@@ -8,6 +8,7 @@ from app.routers.candidates import router as candidates_router
 from app.routers.applications import router as applications_router
 from app.routers.me import router as me_router
 from app.routers.clients import router as clients_router
+from app.routers.dashboard import router as dashboard_router
 
 
 app = FastAPI(
@@ -31,6 +32,7 @@ app.include_router(candidates_router)
 app.include_router(applications_router)
 app.include_router(me_router)
 app.include_router(clients_router)
+app.include_router(dashboard_router)
 
 
 @app.get("/")
