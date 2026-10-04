@@ -78,7 +78,7 @@ class ApplicationService:
                 return cursor.fetchone()
 
     async def update_application(
-        self, application_id: UUID, payload: ApplicationUpdate
+        self, application_id: UUID, payload: ApplicationUpdate, actor_user_id: UUID
     ) -> dict[str, Any] | None:
         data = payload.model_dump(mode="python", exclude_unset=True)
         if not data:
