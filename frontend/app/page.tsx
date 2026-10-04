@@ -10,7 +10,8 @@ type DashboardData = { open_requisitions:number; active_candidates:number; activ
 
 const nav = ["Dashboard", "Jobs", "Candidates", "Submissions", "Interviews", "Clients", "Vendors", "Talent Bench", "Onboarding", "Placements", "Leads", "Reports"];
 
-export default function Dashboard() {\n  const [data,setData]=useState<DashboardData|null>(null);\n  useEffect(()=>{const org=typeof window!=="undefined"?window.localStorage.getItem("talentos_active_org")||process.env.NEXT_PUBLIC_ORGANIZATION_ID:""; if(!API_BASE||!org)return; apiFetch(API_BASE+"/api/dashboard?organization_id="+encodeURIComponent(org)).then(r=>r.ok?r.json():null).then(setData).catch(()=>{});},[]);
+export default function Dashboard() {
+  const [data,setData]=useState<DashboardData|null>(null);\n  useEffect(()=>{const org=typeof window!=="undefined"?window.localStorage.getItem("talentos_active_org")||process.env.NEXT_PUBLIC_ORGANIZATION_ID:""; if(!API_BASE||!org)return; apiFetch(API_BASE+"/api/dashboard?organization_id="+encodeURIComponent(org)).then(r=>r.ok?r.json():null).then(setData).catch(()=>{});},[]);
   return (
     <div className="shell">
       <aside className="sidebar">
