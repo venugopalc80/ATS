@@ -70,7 +70,7 @@ async def update_application(
         if existing is None:
             raise HTTPException(status_code=404, detail="Application not found")
         assert_org_member(user_id, existing["organization_id"])
-        row = await service.update_application(application_id, payload)
+        row = await service.update_application(application_id, payload, user_id)
         return ApplicationOut.model_validate(row)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
