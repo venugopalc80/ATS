@@ -52,7 +52,7 @@ export default function OnboardingPage() {
         <p className="subtitle">Your account is ready. Set up the organisation that will own your jobs, candidates and applications.</p>
         <form onSubmit={submit} className="auth-form">
           <label>Organisation name<input required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Recruitment" /></label>
-          <label>Primary country<select value={country} onChange={(e) => setCountry(e.target.value)}><option value="GB">United Kingdom</option><option value="US">United States</option><option value="IN">India</option><option value="AU">Australia</option></select></label>
+          <label>Primary country code<input required maxLength={2} pattern="[A-Za-z]{2}" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} placeholder="GB" /><small className="muted-small">Use the ISO 3166-1 alpha-2 code for your primary country, e.g. GB, US, DE, AE.</small></label>
           <button className="btn primary auth-submit" disabled={busy}>{busy ? "Creating..." : "Create workspace"}</button>
         </form>
         {message && <div className="notice">{message}</div>}
