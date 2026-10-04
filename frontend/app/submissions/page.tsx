@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import { apiFetch } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
@@ -47,9 +48,9 @@ export default function SubmissionsPage() {
       try {
         const org = encodeURIComponent(ORGANIZATION_ID);
         const [appsResponse, jobsResponse, candidatesResponse] = await Promise.all([
-          fetch(API_BASE + "/api/applications?organization_id=" + org),
-          fetch(API_BASE + "/api/jobs?organization_id=" + org),
-          fetch(API_BASE + "/api/candidates?organization_id=" + org),
+          apiFetch(API_BASE + "/api/applications?organization_id=" + org),
+          apiFetch(API_BASE + "/api/jobs?organization_id=" + org),
+          apiFetch(API_BASE + "/api/candidates?organization_id=" + org),
         ]);
 
         if (!appsResponse.ok || !jobsResponse.ok || !candidatesResponse.ok) {
@@ -76,7 +77,7 @@ export default function SubmissionsPage() {
 
   async function changeStatus(application: Application, nextStatus: Application["status"]) {
     try {
-      const response = await fetch(API_BASE + "/api/applications/" + application.id, {
+      const response = await apiFetch(API_BASE + "/api/applications/" + application.id, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: nextStatus }),
