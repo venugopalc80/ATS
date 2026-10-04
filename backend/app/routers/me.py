@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from app.auth import get_current_user_id
@@ -15,7 +15,7 @@ class OrganizationCreate(BaseModel):
 
 
 @router.get("")
-async def get_context(user_id: UUID = __import__("fastapi").Depends(get_current_user_id)):
+async def get_context(user_id: UUID = Depends(get_current_user_id)):
     with get_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
