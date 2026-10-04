@@ -4,6 +4,8 @@ from uuid import UUID
 from app.db import get_connection
 from app.schemas.applications import ApplicationCreate, ApplicationUpdate
 
+ALLOWED_APPLICATION_TRANSITIONS = {"new": {"screening", "rejected", "withdrawn"}, "screening": {"submitted", "rejected", "withdrawn"}, "submitted": {"interview", "rejected", "withdrawn"}, "interview": {"offer", "rejected", "withdrawn"}, "offer": {"hired", "rejected", "withdrawn"}, "hired": set(), "rejected": set(), "withdrawn": set()}
+
 
 APPLICATION_COLUMNS = """
     id, organization_id, job_id, candidate_id, source, status,
@@ -83,6 +85,16 @@ class ApplicationService:
         data = payload.model_dump(mode="python", exclude_unset=True)
         if not data:
             return await self.get_application(application_id)
+
+        if "status" in data:
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute("select status from public.applications where id = %s", [application_id])
+                    existing = cursor.fetchone()
+                    if existing is None:
+                        return None
+                    if data["status"] != existing["status"] and data["status"] not in ALLOWED_APPLICATION_TRANSITIONS.get(existing["status"], set()):
+                        raise ValueError("Invalid application stage transition")
 
         assignments = ", ".join(f"{column} = %s" for column in data)
         values = list(data.values()) + [application_id]
