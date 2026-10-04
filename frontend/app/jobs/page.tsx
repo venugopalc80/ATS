@@ -91,7 +91,7 @@ export default function JobsPage() {
 
     async function loadJobs() {
       try {
-        const response = await fetch(${API_BASE}/api/jobs?organization_id=${encodeURIComponent(ORGANIZATION_ID)});
+        const response = await fetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(ORGANIZATION_ID));
         if (!response.ok) throw new Error(\`API returned ${response.status}\`);
         const data: Job[] = await response.json();
         if (!cancelled) setJobs(data);
