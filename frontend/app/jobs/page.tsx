@@ -1,9 +1,10 @@
 'use client';
 
 import Link from "next/link";
-import { FormEvent, useMemo, useState } from "react";
+import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL;
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID;
 
 type Job = {
   id?: string;
@@ -22,13 +23,33 @@ const seedJobs: Job[] = [
 ];
 
 export default function JobsPage() {
-  const [jobs, setJobs] = useState<Job[]>(seedJobs);
+  const [jobs, setJobs] = useState<Job[]>(API_BASE ? [] : seedJobs);
+  const [loading, setLoading] = useState(Boolean(API_BASE));
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState({ title: "", client: "", location: "", employment_type: "Permanent", skills: "" });
+
+  useEffect(() => {
+    if (!API_BASE || !ORGANIZATION_ID) return;
+    let cancelled = false;
+    async function loadJobs() {
+      try {
+        const response = await fetch(`${API_BASE}/api/jobs?organization_id=${encodeURIComponent(ORGANIZATION_ID)}`);
+        if (!response.ok) throw new Error(`API returned ${response.status}`);
+        const data: Job[] = await response.json();
+        if (!cancelled) setJobs(data);
+      } catch (error) {
+        if (!cancelled) setMessage(error instanceof Error ? error.message : "Unable to load requisitions.");
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+    loadJobs();
+    return () => { cancelled = true; };
+  }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
     const matchesQuery = `${job.title} ${job.client ?? ""} ${job.location ?? ""}`.toLowerCase().includes(query.toLowerCase());
@@ -41,7 +62,7 @@ export default function JobsPage() {
     setSaving(true);
     setMessage("");
     const payload = {
-      organization_id: "00000000-0000-0000-0000-000000000001",
+      organization_id: ORGANIZATION_ID,
       title: form.title,
       location: form.location || null,
       employment_type: form.employment_type,
@@ -50,7 +71,7 @@ export default function JobsPage() {
     };
 
     try {
-      if (!API_BASE) {
+      if (!API_BASE || !ORGANIZATION_ID) {
         const demoJob: Job = {
           id: `local-${Date.now()}`,
           title: form.title,
@@ -118,9 +139,9 @@ export default function JobsPage() {
           {message && <div className="notice">{message}</div>}
 
           <div className="card">
-            <div className="card-head"><span className="card-title">Requisitions</span><span className="muted-small">{API_BASE ? "Connected to API" : "Demo mode"}</span></div>
+            <div className="card-head"><span className="card-title">Requisitions</span><span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "Demo mode"}</span></div>
             <table className="table"><thead><tr><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th></tr></thead>
-              <tbody>{filtered.map((job) => <tr key={job.id ?? job.title}><td><strong>{job.title}</strong></td><td>{job.client ?? "Unassigned"}</td><td>{job.location ?? "Not specified"}</td><td>{job.employment_type ?? "-"}</td><td><span className={`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}`}>{job.status.replace("_", " ")}</span></td><td>{(job.required_skills ?? []).slice(0, 3).join(", ") || "-"}</td></tr>)}</tbody>
+              <tbody>{loading ? <tr><td colSpan={6}>Loading requisitions...</td></tr> : filtered.map((job) => <tr key={job.id ?? job.title}><td><strong>{job.title}</strong></td><td>{job.client ?? "Unassigned"}</td><td>{job.location ?? "Not specified"}</td><td>{job.employment_type ?? "-"}</td><td><span className={`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}`}>{job.status.replace("_", " ")}</span></td><td>{(job.required_skills ?? []).slice(0, 3).join(", ") || "-"}</td></tr>)}</tbody>
             </table>
           </div>
         </section>
