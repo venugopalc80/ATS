@@ -10,10 +10,6 @@ router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 service = JobService()
 
 
-def database_error(exc: Exception) -> HTTPException:
-    return HTTPException(status_code=503, detail="Database operation failed") from exc
-
-
 @router.get("", response_model=list[JobOut])
 async def list_jobs(
     organization_id: UUID,
