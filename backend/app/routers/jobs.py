@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
 
-from app.db import DatabaseConfigurationError
+from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.jobs import JobCreate, JobOut
 from app.services.job_service import JobService
 
@@ -20,6 +20,8 @@ async def list_jobs(
         return [JobOut.model_validate(row) for row in rows]
     except DatabaseConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except DatabaseConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.post("", response_model=JobOut, status_code=201)
@@ -29,6 +31,8 @@ async def create_job(payload: JobCreate) -> JobOut:
         return JobOut.model_validate(row)
     except DatabaseConfigurationError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except DatabaseConnectionError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
 @router.get("/{job_id}", response_model=JobOut)
@@ -36,6 +40,8 @@ async def get_job(job_id: UUID) -> JobOut:
     try:
         row = await service.get_job(job_id)
     except DatabaseConfigurationError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    except DatabaseConnectionError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     if row is None:
