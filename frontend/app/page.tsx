@@ -4,14 +4,9 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { apiFetch, API_BASE } from "@/lib/api";
 
-type DashboardData = { open_requisitions:number; active_candidates:number; active_clients:number; pipeline:Record<string,number> };
+type DashboardData = { open_requisitions:number; active_candidates:number; active_clients:number; scheduled_interviews:number; active_offers:number; active_placements:number; pipeline:Record<string,number>; jobs:Array<{id:string;title:string;client:string;status:string;applicants:number}>; activity:Array<{action:string;entity_type:string;entity_id:string;metadata:Record<string,unknown>|null;created_at:string}> };
 
-const jobs = [
-  { title: "Senior Python Engineer", client: "Northstar Digital", applicants: 28, status: "Active", recruiter: "AM" },
-  { title: "Data Analyst", client: "Brightline Group", applicants: 19, status: "Active", recruiter: "RK" },
-  { title: "Full Stack Developer", client: "Vertex Systems", applicants: 34, status: "Interviewing", recruiter: "SG" },
-  { title: "Cloud Engineer", client: "Atlas Technology", applicants: 12, status: "On hold", recruiter: "AM" },
-];
+
 
 const nav = ["Dashboard", "Jobs", "Candidates", "Submissions", "Interviews", "Clients", "Vendors", "Talent Bench", "Onboarding", "Placements", "Leads", "Reports"];
 
@@ -61,11 +56,11 @@ export default function Dashboard() {\n  const [data,setData]=useState<Dashboard
           <div className="grid">
             <div className="card">
               <div className="card-head"><span className="card-title">Active requisitions</span><Link href="/jobs" className="link">View all →</Link></div>
-              <table className="table"><thead><tr><th>Position</th><th>Client</th><th>Applicants</th><th>Status</th></tr></thead><tbody>{jobs.map(j => <tr key={j.title}><td><strong>{j.title}</strong><br /><small style={{color:"var(--muted)"}}>Recruiter {j.recruiter}</small></td><td>{j.client}</td><td>{j.applicants}</td><td><span className={j.status === "Active" ? "badge green" : j.status === "Interviewing" ? "badge blue" : "badge amber"}>{j.status}</span></td></tr>)}</tbody></table>
+              <table className="table"><thead><tr><th>Position</th><th>Client</th><th>Applicants</th><th>Status</th></tr></thead><tbody>{(data?.jobs ?? []).map(j => <tr key={j.id}><td><strong>{j.title}</strong></td><td>{j.client}</td><td>{j.applicants}</td><td><span className={j.status === "open" ? "badge green" : "badge amber"}>{j.status}</span></td></tr>)}</tbody></table>
             </div>
             <div className="card">
               <div className="card-head"><span className="card-title">Recent activity</span><span className="link">View activity →</span></div>
-              <div className="activity">{[["New candidate added","Sarah Wilson was added to Senior Python Engineer","8 min ago"],["Interview scheduled","James Patel · Data Analyst · Tomorrow 10:30","24 min ago"],["Candidate submitted","Michael Chen submitted to Vertex Systems","41 min ago"],["Placement created","Aisha Khan placed at Northstar Digital","1 hr ago"],["New client lead","Brightline Group added as a prospect","2 hrs ago"]].map(([a,b,c]) => <div className="activity-row" key={b}><div className="dot"/><div className="activity-text"><strong>{a}</strong><br />{b}<div className="activity-time">{c}</div></div></div>)}</div>
+              <div className="activity">{(data?.activity ?? []).map((item, i) => <div className="activity-row" key={`${item.entity_id}-${item.created_at}-${i}`}><div className="dot"/><div className="activity-text"><strong>{item.action}</strong><div className="activity-time">{new Date(item.created_at).toLocaleString()}</div></div></div>)}</div>
             </div>
           </div>
         </section>
