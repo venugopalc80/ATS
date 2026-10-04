@@ -5,7 +5,7 @@ import { DragEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
+const DEFAULT_ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 type Job = { id: string; title: string; status: string };
 type Candidate = { id: string; first_name: string; last_name?: string | null; current_title?: string | null };
@@ -51,13 +51,14 @@ export default function SubmissionsPage() {
 
   useEffect(() => {
     async function load() {
-      if (!API_BASE || !ORGANIZATION_ID) {
+      const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || DEFAULT_ORGANIZATION_ID : DEFAULT_ORGANIZATION_ID;
+      if (!API_BASE || !organizationId) {
         setMessage("API configuration is missing.");
         setLoading(false);
         return;
       }
       try {
-        const org = encodeURIComponent(ORGANIZATION_ID);
+        const org = encodeURIComponent(organizationId);
         const [apps, jobResponse, candidateResponse] = await Promise.all([
           apiFetch(API_BASE + "/api/applications?organization_id=" + org),
           apiFetch(API_BASE + "/api/jobs?organization_id=" + org),
