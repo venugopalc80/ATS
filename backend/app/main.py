@@ -4,11 +4,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.routers.jobs import router as jobs_router
+from app.routers.candidates import router as candidates_router
 
 
 app = FastAPI(
     title="ATS API",
-    version="0.3.0",
+    version="0.4.0",
     description="AI-powered Applicant Tracking System API",
 )
 
@@ -23,6 +24,7 @@ app.add_middleware(
 )
 
 app.include_router(jobs_router)
+app.include_router(candidates_router)
 
 
 @app.get("/")
