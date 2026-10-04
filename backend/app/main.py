@@ -8,7 +8,7 @@ from app.routers.jobs import router as jobs_router
 
 app = FastAPI(
     title="ATS API",
-    version="0.2.1",
+    version="0.3.0",
     description="AI-powered Applicant Tracking System API",
 )
 
