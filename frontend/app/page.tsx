@@ -17,6 +17,8 @@ export default function Dashboard() {
         <div className="nav-label">Workspace</div>
         {nav.map((item, i) => item === "Jobs"
           ? <Link key={item} href="/jobs" className="nav-item"><span>▣</span><span>{item}</span></Link>
+          : item === "Candidates"
+          ? <Link key={item} href="/candidates" className="nav-item"><span>♙</span><span>{item}</span></Link>
           : <div key={item} className={i === 0 ? "nav-item active" : "nav-item"}><span>{["⌂","▣","♙","↗","◷","□","◇","♧","✓","◈","◌","▤"][i]}</span><span>{item}</span></div>
         )}
         <div className="nav-label">Administration</div>
@@ -38,7 +40,7 @@ export default function Dashboard() {
 
           <div className="metrics">
             <div className="card"><div className="metric-title">Open requisitions</div><div className="metric-value">42</div><div className="metric-foot">↑ 8% this month</div></div>
-            <div className="card"><div className="metric-title">Active candidates</div><div className="metric-value">1,284</div><div className="metric-foot">↑ 12% this month</div></div>
+            <div className="card"><Link href="/candidates" style={{display:"block"}}><div className="metric-title">Active candidates</div><div className="metric-value">1,284</div></Link><div className="metric-foot">↑ 12% this month</div></div>
             <div className="card"><div className="metric-title">Interviews this week</div><div className="metric-value">37</div><div className="metric-foot">↑ 5 from last week</div></div>
             <div className="card"><div className="metric-title">Placements this month</div><div className="metric-value">18</div><div className="metric-foot">↑ 20% this month</div></div>
           </div>
