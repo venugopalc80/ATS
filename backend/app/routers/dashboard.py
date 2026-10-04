@@ -19,7 +19,7 @@ async def dashboard(organization_id: UUID, user_id: UUID=Depends(get_current_use
                 active_clients=cursor.fetchone()["total"]
                 cursor.execute("select status,count(*) as total from public.applications where organization_id=%s group by status", [organization_id])
                 pipeline={r["status"]:r["total"] for r in cursor.fetchall()}
-        cursor.execute("""select j.id,j.title,coalesce(c.name,'Direct client') as client,j.status,count(a.id)::int as applicants from public.jobs j left join public.clients c on c.id=j.client_id left join public.applications a on a.job_id=j.id where j.organization_id=%s and j.status in ('open','on_hold') group by j.id,j.title,c.name,j.status order by j.created_at desc limit 6""",[organization_id])
+                cursor.execute("""select j.id,j.title,coalesce(c.name,'Direct client') as client,j.status,count(a.id)::int as applicants from public.jobs j left join public.clients c on c.id=j.client_id left join public.applications a on a.job_id=j.id where j.organization_id=%s and j.status in ('open','on_hold') group by j.id,j.title,c.name,j.status order by j.created_at desc limit 6""",[organization_id])
                 jobs=list(cursor.fetchall())
                 cursor.execute("select action,entity_type,entity_id,metadata,created_at from public.audit_events where organization_id=%s order by created_at desc limit 8",[organization_id])
                 activity=list(cursor.fetchall())
