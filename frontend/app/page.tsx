@@ -46,13 +46,13 @@ export default function Dashboard() {
           <div className="metrics">
             <div className="card"><div className="metric-title">Open requisitions</div><div className="metric-value">{data?.open_requisitions ?? "—"}</div><div className="metric-foot">↑ 8% this month</div></div>
             <div className="card"><Link href="/candidates" style={{display:"block"}}><div className="metric-title">Active candidates</div><div className="metric-value">{data?.active_candidates ?? "—"}</div></Link><div className="metric-foot">↑ 12% this month</div></div>
-            <div className="card"><div className="metric-title">Interviews this week</div><div className="metric-value">{data ? (data.pipeline?.interview ?? 0) : "—"}</div><div className="metric-foot">↑ 5 from last week</div></div>
-            <div className="card"><div className="metric-title">Placements this month</div><div className="metric-value">{data ? ((data.pipeline?.offer ?? 0) + (data.pipeline?.hired ?? 0)) : "—"}</div><div className="metric-foot">↑ 20% this month</div></div>
+            <div className="card"><div className="metric-title">Interviews this week</div><div className="metric-value">{data ? (data.scheduled_interviews ?? 0) : "—"}</div><div className="metric-foot">↑ 5 from last week</div></div>
+            <div className="card"><div className="metric-title">Placements this month</div><div className="metric-value">{data ? (data.active_placements ?? 0) : "—"}</div><div className="metric-foot">↑ 20% this month</div></div>
           </div>
 
           <div className="card" style={{ marginBottom: 18 }}>
-            <div className="card-head"><span className="card-title">Recruitment pipeline</span><span className="link">View analytics →</span></div>
-            <div className="pipeline">{[["New applicants","new"],["Screening","screening"],["Submitted","submitted"],["Interview","interview"],["Offer / hire","offer"]].map(([label,key]) => <div className="stage" key={label}><strong>{data?.pipeline?.[key] ?? "—"}</strong><span>{label}</span></div>)}</div>
+            <div className="card-head"><span className="card-title">Recruitment pipeline</span><Link href="/submissions" className="link">View pipeline →</Link></div>
+            <div className="pipeline">{[["New applicants","new"],["Screening","screening"],["Submitted","submitted"],["Interview","interview"],["Offer","offer"]].map(([label,key]) => <div className="stage" key={label}><strong>{data?.pipeline?.[key] ?? "—"}</strong><span>{label}</span></div>)}</div>
           </div>
 
           <div className="grid">
