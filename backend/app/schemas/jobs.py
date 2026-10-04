@@ -8,8 +8,7 @@ from pydantic import BaseModel, Field, field_validator
 JobStatus = Literal["draft", "open", "on_hold", "closed", "filled", "cancelled"]
 
 
-class JobCreate(BaseModel):
-    organization_id: UUID
+class JobBase(BaseModel):
     client_id: UUID | None = None
     job_code: str | None = None
     title: str = Field(min_length=1, max_length=200)
@@ -48,8 +47,51 @@ class JobCreate(BaseModel):
         return value
 
 
-class JobOut(JobCreate):
+class JobCreate(JobBase):
+    organization_id: UUID
+
+
+class JobUpdate(BaseModel):
+    client_id: UUID | None = None
+    job_code: str | None = None
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    location: str | None = None
+    country_code: Literal["GB", "US", "IN", "AU"] | None = None
+    employment_type: str | None = None
+    work_mode: str | None = None
+    salary_min: Decimal | None = None
+    salary_max: Decimal | None = None
+    salary_currency: str | None = Field(default=None, min_length=3, max_length=3)
+    experience_min: Decimal | None = None
+    experience_max: Decimal | None = None
+    work_authorization: str | None = None
+    required_skills: list[str] | None = None
+    preferred_skills: list[str] | None = None
+    status: JobStatus | None = None
+    recruiter_id: UUID | None = None
+    hiring_manager_id: UUID | None = None
+
+    @field_validator("salary_max")
+    @classmethod
+    def salary_range_is_valid(cls, value: Decimal | None, info):
+        minimum = info.data.get("salary_min")
+        if value is not None and minimum is not None and value < minimum:
+            raise ValueError("salary_max must be greater than or equal to salary_min")
+        return value
+
+    @field_validator("experience_max")
+    @classmethod
+    def experience_range_is_valid(cls, value: Decimal | None, info):
+        minimum = info.data.get("experience_min")
+        if value is not None and minimum is not None and value < minimum:
+            raise ValueError("experience_max must be greater than or equal to experience_min")
+        return value
+
+
+class JobOut(JobBase):
     id: UUID
+    organization_id: UUID
     created_at: datetime
     updated_at: datetime
 
