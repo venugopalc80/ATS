@@ -7,11 +7,12 @@ from app.routers.jobs import router as jobs_router
 from app.routers.candidates import router as candidates_router
 from app.routers.applications import router as applications_router
 from app.routers.me import router as me_router
+from app.routers.clients import router as clients_router
 
 
 app = FastAPI(
     title="ATS API",
-    version="0.6.0",
+    version="0.7.0",
     description="AI-powered Applicant Tracking System API",
 )
 
@@ -29,6 +30,7 @@ app.include_router(jobs_router)
 app.include_router(candidates_router)
 app.include_router(applications_router)
 app.include_router(me_router)
+app.include_router(clients_router)
 
 
 @app.get("/")
