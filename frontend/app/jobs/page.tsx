@@ -92,7 +92,7 @@ export default function JobsPage() {
     async function loadJobs() {
       try {
         const response = await fetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(ORGANIZATION_ID));
-        if (!response.ok) throw new Error(\`API returned ${response.status}\`);
+        if (!response.ok) throw new Error("API returned " + response.status);
         const data: Job[] = await response.json();
         if (!cancelled) setJobs(data);
       } catch (error) {
@@ -107,7 +107,7 @@ export default function JobsPage() {
   }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
-    const matchesQuery = \`${job.title} ${job.client ?? ""} ${job.location ?? ""}\`.toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
@@ -151,14 +151,14 @@ export default function JobsPage() {
           setJobs((current) => current.map((job) => job.id === editingJob.id ? { ...job, ...payload, client: form.client } : job));
           setMessage("Demo requisition updated.");
         } else {
-          const demoJob: Job = { id: \`local-${Date.now()}\`, ...payload, client: form.client } as Job;
+          const demoJob: Job = { id: `local-${Date.now()}`, ...payload, client: form.client } as Job;
           setJobs((current) => [demoJob, ...current]);
           setMessage("Demo requisition created.");
         }
       } else {
         const endpoint = editingJob?.id
-          ? \`${API_BASE}/api/jobs/${editingJob.id}\`
-          : \`${API_BASE}/api/jobs\`;
+          ? `${API_BASE}/api/jobs/${editingJob.id}`
+          : `${API_BASE}/api/jobs`;
         const response = await fetch(endpoint, {
           method: editingJob?.id ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
@@ -166,7 +166,7 @@ export default function JobsPage() {
         });
         if (!response.ok) {
           const errorBody = await response.json().catch(() => null);
-          throw new Error(errorBody?.detail || \`API returned ${response.status}\`);
+          throw new Error(errorBody?.detail || `API returned ${response.status}`);
         }
         const saved: Job = await response.json();
         setJobs((current) => editingJob?.id
@@ -187,7 +187,7 @@ export default function JobsPage() {
 
   async function deleteJob(job: Job) {
     if (!job.id) return;
-    if (!window.confirm(\`Delete "${job.title}"? This cannot be undone.\`)) return;
+    if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
 
     setDeletingId(job.id);
     setMessage("");
@@ -195,10 +195,10 @@ export default function JobsPage() {
       if (!API_BASE || !ORGANIZATION_ID) {
         setJobs((current) => current.filter((item) => item.id !== job.id));
       } else {
-        const response = await fetch(\`${API_BASE}/api/jobs/${job.id}\`, { method: "DELETE" });
+        const response = await fetch(`${API_BASE}/api/jobs/${job.id}`, { method: "DELETE" });
         if (!response.ok) {
           const errorBody = await response.json().catch(() => null);
-          throw new Error(errorBody?.detail || \`API returned ${response.status}\`);
+          throw new Error(errorBody?.detail || `API returned ${response.status}`);
         }
         setJobs((current) => current.filter((item) => item.id !== job.id));
       }
@@ -256,7 +256,7 @@ export default function JobsPage() {
                     <td>{job.client ?? "Unassigned"}</td>
                     <td>{job.location ?? "Not specified"}</td>
                     <td>{job.employment_type ?? "-"}</td>
-                    <td><span className={\`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}\`}>{job.status.replace("_", " ")}</span></td>
+                    <td><span className={`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}`}>{job.status.replace("_", " ")}</span></td>
                     <td>{(job.required_skills ?? []).slice(0, 3).join(", ") || "-"}</td>
                     <td><div style={{ display: "flex", gap: 6 }}><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
                   </tr>
