@@ -3,11 +3,15 @@ from uuid import UUID
 from fastapi import APIRouter, HTTPException, Query
 
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
-from app.schemas.jobs import JobCreate, JobOut
+from app.schemas.jobs import JobCreate, JobOut, JobUpdate
 from app.services.job_service import JobService
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 service = JobService()
+
+
+def database_error(exc: Exception) -> HTTPException:
+    return HTTPException(status_code=503, detail="Database operation failed") from exc
 
 
 @router.get("", response_model=list[JobOut])
@@ -18,9 +22,7 @@ async def list_jobs(
     try:
         rows = await service.list_jobs(organization_id, status)
         return [JobOut.model_validate(row) for row in rows]
-    except DatabaseConfigurationError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except DatabaseConnectionError as exc:
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -29,9 +31,7 @@ async def create_job(payload: JobCreate) -> JobOut:
     try:
         row = await service.create_job(payload)
         return JobOut.model_validate(row)
-    except DatabaseConfigurationError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except DatabaseConnectionError as exc:
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 
@@ -39,12 +39,34 @@ async def create_job(payload: JobCreate) -> JobOut:
 async def get_job(job_id: UUID) -> JobOut:
     try:
         row = await service.get_job(job_id)
-    except DatabaseConfigurationError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
-    except DatabaseConnectionError as exc:
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
 
     return JobOut.model_validate(row)
+
+
+@router.patch("/{job_id}", response_model=JobOut)
+async def update_job(job_id: UUID, payload: JobUpdate) -> JobOut:
+    try:
+        row = await service.update_job(job_id, payload)
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if row is None:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return JobOut.model_validate(row)
+
+
+@router.delete("/{job_id}", status_code=204)
+async def delete_job(job_id: UUID) -> None:
+    try:
+        deleted = await service.delete_job(job_id)
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Job not found")
