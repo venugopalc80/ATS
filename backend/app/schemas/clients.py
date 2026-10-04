@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import Literal
+from pydantic import StringConstraints
+from typing import Annotated
 from uuid import UUID
 from pydantic import BaseModel, Field
 
@@ -9,7 +11,7 @@ class ClientBase(BaseModel):
     name: str = Field(min_length=2, max_length=200)
     website: str | None = None
     industry: str | None = None
-    country_code: Literal["GB", "US", "IN", "AU"] | None = None
+    country_code: Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}$")] | None = None
     contact_name: str | None = None
     contact_email: str | None = None
     contact_phone: str | None = None
