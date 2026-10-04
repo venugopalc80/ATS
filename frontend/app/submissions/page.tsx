@@ -5,7 +5,7 @@ import { apiFetch } from "@/lib/api";
 import { useEffect, useMemo, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
-const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID;
+const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 type Job = { id: string; title: string; status: string };
 type Candidate = { id: string; first_name: string; last_name?: string | null; current_title?: string | null };
