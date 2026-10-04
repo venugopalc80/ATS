@@ -1,7 +1,8 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+from typing import Annotated
 
 from app.auth import get_current_user_id
 from app.db import get_connection
@@ -11,7 +12,7 @@ router = APIRouter(prefix="/api/me", tags=["me"])
 
 class OrganizationCreate(BaseModel):
     name: str = Field(min_length=2, max_length=150)
-    country_code: str = Field(pattern="^(GB|US|IN|AU)$")
+    country_code: Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}$")]
 
 
 @router.get("")
