@@ -2,7 +2,17 @@ from typing import Any
 from uuid import UUID
 
 from app.db import get_connection
-from app.schemas.jobs import JobCreate
+from app.schemas.jobs import JobCreate, JobUpdate
+
+
+JOB_COLUMNS = """
+    id, organization_id, client_id, job_code, title, description,
+    location, country_code, employment_type, work_mode,
+    salary_min, salary_max, salary_currency, experience_min,
+    experience_max, work_authorization, required_skills,
+    preferred_skills, status, recruiter_id, hiring_manager_id,
+    created_by, created_at, updated_at
+"""
 
 
 class JobService:
@@ -11,13 +21,8 @@ class JobService:
     async def list_jobs(
         self, organization_id: UUID, status: str | None = None
     ) -> list[dict[str, Any]]:
-        query = """
-            select id, organization_id, client_id, job_code, title, description,
-                   location, country_code, employment_type, work_mode,
-                   salary_min, salary_max, salary_currency, experience_min,
-                   experience_max, work_authorization, required_skills,
-                   preferred_skills, status, recruiter_id, hiring_manager_id,
-                   created_by, created_at, updated_at
+        query = f"""
+            select {JOB_COLUMNS}
             from public.jobs
             where organization_id = %s
         """
@@ -44,12 +49,7 @@ class JobService:
         query = f"""
             insert into public.jobs ({column_sql})
             values ({placeholders})
-            returning id, organization_id, client_id, job_code, title,
-                      description, location, country_code, employment_type,
-                      work_mode, salary_min, salary_max, salary_currency,
-                      experience_min, experience_max, work_authorization,
-                      required_skills, preferred_skills, status, recruiter_id,
-                      hiring_manager_id, created_by, created_at, updated_at
+            returning {JOB_COLUMNS}
         """
 
         with get_connection() as connection:
@@ -61,13 +61,8 @@ class JobService:
                 return row
 
     async def get_job(self, job_id: UUID) -> dict[str, Any] | None:
-        query = """
-            select id, organization_id, client_id, job_code, title, description,
-                   location, country_code, employment_type, work_mode,
-                   salary_min, salary_max, salary_currency, experience_min,
-                   experience_max, work_authorization, required_skills,
-                   preferred_skills, status, recruiter_id, hiring_manager_id,
-                   created_by, created_at, updated_at
+        query = f"""
+            select {JOB_COLUMNS}
             from public.jobs
             where id = %s
         """
@@ -76,3 +71,29 @@ class JobService:
             with connection.cursor() as cursor:
                 cursor.execute(query, [job_id])
                 return cursor.fetchone()
+
+    async def update_job(self, job_id: UUID, payload: JobUpdate) -> dict[str, Any] | None:
+        data = payload.model_dump(mode="python", exclude_unset=True)
+        if not data:
+            return await self.get_job(job_id)
+
+        assignments = ", ".join(f"{column} = %s" for column in data)
+        values = list(data.values()) + [job_id]
+
+        query = f"""
+            update public.jobs
+            set {assignments}, updated_at = now()
+            where id = %s
+            returning {JOB_COLUMNS}
+        """
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(query, values)
+                return cursor.fetchone()
+
+    async def delete_job(self, job_id: UUID) -> bool:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("delete from public.jobs where id = %s", [job_id])
+                return cursor.rowcount > 0
