@@ -4,7 +4,7 @@ import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
+const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID;
 
 type Candidate = {
