@@ -72,9 +72,10 @@ async def update_application(
         assert_org_member(user_id, existing["organization_id"])
         row = await service.update_application(application_id, payload, user_id)
         return ApplicationOut.model_validate(row)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
-    return ApplicationOut.model_validate(row)
 
 
 @router.delete("/{application_id}", status_code=204)
