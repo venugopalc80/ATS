@@ -3,10 +3,11 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, StringConstraints
+from typing import Annotated
 
 CandidateStatus = Literal["active", "inactive", "placed", "do_not_contact"]
-CountryCode = Literal["GB", "US", "IN", "AU"]
+CountryCode = Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}$")]
 
 
 class CandidateBase(BaseModel):
