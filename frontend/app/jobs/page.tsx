@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import { apiFetch } from "@/lib/api";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
@@ -91,7 +92,7 @@ export default function JobsPage() {
 
     async function loadJobs() {
       try {
-        const response = await fetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(ORGANIZATION_ID));
+        const response = await apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(ORGANIZATION_ID));
         if (!response.ok) throw new Error("API returned " + response.status);
         const data: Job[] = await response.json();
         if (!cancelled) setJobs(data);
@@ -159,7 +160,7 @@ export default function JobsPage() {
         const endpoint = editingJob?.id
           ? `${API_BASE}/api/jobs/${editingJob.id}`
           : `${API_BASE}/api/jobs`;
-        const response = await fetch(endpoint, {
+        const response = await apiFetch(endpoint, {
           method: editingJob?.id ? "PATCH" : "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -195,7 +196,7 @@ export default function JobsPage() {
       if (!API_BASE || !ORGANIZATION_ID) {
         setJobs((current) => current.filter((item) => item.id !== job.id));
       } else {
-        const response = await fetch(`${API_BASE}/api/jobs/${job.id}`, { method: "DELETE" });
+        const response = await apiFetch(`${API_BASE}/api/jobs/${job.id}`, { method: "DELETE" });
         if (!response.ok) {
           const errorBody = await response.json().catch(() => null);
           throw new Error(errorBody?.detail || `API returned ${response.status}`);
