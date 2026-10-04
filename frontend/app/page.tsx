@@ -19,6 +19,8 @@ export default function Dashboard() {
           ? <Link key={item} href="/jobs" className="nav-item"><span>▣</span><span>{item}</span></Link>
           : item === "Candidates"
           ? <Link key={item} href="/candidates" className="nav-item"><span>♙</span><span>{item}</span></Link>
+          : item === "Submissions"
+          ? <Link key={item} href="/submissions" className="nav-item"><span>↗</span><span>{item}</span></Link>
           : <div key={item} className={i === 0 ? "nav-item active" : "nav-item"}><span>{["⌂","▣","♙","↗","◷","□","◇","♧","✓","◈","◌","▤"][i]}</span><span>{item}</span></div>
         )}
         <div className="nav-label">Administration</div>
