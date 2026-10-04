@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import { apiFetch } from "@/lib/api";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
@@ -92,7 +93,7 @@ export default function CandidatesPage() {
 
     async function load() {
       try {
-        const response = await fetch(
+        const response = await apiFetch(
           API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(ORGANIZATION_ID)
         );
         if (!response.ok) throw new Error("API returned " + response.status);
@@ -166,7 +167,7 @@ export default function CandidatesPage() {
         ? API_BASE + "/api/candidates/" + editing.id
         : API_BASE + "/api/candidates";
 
-      const response = await fetch(endpoint, {
+      const response = await apiFetch(endpoint, {
         method: editing ? "PATCH" : "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -198,7 +199,7 @@ export default function CandidatesPage() {
     if (!window.confirm("Delete " + fullName(candidate) + "? This cannot be undone.")) return;
 
     try {
-      const response = await fetch(API_BASE + "/api/candidates/" + candidate.id, { method: "DELETE" });
+      const response = await apiFetch(API_BASE + "/api/candidates/" + candidate.id, { method: "DELETE" });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.detail || "API returned " + response.status);
