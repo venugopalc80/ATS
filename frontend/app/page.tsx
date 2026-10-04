@@ -1,4 +1,10 @@
+"use client";
+
 import Link from "next/link";
+import { useEffect, useState } from "react";
+import { apiFetch, API_BASE } from "@/lib/api";
+
+type DashboardData = { open_requisitions:number; active_candidates:number; active_clients:number; pipeline:Record<string,number> };
 
 const jobs = [
   { title: "Senior Python Engineer", client: "Northstar Digital", applicants: 28, status: "Active", recruiter: "AM" },
@@ -9,7 +15,7 @@ const jobs = [
 
 const nav = ["Dashboard", "Jobs", "Candidates", "Submissions", "Interviews", "Clients", "Vendors", "Talent Bench", "Onboarding", "Placements", "Leads", "Reports"];
 
-export default function Dashboard() {
+export default function Dashboard() {\n  const [data,setData]=useState<DashboardData|null>(null);\n  useEffect(()=>{const org=typeof window!=="undefined"?window.localStorage.getItem("talentos_active_org")||process.env.NEXT_PUBLIC_ORGANIZATION_ID:""; if(!API_BASE||!org)return; apiFetch(API_BASE+"/api/dashboard?organization_id="+encodeURIComponent(org)).then(r=>r.ok?r.json():null).then(setData).catch(()=>{});},[]);
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -41,15 +47,15 @@ export default function Dashboard() {
           </div>
 
           <div className="metrics">
-            <div className="card"><div className="metric-title">Open requisitions</div><div className="metric-value">42</div><div className="metric-foot">↑ 8% this month</div></div>
-            <div className="card"><Link href="/candidates" style={{display:"block"}}><div className="metric-title">Active candidates</div><div className="metric-value">1,284</div></Link><div className="metric-foot">↑ 12% this month</div></div>
-            <div className="card"><div className="metric-title">Interviews this week</div><div className="metric-value">37</div><div className="metric-foot">↑ 5 from last week</div></div>
-            <div className="card"><div className="metric-title">Placements this month</div><div className="metric-value">18</div><div className="metric-foot">↑ 20% this month</div></div>
+            <div className="card"><div className="metric-title">Open requisitions</div><div className="metric-value">{data?.open_requisitions ?? "—"}</div><div className="metric-foot">↑ 8% this month</div></div>
+            <div className="card"><Link href="/candidates" style={{display:"block"}}><div className="metric-title">Active candidates</div><div className="metric-value">{data?.active_candidates ?? "—"}</div></Link><div className="metric-foot">↑ 12% this month</div></div>
+            <div className="card"><div className="metric-title">Interviews this week</div><div className="metric-value">{data ? (data.pipeline?.interview ?? 0) : "—"}</div><div className="metric-foot">↑ 5 from last week</div></div>
+            <div className="card"><div className="metric-title">Placements this month</div><div className="metric-value">{data ? ((data.pipeline?.offer ?? 0) + (data.pipeline?.hired ?? 0)) : "—"}</div><div className="metric-foot">↑ 20% this month</div></div>
           </div>
 
           <div className="card" style={{ marginBottom: 18 }}>
             <div className="card-head"><span className="card-title">Recruitment pipeline</span><span className="link">View analytics →</span></div>
-            <div className="pipeline">{[["New applicants","186"],["Screening","74"],["Submitted","51"],["Interview","37"],["Offer / hire","18"]].map(([label, value]) => <div className="stage" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
+            <div className="pipeline">{[["New applicants","new"],["Screening","screening"],["Submitted","submitted"],["Interview","interview"],["Offer / hire","offer"]].map(([label,key]) => <div className="stage" key={label}><strong>{data?.pipeline?.[key] ?? "—"}</strong><span>{label}</span></div>)}</div>
           </div>
 
           <div className="grid">
