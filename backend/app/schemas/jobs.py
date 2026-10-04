@@ -3,7 +3,8 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
+from typing import Annotated
 
 JobStatus = Literal["draft", "open", "on_hold", "closed", "filled", "cancelled"]
 
@@ -14,7 +15,7 @@ class JobBase(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
-    country_code: Literal["GB", "US", "IN", "AU"] | None = None
+    country_code: Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}$")] | None = None
     employment_type: str | None = None
     work_mode: str | None = None
     salary_min: Decimal | None = None
