@@ -16,7 +16,7 @@ type Candidate = {
   phone?: string | null;
   city?: string | null;
   region?: string | null;
-  country_code?: "GB" | "US" | "IN" | "AU" | null;
+  country_code?: string | null;
   status: "active" | "inactive" | "placed" | "do_not_contact";
   current_title?: string | null;
   years_experience?: number | null;
@@ -31,7 +31,7 @@ type CandidateForm = {
   phone: string;
   city: string;
   region: string;
-  country_code: "GB" | "US" | "IN" | "AU";
+  country_code: string;
   status: Candidate["status"];
   current_title: string;
   years_experience: string;
@@ -317,7 +317,7 @@ export default function CandidatesPage() {
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 12 }}>
               <label>City<input value={form.city} onChange={(e) => setForm({ ...form, city: e.target.value })} /></label>
               <label>Region<input value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} /></label>
-              <label>Country<select value={form.country_code} onChange={(e) => setForm({ ...form, country_code: e.target.value as CandidateForm["country_code"] })}><option value="GB">UK</option><option value="US">USA</option><option value="IN">India</option><option value="AU">Australia</option></select></label>
+              <label>Country code<input required maxLength={2} pattern="[A-Za-z]{2}" value={form.country_code} onChange={(e) => setForm({ ...form, country_code: e.target.value.toUpperCase() })} placeholder="GB" /></label>
             </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>Years of experience<input type="number" min="0" max="80" step="0.5" value={form.years_experience} onChange={(e) => setForm({ ...form, years_experience: e.target.value })} /></label>
