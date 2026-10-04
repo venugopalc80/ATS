@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 const jobs = [
   { title: "Senior Python Engineer", client: "Northstar Digital", applicants: 28, status: "Active", recruiter: "AM" },
   { title: "Data Analyst", client: "Brightline Group", applicants: 19, status: "Active", recruiter: "RK" },
@@ -11,9 +13,12 @@ export default function Dashboard() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <div className="brand">Talent<span>OS</span></div>
+        <Link href="/" className="brand">Talent<span>OS</span></Link>
         <div className="nav-label">Workspace</div>
-        {nav.map((item, i) => <div key={item} className={`nav-item ${i === 0 ? "active" : ""}`}><span>{["⌂","▣","♙","↗","◷","□","◇","♧","✓","◈","◌","▤"][i]}</span><span>{item}</span></div>)}
+        {nav.map((item, i) => item === "Jobs"
+          ? <Link key={item} href="/jobs" className="nav-item"><span>▣</span><span>{item}</span></Link>
+          : <div key={item} className={i === 0 ? "nav-item active" : "nav-item"}><span>{["⌂","▣","♙","↗","◷","□","◇","♧","✓","◈","◌","▤"][i]}</span><span>{item}</span></div>
+        )}
         <div className="nav-label">Administration</div>
         <div className="nav-item"><span>⚙</span><span>Settings</span></div>
         <div className="nav-item"><span>?</span><span>Help & support</span></div>
@@ -28,7 +33,7 @@ export default function Dashboard() {
         <section className="content">
           <div className="header-row">
             <div><div className="eyebrow">Recruitment operations</div><h1>Good afternoon</h1><p className="subtitle">Here’s what is happening across your hiring pipeline.</p></div>
-            <div className="actions"><button className="btn">Import candidates</button><button className="btn primary">+ New requisition</button></div>
+            <div className="actions"><Link href="/jobs" className="btn">Manage jobs</Link><Link href="/jobs" className="btn primary">+ New requisition</Link></div>
           </div>
 
           <div className="metrics">
@@ -40,21 +45,17 @@ export default function Dashboard() {
 
           <div className="card" style={{ marginBottom: 18 }}>
             <div className="card-head"><span className="card-title">Recruitment pipeline</span><span className="link">View analytics →</span></div>
-            <div className="pipeline">
-              {[['New applicants','186'],['Screening','74'],['Submitted','51'],['Interview','37'],['Offer / hire','18']].map(([label, value]) => <div className="stage" key={label}><strong>{value}</strong><span>{label}</span></div>)}
-            </div>
+            <div className="pipeline">{[["New applicants","186"],["Screening","74"],["Submitted","51"],["Interview","37"],["Offer / hire","18"]].map(([label, value]) => <div className="stage" key={label}><strong>{value}</strong><span>{label}</span></div>)}</div>
           </div>
 
           <div className="grid">
             <div className="card">
-              <div className="card-head"><span className="card-title">Active requisitions</span><span className="link">View all →</span></div>
-              <table className="table"><thead><tr><th>Position</th><th>Client</th><th>Applicants</th><th>Status</th></tr></thead><tbody>{jobs.map(j => <tr key={j.title}><td><strong>{j.title}</strong><br /><small style={{color:'var(--muted)'}}>Recruiter {j.recruiter}</small></td><td>{j.client}</td><td>{j.applicants}</td><td><span className={`badge ${j.status === 'Active' ? 'green' : j.status === 'Interviewing' ? 'blue' : 'amber'}`}>{j.status}</span></td></tr>)}</tbody></table>
+              <div className="card-head"><span className="card-title">Active requisitions</span><Link href="/jobs" className="link">View all →</Link></div>
+              <table className="table"><thead><tr><th>Position</th><th>Client</th><th>Applicants</th><th>Status</th></tr></thead><tbody>{jobs.map(j => <tr key={j.title}><td><strong>{j.title}</strong><br /><small style={{color:"var(--muted)"}}>Recruiter {j.recruiter}</small></td><td>{j.client}</td><td>{j.applicants}</td><td><span className={j.status === "Active" ? "badge green" : j.status === "Interviewing" ? "badge blue" : "badge amber"}>{j.status}</span></td></tr>)}</tbody></table>
             </div>
             <div className="card">
               <div className="card-head"><span className="card-title">Recent activity</span><span className="link">View activity →</span></div>
-              <div className="activity">
-                {[['New candidate added','Sarah Wilson was added to Senior Python Engineer','8 min ago'],['Interview scheduled','James Patel · Data Analyst · Tomorrow 10:30','24 min ago'],['Candidate submitted','Michael Chen submitted to Vertex Systems','41 min ago'],['Placement created','Aisha Khan placed at Northstar Digital','1 hr ago'],['New client lead','Brightline Group added as a prospect','2 hrs ago']].map(([a,b,c]) => <div className="activity-row" key={b}><div className="dot"/><div className="activity-text"><strong>{a}</strong><br />{b}<div className="activity-time">{c}</div></div></div>)}
-              </div>
+              <div className="activity">{[["New candidate added","Sarah Wilson was added to Senior Python Engineer","8 min ago"],["Interview scheduled","James Patel · Data Analyst · Tomorrow 10:30","24 min ago"],["Candidate submitted","Michael Chen submitted to Vertex Systems","41 min ago"],["Placement created","Aisha Khan placed at Northstar Digital","1 hr ago"],["New client lead","Brightline Group added as a prospect","2 hrs ago"]].map(([a,b,c]) => <div className="activity-row" key={b}><div className="dot"/><div className="activity-text"><strong>{a}</strong><br />{b}<div className="activity-time">{c}</div></div></div>)}</div>
             </div>
           </div>
         </section>
