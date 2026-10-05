@@ -15,4 +15,4 @@ def get_one(offer_id: UUID,organization_id: UUID,user_id: UUID=Depends(get_curre
     assert_org_member(user_id,organization_id); return get_offer(organization_id,offer_id)
 @router.patch("/{offer_id}",response_model=OfferOut)
 def patch_offer(offer_id: UUID,payload: OfferUpdate,organization_id: UUID,user_id: UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,organization_id); return update_offer(organization_id,offer_id,payload)
+    assert_org_member(user_id,organization_id); return update_offer(organization_id,offer_id,payload,user_id)

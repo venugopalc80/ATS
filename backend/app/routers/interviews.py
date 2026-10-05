@@ -31,4 +31,4 @@ async def update_interview(interview_id:UUID,payload:InterviewUpdate,user_id:UUI
     row=await service.get_interview(interview_id)
     if row is None:raise HTTPException(404,"Interview not found")
     assert_org_member(user_id,row["organization_id"])
-    return InterviewOut.model_validate(await service.update_interview(interview_id,payload))
+    return InterviewOut.model_validate(await service.update_interview(interview_id,payload,user_id))

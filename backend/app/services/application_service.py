@@ -102,6 +102,10 @@ class ApplicationService:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
+                    "select set_config('app.actor_user_id', %s, true)",
+                    [str(actor_user_id)],
+                )
+                cursor.execute(
                     f"""
                     update public.applications
                     set {assignments}, updated_at = now()
