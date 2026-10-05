@@ -32,6 +32,13 @@ def create_placement(payload: PlacementCreate, user_id: UUID):
     with get_connection() as c:
         with c.cursor() as cur:
             cur.execute(
+                """select 1 from public.applications where id=%(application_id)s and organization_id=%(organization_id)s
+                """,
+                {"application_id": payload.application_id, "organization_id": payload.organization_id},
+            )
+            if cur.fetchone() is None:
+                raise ValueError("Application must belong to the same organization")
+            cur.execute(
                 """insert into public.placements
                 (organization_id,application_id,offer_id,job_id,candidate_id,client_id,status,start_date,end_date,fee_amount,fee_currency,fee_type,fee_percentage,notes,created_by)
                 values (%(organization_id)s,%(application_id)s,%(offer_id)s,%(job_id)s,%(candidate_id)s,%(client_id)s,%(status)s,%(start_date)s,%(end_date)s,%(fee_amount)s,%(fee_currency)s,%(fee_type)s,%(fee_percentage)s,%(notes)s,%(created_by)s)
