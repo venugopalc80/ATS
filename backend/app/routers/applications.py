@@ -27,6 +27,8 @@ async def list_applications(
     try:
         rows = await service.list_applications(organization_id, status, job_id, candidate_id)
         return [ApplicationOut.model_validate(row) for row in rows]
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
