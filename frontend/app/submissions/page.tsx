@@ -45,6 +45,11 @@ export default function SubmissionsPage() {
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [selectedJob, setSelectedJob] = useState("");
+  const [selectedCandidate, setSelectedCandidate] = useState("");
+  const [source, setSource] = useState("Direct");
+  const [saving, setSaving] = useState(false);
 
   const jobMap = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
   const candidateMap = useMemo(() => new Map(candidates.map((candidate) => [candidate.id, candidate])), [candidates]);
@@ -151,6 +156,7 @@ export default function SubmissionsPage() {
               <h1>Submissions</h1>
               <p className="subtitle">Move candidates through screening, submission, interview and offer stages.</p>
             </div>
+            <button className="btn primary" onClick={() => { setMessage(""); setShowCreate(true); }}>+ New submission</button>
             <select className="filter" value={status} onChange={(event) => setStatus(event.target.value as "all" | ApplicationStatus)}>
               <option value="all">All statuses</option>
               {statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
@@ -158,6 +164,63 @@ export default function SubmissionsPage() {
           </div>
 
           {message && <div className="notice">{message}</div>}
+
+          {showCreate && (
+            <div className="modal-backdrop">
+              <form className="modal" onSubmit={async (event) => {
+                event.preventDefault();
+                if (!selectedJob || !selectedCandidate) { setMessage("Select both a job and candidate."); return; }
+                setSaving(true);
+                try {
+                  const organizationId = localStorage.getItem("talentos_active_org") || DEFAULT_ORGANIZATION_ID;
+                  const response = await apiFetch(API_BASE + "/api/applications", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ organization_id: organizationId, job_id: selectedJob, candidate_id: selectedCandidate, source, status: "new" }),
+                  });
+                  if (!response.ok) {
+                    const detail = await response.json().catch(() => null);
+                    throw new Error(detail?.detail ?? "Unable to create submission.");
+                  }
+                  const created: Application = await response.json();
+                  setApplications((current) => [created, ...current]);
+                  setShowCreate(false);
+                  setSelectedJob("");
+                  setSelectedCandidate("");
+                  setSource("Direct");
+                  setMessage("Submission created successfully.");
+                } catch (error) {
+                  setMessage(error instanceof Error ? error.message : "Unable to create submission.");
+                } finally {
+                  setSaving(false);
+                }
+              }}>
+                <div className="card-head">
+                  <span className="card-title">New submission</span>
+                  <button type="button" className="icon-button" onClick={() => setShowCreate(false)}>×</button>
+                </div>
+                <label>Candidate
+                  <select required value={selectedCandidate} onChange={(event) => setSelectedCandidate(event.target.value)}>
+                    <option value="">Select candidate</option>
+                    {candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidateName(candidate)}</option>)}
+                  </select>
+                </label>
+                <label>Job
+                  <select required value={selectedJob} onChange={(event) => setSelectedJob(event.target.value)}>
+                    <option value="">Select job</option>
+                    {jobs.filter((job) => job.status === "open" || job.status === "on_hold").map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}
+                  </select>
+                </label>
+                <label>Source
+                  <input value={source} onChange={(event) => setSource(event.target.value)} placeholder="Direct, LinkedIn, referral..." />
+                </label>
+                <div className="modal-actions">
+                  <button type="button" className="btn" onClick={() => setShowCreate(false)}>Cancel</button>
+                  <button className="btn primary" disabled={saving}>{saving ? "Creating..." : "Create submission"}</button>
+                </div>
+              </form>
+            </div>
+          )}
 
           <div className="pipeline-board">
             {boardStatuses.map((stage) => {
