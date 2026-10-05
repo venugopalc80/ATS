@@ -35,6 +35,9 @@ class InterviewService:
         vals = [d[x] for x in cols]
         with get_connection() as c:
             with c.cursor() as cur:
+                cur.execute("select 1 from public.applications where id=%s and organization_id=%s", [payload.application_id, payload.organization_id])
+                if cur.fetchone() is None:
+                    raise ValueError("Application must belong to the same organization")
                 cur.execute(
                     f"insert into public.interviews ({','.join(cols)}) values ({','.join(['%s'] * len(cols))}) returning {COLUMNS}",
                     vals,
