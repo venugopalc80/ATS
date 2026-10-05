@@ -15,4 +15,4 @@ def get_one(placement_id: UUID,organization_id: UUID,user_id: UUID=Depends(get_c
     assert_org_member(user_id,organization_id); return get_placement(organization_id,placement_id)
 @router.patch("/{placement_id}",response_model=PlacementOut)
 def patch_placement(placement_id: UUID,payload: PlacementUpdate,organization_id: UUID,user_id: UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,organization_id); return update_placement(organization_id,placement_id,payload)
+    assert_org_member(user_id,organization_id); return update_placement(organization_id,placement_id,payload,user_id)
