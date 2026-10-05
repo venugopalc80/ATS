@@ -30,6 +30,9 @@ def create_offer(payload: OfferCreate, user_id: UUID):
     d["created_by"] = user_id
     with get_connection() as c:
         with c.cursor() as cur:
+            cur.execute("select 1 from public.applications where id=%s and organization_id=%s", [payload.application_id, payload.organization_id])
+            if cur.fetchone() is None:
+                raise ValueError("Application must belong to the same organization")
             cur.execute(
                 """insert into public.offers
                 (organization_id,application_id,title,status,employment_type,start_date,salary_amount,salary_currency,bonus_amount,benefits,expires_at,notes,created_by)
