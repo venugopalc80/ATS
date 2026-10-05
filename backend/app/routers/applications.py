@@ -42,6 +42,8 @@ async def create_application(
     try:
         row = await service.create_application(payload)
         return ApplicationOut.model_validate(row)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
