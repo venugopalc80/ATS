@@ -12,6 +12,7 @@ from app.routers.dashboard import router as dashboard_router
 from app.routers.interviews import router as interviews_router
 from app.routers.offers import router as offers_router
 from app.routers.placements import router as placements_router
+from app.routers.audit import router as audit_router
 
 
 app = FastAPI(
@@ -39,6 +40,7 @@ app.include_router(dashboard_router)
 app.include_router(interviews_router)
 app.include_router(offers_router)
 app.include_router(placements_router)
+app.include_router(audit_router)
 
 
 @app.get("/")

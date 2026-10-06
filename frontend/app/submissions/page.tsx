@@ -237,7 +237,7 @@ export default function SubmissionsPage() {
                       const job = jobMap.get(application.job_id);
                       return (
                         <div key={application.id} className="pipeline-card" draggable onDragStart={(event) => onDragStart(event, application.id)}>
-                          <strong>{candidateName(candidate)}</strong>
+                          <Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link>
                           <div className="muted-small">{job?.title ?? "Unknown job"}</div>
                           {application.match_score != null && <span className="badge green">{application.match_score}% match</span>}
                           <select

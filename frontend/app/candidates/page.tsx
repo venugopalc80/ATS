@@ -275,7 +275,7 @@ export default function CandidatesPage() {
                 ) : filtered.map((candidate) => (
                   <tr key={candidate.id}>
                     <td>
-                      <strong>{fullName(candidate)}</strong>
+                      <Link className="link" href={"/candidates/" + candidate.id}><strong>{fullName(candidate)}</strong></Link>
                       <div className="muted-small">{candidate.email ?? "No email"}</div>
                     </td>
                     <td>{candidate.current_title ?? "Not specified"}</td>
@@ -285,7 +285,7 @@ export default function CandidatesPage() {
                     <td><span className={"badge " + (candidate.status === "active" ? "green" : candidate.status === "placed" ? "blue" : "amber")}>{candidate.status.replaceAll("_", " ")}</span></td>
                     <td>
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button className="btn" onClick={() => openEdit(candidate)}>Edit</button>
+                        <Link className="btn" href={"/candidates/" + candidate.id}>View</Link><button className="btn" onClick={() => openEdit(candidate)}>Edit</button>
                         <button className="btn" onClick={() => deleteCandidate(candidate)}>Delete</button>
                       </div>
                     </td>
