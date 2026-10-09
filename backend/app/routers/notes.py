@@ -1,5 +1,5 @@
 from uuid import UUID
-from fastapi import APIRouter,Depends,HTTPException
+from fastapi import APIRouter,Depends,HTTPException,Query
 from app.auth import assert_org_member,get_current_user_id
 from app.db import DatabaseConfigurationError,DatabaseConnectionError,get_connection
 from app.schemas.notes import NoteCreate,NoteOut
@@ -27,3 +27,30 @@ async def create_note(payload:NoteCreate,user_id:UUID=Depends(get_current_user_i
         return NoteOut.model_validate(await service.create_note(payload,user_id))
     except HTTPException: raise
     except (DatabaseConfigurationError,DatabaseConnectionError) as exc: raise HTTPException(status_code=503,detail="Database operation failed") from exc
+
+@router.get("/latest", response_model=list[dict])
+async def latest_notes(
+    organization_id: UUID,
+    candidate_ids: list[UUID] = Query(..., min_length=1, max_length=50),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select distinct on (rn.candidate_id)
+                        rn.candidate_id, rn.note, rn.created_at, rn.author_user_id
+                    from public.recruiter_notes rn
+                    join public.candidates c on c.id = rn.candidate_id
+                    where rn.organization_id = %s
+                      and c.organization_id = %s
+                      and rn.candidate_id = any(%s)
+                    order by rn.candidate_id, rn.created_at desc
+                    """,
+                    [organization_id, organization_id, candidate_ids],
+                )
+                return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Database operation failed") from exc
