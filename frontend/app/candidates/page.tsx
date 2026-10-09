@@ -77,6 +77,15 @@ export default function CandidatesPage() {
   const [loading, setLoading] = useState(Boolean(API_BASE));
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
+  const [country, setCountry] = useState("all");
+  const [sortBy, setSortBy] = useState<"name" | "title" | "location" | "status">("name");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("asc");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<Candidate["status"]>("active");
+  const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string; country: string }>>([]);
+  const [activeView, setActiveView] = useState("All candidates");
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Candidate | null>(null);
   const [form, setForm] = useState<CandidateForm>(emptyForm);
@@ -84,17 +93,19 @@ export default function CandidatesPage() {
   const [message, setMessage] = useState("");
 
   useEffect(() => {
-    if (!API_BASE || !ORGANIZATION_ID) {
-      setLoading(false);
-      return;
-    }
+    try { const stored = window.localStorage.getItem("talentos_candidate_views"); if (stored) setSavedViews(JSON.parse(stored)); } catch { /* Ignore invalid saved view data. */ }
+  }, []);
+
+  useEffect(() => {
+    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    if (!API_BASE || !organizationId) { setLoading(false); return; }
 
     let cancelled = false;
 
     async function load() {
       try {
         const response = await apiFetch(
-          API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(ORGANIZATION_ID)
+          API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId)
         );
         if (!response.ok) throw new Error("API returned " + response.status);
         const data: Candidate[] = await response.json();
@@ -119,9 +130,46 @@ export default function CandidatesPage() {
       candidate.skills.join(" ")
     ).toLowerCase();
 
-    return haystack.includes(query.toLowerCase()) &&
-      (status === "all" || candidate.status === status);
-  }), [candidates, query, status]);
+    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country);
+  }).sort((a, b) => {
+    const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
+    const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
+    return sortDirection === "asc" ? comparison : -comparison;
+  }), [candidates, query, status, country, sortBy, sortDirection]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const allVisibleSelected = visibleCandidates.length > 0 && visibleCandidates.every((candidate) => selectedIds.includes(candidate.id));
+  function changeSort(field: typeof sortBy) { if (sortBy === field) setSortDirection((direction) => direction === "asc" ? "desc" : "asc"); else { setSortBy(field); setSortDirection("asc"); } }
+  function saveCurrentView() {
+    const name = window.prompt("Name this saved view"); if (!name?.trim()) return;
+    const next = [...savedViews.filter((view) => view.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), query, status, country }];
+    setSavedViews(next); setActiveView(name.trim()); window.localStorage.setItem("talentos_candidate_views", JSON.stringify(next)); setMessage("View saved.");
+  }
+  function applyView(name: string) {
+    setActiveView(name);
+    if (name === "All candidates") { setQuery(""); setStatus("all"); setCountry("all"); }
+    else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status); setCountry(view.country); } }
+    setPage(1);
+  }
+  function exportCandidates() {
+    const escapeCsv = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+    const rows = [["Candidate ID","First name","Last name","Email","Phone","City","Region","Country","Current title","Years experience","Skills","Status"], ...filtered.map((candidate) => [candidate.id,candidate.first_name,candidate.last_name,candidate.email,candidate.phone,candidate.city,candidate.region,candidate.country_code,candidate.current_title,candidate.years_experience,candidate.skills.join("; "),candidate.status])];
+    const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" })); const link = document.createElement("a"); link.href = url; link.download = "talentos-candidates.csv"; link.click(); URL.revokeObjectURL(url);
+  }
+  async function applyBulkStatus() {
+    if (!selectedIds.length) return; setSaving(true); setMessage("");
+    try {
+      const results = await Promise.all(selectedIds.map(async (id) => {
+        const response = await apiFetch(API_BASE + "/api/candidates/" + id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: bulkStatus }) });
+        if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.detail || "Could not update every selected candidate."); }
+        return await response.json() as Candidate;
+      }));
+      const byId = new Map(results.map((candidate) => [candidate.id, candidate])); setCandidates((current) => current.map((candidate) => byId.get(candidate.id) ?? candidate)); setSelectedIds([]); setMessage("Updated " + results.length + " candidate(s).");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Bulk update failed. Some updates may have succeeded; refresh to verify."); }
+    finally { setSaving(false); }
+  }
 
   function openCreate() {
     setEditing(null);
@@ -228,7 +276,7 @@ export default function CandidatesPage() {
 
       <main className="main">
         <header className="topbar">
-          <input className="search" placeholder="Search candidates, skills, titles..." value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input className="search" placeholder="Search candidates, skills, titles..." value={query} onChange={(e) => { setQuery(e.target.value); setPage(1); }} />
           <div className="profile"><span>Acme Recruitment</span><div className="avatar">VG</div></div>
         </header>
 
@@ -244,36 +292,32 @@ export default function CandidatesPage() {
 
           <div className="card" style={{ marginBottom: 18 }}>
             <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-              <select className="filter" value={status} onChange={(e) => setStatus(e.target.value)}>
+              <select className="filter" aria-label="Saved candidate views" value={activeView} onChange={(e) => applyView(e.target.value)}><option>All candidates</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select>
+              <button className="btn" onClick={saveCurrentView}>Save view</button>
+              <select className="filter" value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }}>
                 <option value="all">All statuses</option>
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
-              <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span>
+              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
+              <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
             </div>
           </div>
 
           {message && <div className="notice">{message}</div>}
 
           <div className="card">
-            <div className="card-head">
-              <span className="card-title">Candidate pool</span>
-              <span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "API not configured"}</span>
+            <div className="card-head" style={{ flexWrap: "wrap", gap: 10 }}>
+              <span className="card-title">Candidate register</span><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "API not configured"}</span><select className="filter" aria-label="Bulk status" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as Candidate["status"])}><option value="active">Set Active</option><option value="inactive">Set Inactive</option><option value="placed">Set Placed</option><option value="do_not_contact">Set Do not contact</option></select><button className="btn" disabled={!selectedIds.length || saving} onClick={applyBulkStatus}>{saving ? "Updating..." : "Apply to " + selectedIds.length + " selected"}</button></div>
             </div>
-
-            <table className="table">
-              <thead>
-                <tr><th>Candidate</th><th>Current role</th><th>Location</th><th>Experience</th><th>Skills</th><th>Status</th><th>Actions</th></tr>
-              </thead>
+            <div style={{ overflowX: "auto" }}><table className="table">
+              <thead><tr><th><input type="checkbox" aria-label="Select all visible candidates" checked={allVisibleSelected} onChange={(e) => setSelectedIds((current) => e.target.checked ? [...new Set([...current, ...visibleCandidates.map((candidate) => candidate.id)])] : current.filter((id) => !visibleCandidates.some((candidate) => candidate.id === id)))} /></th><th><button className="table-sort" onClick={() => changeSort("name")}>Candidate {sortBy === "name" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("title")}>Current role {sortBy === "title" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("location")}>Location {sortBy === "location" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Experience</th><th>Skills</th><th><button className="table-sort" onClick={() => changeSort("status")}>Status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Actions</th></tr></thead>
               <tbody>
-                {loading ? (
-                  <tr><td colSpan={7}>Loading candidates...</td></tr>
-                ) : filtered.length === 0 ? (
-                  <tr><td colSpan={7}>No candidates yet. Add your first candidate.</td></tr>
-                ) : filtered.map((candidate) => (
+                {loading ? (<tr><td colSpan={8}>Loading candidates...</td></tr>) : filtered.length === 0 ? (<tr><td colSpan={8}>No candidates match these filters. Adjust your search or add a candidate.</td></tr>) : visibleCandidates.map((candidate) => (
                   <tr key={candidate.id}>
+                    <td><input type="checkbox" aria-label={"Select " + fullName(candidate)} checked={selectedIds.includes(candidate.id)} onChange={(e) => setSelectedIds((current) => e.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))} /></td>
                     <td>
                       <Link className="link" href={"/candidates/" + candidate.id}><strong>{fullName(candidate)}</strong></Link>
                       <div className="muted-small">{candidate.email ?? "No email"}</div>
@@ -292,7 +336,8 @@ export default function CandidatesPage() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
           </div>
         </section>
       </main>
