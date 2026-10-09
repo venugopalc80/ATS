@@ -8,7 +8,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 type Job = { id: string; title: string; status: string };
-type Candidate = { id: string; first_name: string; last_name?: string | null; current_title?: string | null };
+type Candidate = { id: string; first_name: string; last_name?: string | null; email?: string | null; phone?: string | null; city?: string | null; region?: string | null; current_title?: string | null };
 type ApplicationStatus = "new" | "screening" | "submitted" | "interview" | "offer" | "hired" | "rejected" | "withdrawn";
 type Application = {
   id: string;
