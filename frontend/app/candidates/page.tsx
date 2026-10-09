@@ -1,6 +1,7 @@
 'use client';
 
 import Link from "next/link";
+import * as XLSX from "xlsx";
 import { apiFetch } from "@/lib/api";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
@@ -201,38 +202,99 @@ export default function CandidatesPage() {
   async function readImportFile(file?: File) {
     if (!file) return;
     setImportFileName(file.name); setImportRows([]); setImportMessage("");
-    if (!file.name.toLowerCase().endsWith(".csv")) { setImportMessage("For this first version, upload a CSV file. Save Excel files as CSV first."); return; }
+    const extension = file.name.toLowerCase().split(".").pop();
+    if (!["csv", "xlsx", "xls"].includes(extension || "")) {
+      setImportMessage("Choose a CSV or Excel workbook (.xlsx or .xls)."); return;
+    }
     try {
-      const rows = parseCsv(await file.text());
-      if (rows.length < 2) { setImportMessage("The CSV needs a header row and at least one candidate row."); return; }
-      const normalize = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
-      const headers = rows[0].map(normalize);
+      let sourceRows: Array<{ cells: unknown[]; headers: string[]; sheet: string; line: number }> = [];
+      if (extension === "csv") {
+        const rows = parseCsv(await file.text());
+        if (rows.length < 2) { setImportMessage("The CSV needs a header row and at least one candidate row."); return; }
+        sourceRows = rows.slice(1).map((cells, index) => ({ cells, headers: rows[0].map(String), sheet: "CSV", line: index + 2 }));
+      } else {
+        const workbook = XLSX.read(await file.arrayBuffer(), { type: "array", cellDates: false });
+        for (const sheetName of workbook.SheetNames) {
+          const worksheet = workbook.Sheets[sheetName];
+          const grid = XLSX.utils.sheet_to_json<unknown[]>(worksheet, { header: 1, defval: "", raw: false }) as unknown[][];
+          if (!grid.length) continue;
+          const normalizeHeader = (value: unknown) => String(value ?? "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+          let headerIndex = -1;
+          for (let i = 0; i < Math.min(grid.length, 20); i++) {
+            const headers = grid[i].map(normalizeHeader);
+            const hasName = headers.some((value) => ["firstname", "givenname", "applicantname", "fullname", "name", "candidate", "candidatename"].includes(value));
+            const hasContact = headers.some((value) => ["email", "emailaddress", "emailid", "mobile", "mobilenumber", "phone", "phonenumber"].includes(value));
+            if (hasName && hasContact) { headerIndex = i; break; }
+          }
+          if (headerIndex < 0) continue;
+          const headers = grid[headerIndex].map((value) => String(value ?? ""));
+          grid.slice(headerIndex + 1).forEach((cells, index) => {
+            if (cells.some((value) => String(value ?? "").trim() !== "")) sourceRows.push({ cells, headers, sheet: sheetName, line: index + headerIndex + 2 });
+          });
+        }
+        if (!sourceRows.length) { setImportMessage("No candidate tables were found. Each worksheet needs a header row with a candidate name and email or phone column."); return; }
+      }
+      const normalize = (value: unknown) => String(value ?? "").toLowerCase().trim().replace(/[^a-z0-9]/g, "");
       const aliases: Record<string, string[]> = {
-        first_name: ["firstname", "givenname", "forename", "first"], last_name: ["lastname", "surname", "familyname", "last"],
-        email: ["email", "emailaddress", "e_mail"], phone: ["phone", "mobile", "mobilenumber", "phonenumber", "telephone"],
-        city: ["city", "town"], region: ["region", "state", "county", "province"], country_code: ["countrycode", "countryiso", "iso2"],
-        status: ["status", "candidatestatus"], current_title: ["currenttitle", "jobtitle", "title", "currentrole"],
-        years_experience: ["yearsexperience", "experience", "yearsofexperience"], skills: ["skills", "skill", "technologies"]
+        first_name: ["firstname", "givenname", "forename", "first"],
+        last_name: ["lastname", "surname", "familyname", "last"],
+        full_name: ["fullname", "applicantname", "candidate", "candidatename", "name"],
+        email: ["email", "emailaddress", "emailid", "e_mail", "mailid"],
+        phone: ["phone", "mobile", "mobilenumber", "phonenumber", "telephone", "contactnumber"],
+        city: ["city", "town"], region: ["region", "state", "county", "province"],
+        country_code: ["countrycode", "countryiso", "iso2", "country"],
+        status: ["status", "candidatestatus", "applicantstatus", "profilestatus"],
+        current_title: ["currenttitle", "jobtitle", "currentrole", "designation", "primaryskill", "skillset", "technology"],
+        years_experience: ["yearsexperience", "experience", "yearsofexperience", "totalexperience"],
+        skills: ["skills", "skill", "technologies", "primaryskill", "skillset"],
       };
-      const column: Record<string, number> = {};
-      for (const [field, names] of Object.entries(aliases)) { const idx = headers.findIndex((header) => names.includes(header)); if (idx >= 0) column[field] = idx; }
-      if (column.first_name === undefined) { setImportMessage("Couldn't find a First Name column. Use a header such as first_name or First Name."); return; }
       const existingEmails = new Set(candidates.map((candidate) => candidate.email?.trim().toLowerCase()).filter((email): email is string => Boolean(email)));
-      const fileEmails = new Set<string>(); const allowedStatuses: Candidate["status"][] = ["active", "inactive", "placed", "do_not_contact"];
-      const parsed = rows.slice(1).map((cells, index): ImportRow => {
-        const get = (field: string) => column[field] === undefined ? "" : (cells[column[field]] ?? "").trim();
-        const statusValue = get("status").toLowerCase().replace(/[ -]+/g, "_");
-        const email = get("email").toLowerCase(); const countryCode = get("country_code").toUpperCase(); const experience = get("years_experience"); const errors: string[] = [];
-        if (!get("first_name")) errors.push("First name is required");
+      const fileEmails = new Set<string>();
+      const allowedStatuses: Candidate["status"][] = ["active", "inactive", "placed", "do_not_contact"];
+      const countryCodes: Record<string, string> = { "united kingdom": "GB", uk: "GB", britain: "GB", "united states": "US", usa: "US", india: "IN", australia: "AU", canada: "CA", "new zealand": "NZ", ireland: "IE" };
+      const parsed: ImportRow[] = sourceRows.map((source, index) => {
+        const headers = source.headers.map(normalize);
+        const column: Record<string, number> = {};
+        for (const [field, names] of Object.entries(aliases)) {
+          const idx = headers.findIndex((header) => names.includes(header));
+          if (idx >= 0) column[field] = idx;
+        }
+        const get = (field: string) => column[field] === undefined ? "" : String(source.cells[column[field]] ?? "").trim();
+        let firstName = get("first_name"); let lastName = get("last_name");
+        const fullNameValue = get("full_name");
+        if (!firstName && fullNameValue) {
+          const parts = fullNameValue.split(/\s+/).filter(Boolean);
+          firstName = parts.shift() ?? ""; if (!lastName) lastName = parts.join(" ");
+        }
+        const email = get("email").toLowerCase();
+        const rawCountry = get("country_code");
+        const countryCode = (countryCodes[rawCountry.toLowerCase()] || rawCountry).toUpperCase();
+        const experience = get("years_experience");
+        const statusRaw = get("status").toLowerCase().replace(/[ -]+/g, "_");
+        const statusAliases: Record<string, Candidate["status"]> = { "new lead": "active", "new": "active", "available": "active", "do_not_contact": "do_not_contact", "do not contact": "do_not_contact", "placed": "placed", "inactive": "inactive", "active": "active" };
+        const statusValue = statusAliases[statusRaw] || statusRaw;
+        const errors: string[] = [];
+        if (!firstName) errors.push("Candidate name is required");
         if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Invalid email");
         if (countryCode && !/^[A-Z]{2}$/.test(countryCode)) errors.push("Country must be a 2-letter ISO code");
         if (experience && (!Number.isFinite(Number(experience)) || Number(experience) < 0 || Number(experience) > 80)) errors.push("Experience must be 0–80 years");
         if (statusValue && !allowedStatuses.includes(statusValue as Candidate["status"])) errors.push("Unknown status");
-        const duplicate = Boolean(email && (existingEmails.has(email) || fileEmails.has(email))); if (email) fileEmails.add(email);
-        return { line: index + 2, first_name: get("first_name"), last_name: get("last_name"), email, phone: get("phone"), city: get("city"), region: get("region"), country_code: countryCode, status: (allowedStatuses.includes(statusValue as Candidate["status"]) ? statusValue : "active") as Candidate["status"], current_title: get("current_title"), years_experience: experience, skills: get("skills"), errors, duplicate };
+        const duplicate = Boolean(email && (existingEmails.has(email) || fileEmails.has(email)));
+        if (email) fileEmails.add(email);
+        const skills = get("skills");
+        return {
+          line: source.line, first_name: firstName, last_name: lastName, email, phone: get("phone"),
+          city: get("city"), region: get("region"), country_code: countryCode,
+          status: (allowedStatuses.includes(statusValue as Candidate["status"]) ? statusValue : "active") as Candidate["status"],
+          current_title: get("current_title"), years_experience: experience,
+          skills, errors, duplicate
+        };
       });
-      setImportRows(parsed); setImportMessage("Preview ready: " + parsed.length + " rows. Review errors and duplicates before importing.");
-    } catch { setImportMessage("Couldn't read this CSV. Check its encoding and try again."); }
+      setImportRows(parsed);
+      setImportMessage("Preview ready: " + parsed.length + " rows from " + (extension === "csv" ? "CSV" : "all detected worksheets") + ". Review errors and duplicates before importing.");
+    } catch (error) {
+      setImportMessage("Couldn't read this file. Check that it is a valid CSV or Excel workbook and try again.");
+    }
   }
   async function runImport() {
     const eligible = importRows.filter((row) => row.errors.length === 0 && !row.duplicate);
@@ -428,9 +490,9 @@ export default function CandidatesPage() {
       {showImport && (
         <div className="modal-backdrop"><div className="modal" style={{ width: "min(960px, 96vw)", maxHeight: "88vh", overflow: "auto" }}>
           <div className="card-head"><span className="card-title">Import candidates from CSV</span><button type="button" className="icon-button" onClick={() => { if (!importing) setShowImport(false); }}>×</button></div>
-          <p className="subtitle">Upload a CSV, review the preview, then import valid rows. Existing email matches and duplicate emails within the file are skipped.</p>
-          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}><input type="file" accept=".csv,text/csv" onChange={(event) => void readImportFile(event.target.files?.[0])} disabled={importing} />{importFileName && <span className="muted-small">{importFileName}</span>}</div>
-          <p className="muted-small">Expected columns: first_name, last_name, email, phone, city, region, country_code, current_title, years_experience, skills, status. Only first_name is required. Save Excel workbooks as CSV before uploading.</p>
+          <p className="subtitle">Upload a CSV or Excel workbook. TalentOS scans worksheets, previews candidate rows, and skips email duplicates.</p>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}><input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => void readImportFile(event.target.files?.[0])} disabled={importing} />{importFileName && <span className="muted-small">{importFileName}</span>}</div>
+          <p className="muted-small">Recognised columns include applicant/candidate name, email, phone/mobile, location, skills, job title and status. Excel workbooks with multiple worksheets are scanned. Application history is not imported in this candidate-only workflow.</p>
           {importMessage && <div className="notice" style={{ marginBottom: 12 }}>{importMessage}</div>}
           {importRows.length > 0 && <>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}><span className="badge green">{importRows.filter((row) => !row.errors.length && !row.duplicate).length} ready</span><span className="badge amber">{importRows.filter((row) => row.errors.length > 0).length} with errors</span><span className="badge amber">{importRows.filter((row) => row.duplicate).length} duplicates</span></div>
