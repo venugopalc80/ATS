@@ -265,7 +265,7 @@ export default function CandidatesPage() {
         first_name: ["firstname", "givenname", "forename", "first"],
         last_name: ["lastname", "surname", "familyname", "last"],
         full_name: ["fullname", "applicantname", "candidate", "candidatename", "name"],
-        email: ["email", "emailaddress", "emailid", "e_mail", "mailid"],
+        email: ["email", "emailaddress", "emailid", "personalemailid", "personalemail", "officialemailid", "officialemail", "candidateemail", "workemail", "workemailid", "e_mail", "mailid"],
         phone: ["phone", "mobile", "mobilenumber", "phonenumber", "telephone", "contactnumber"],
         city: ["city", "town"], region: ["region", "state", "county", "province"],
         country_code: ["countrycode", "countryiso", "iso2", "country"],
