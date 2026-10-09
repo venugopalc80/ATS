@@ -36,19 +36,31 @@ def get_current_user_id(
         raise HTTPException(status_code=401, detail="Invalid authentication token") from exc
 
 
-def assert_org_member(user_id: UUID, organization_id: UUID) -> None:
+def get_org_role(user_id: UUID, organization_id: UUID) -> str:
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """
-                    select 1
+                    select role
                     from public.organization_members
                     where organization_id = %s and user_id = %s
                     """,
                     [organization_id, user_id],
                 )
-                if cursor.fetchone() is None:
+                row = cursor.fetchone()
+                if row is None:
                     raise HTTPException(status_code=403, detail="You are not a member of this organization")
+                return str(row[0])
     except HTTPException:
         raise
+
+
+def assert_org_member(user_id: UUID, organization_id: UUID) -> None:
+    get_org_role(user_id, organization_id)
+
+
+def assert_org_admin(user_id: UUID, organization_id: UUID) -> None:
+    role = get_org_role(user_id, organization_id)
+    if role not in {"owner", "admin"}:
+        raise HTTPException(status_code=403, detail="Admin access required")
