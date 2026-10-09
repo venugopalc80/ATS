@@ -52,6 +52,27 @@ const emptyForm: CandidateForm = {
   skills: "",
 };
 
+type ImportRow = {
+  line: number; first_name: string; last_name: string; email: string; phone: string;
+  city: string; region: string; country_code: string; status: Candidate["status"];
+  current_title: string; years_experience: string; skills: string; errors: string[]; duplicate: boolean;
+};
+function parseCsv(text: string): string[][] {
+  const rows: string[][] = []; let row: string[] = []; let cell = ""; let quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '"' && quoted && text[i + 1] === '"') { cell += '"'; i++; }
+    else if (char === '"') quoted = !quoted;
+    else if (char === "," && !quoted) { row.push(cell.trim()); cell = ""; }
+    else if ((char === "\n" || char === "\r") && !quoted) {
+      if (char === "\r" && text[i + 1] === "\n") i++;
+      row.push(cell.trim()); if (row.some((value) => value !== "")) rows.push(row);
+      row = []; cell = "";
+    } else cell += char;
+  }
+  row.push(cell.trim()); if (row.some((value) => value !== "")) rows.push(row); return rows;
+}
+
 function fullName(candidate: Candidate) {
   return [candidate.first_name, candidate.last_name].filter(Boolean).join(" ");
 }
@@ -91,6 +112,12 @@ export default function CandidatesPage() {
   const [form, setForm] = useState<CandidateForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [importFileName, setImportFileName] = useState("");
+  const [importing, setImporting] = useState(false);
+  const [importMessage, setImportMessage] = useState("");
+
 
   useEffect(() => {
     try { const stored = window.localStorage.getItem("talentos_candidate_views"); if (stored) setSavedViews(JSON.parse(stored)); } catch { /* Ignore invalid saved view data. */ }
@@ -169,6 +196,62 @@ export default function CandidatesPage() {
       const byId = new Map(results.map((candidate) => [candidate.id, candidate])); setCandidates((current) => current.map((candidate) => byId.get(candidate.id) ?? candidate)); setSelectedIds([]); setMessage("Updated " + results.length + " candidate(s).");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Bulk update failed. Some updates may have succeeded; refresh to verify."); }
     finally { setSaving(false); }
+  }
+
+  async function readImportFile(file?: File) {
+    if (!file) return;
+    setImportFileName(file.name); setImportRows([]); setImportMessage("");
+    if (!file.name.toLowerCase().endsWith(".csv")) { setImportMessage("For this first version, upload a CSV file. Save Excel files as CSV first."); return; }
+    try {
+      const rows = parseCsv(await file.text());
+      if (rows.length < 2) { setImportMessage("The CSV needs a header row and at least one candidate row."); return; }
+      const normalize = (value: string) => value.toLowerCase().trim().replace(/[^a-z0-9]/g, "");
+      const headers = rows[0].map(normalize);
+      const aliases: Record<string, string[]> = {
+        first_name: ["firstname", "givenname", "forename", "first"], last_name: ["lastname", "surname", "familyname", "last"],
+        email: ["email", "emailaddress", "e_mail"], phone: ["phone", "mobile", "mobilenumber", "phonenumber", "telephone"],
+        city: ["city", "town"], region: ["region", "state", "county", "province"], country_code: ["countrycode", "countryiso", "iso2"],
+        status: ["status", "candidatestatus"], current_title: ["currenttitle", "jobtitle", "title", "currentrole"],
+        years_experience: ["yearsexperience", "experience", "yearsofexperience"], skills: ["skills", "skill", "technologies"]
+      };
+      const column: Record<string, number> = {};
+      for (const [field, names] of Object.entries(aliases)) { const idx = headers.findIndex((header) => names.includes(header)); if (idx >= 0) column[field] = idx; }
+      if (column.first_name === undefined) { setImportMessage("Couldn't find a First Name column. Use a header such as first_name or First Name."); return; }
+      const existingEmails = new Set(candidates.map((candidate) => candidate.email?.trim().toLowerCase()).filter((email): email is string => Boolean(email)));
+      const fileEmails = new Set<string>(); const allowedStatuses: Candidate["status"][] = ["active", "inactive", "placed", "do_not_contact"];
+      const parsed = rows.slice(1).map((cells, index): ImportRow => {
+        const get = (field: string) => column[field] === undefined ? "" : (cells[column[field]] ?? "").trim();
+        const statusValue = get("status").toLowerCase().replace(/[ -]+/g, "_");
+        const email = get("email").toLowerCase(); const countryCode = get("country_code").toUpperCase(); const experience = get("years_experience"); const errors: string[] = [];
+        if (!get("first_name")) errors.push("First name is required");
+        if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.push("Invalid email");
+        if (countryCode && !/^[A-Z]{2}$/.test(countryCode)) errors.push("Country must be a 2-letter ISO code");
+        if (experience && (!Number.isFinite(Number(experience)) || Number(experience) < 0 || Number(experience) > 80)) errors.push("Experience must be 0–80 years");
+        if (statusValue && !allowedStatuses.includes(statusValue as Candidate["status"])) errors.push("Unknown status");
+        const duplicate = Boolean(email && (existingEmails.has(email) || fileEmails.has(email))); if (email) fileEmails.add(email);
+        return { line: index + 2, first_name: get("first_name"), last_name: get("last_name"), email, phone: get("phone"), city: get("city"), region: get("region"), country_code: countryCode, status: (allowedStatuses.includes(statusValue as Candidate["status"]) ? statusValue : "active") as Candidate["status"], current_title: get("current_title"), years_experience: experience, skills: get("skills"), errors, duplicate };
+      });
+      setImportRows(parsed); setImportMessage("Preview ready: " + parsed.length + " rows. Review errors and duplicates before importing.");
+    } catch { setImportMessage("Couldn't read this CSV. Check its encoding and try again."); }
+  }
+  async function runImport() {
+    const eligible = importRows.filter((row) => row.errors.length === 0 && !row.duplicate);
+    if (!eligible.length) { setImportMessage("There are no valid, non-duplicate rows to import."); return; }
+    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    if (!API_BASE || !organizationId) { setImportMessage("API or active organisation is not configured."); return; }
+    setImporting(true); let created = 0; const failures: string[] = [];
+    try {
+      for (const row of eligible) {
+        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean) };
+        try {
+          const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+          if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
+          const candidate = await response.json() as Candidate; setCandidates((current) => [candidate, ...current]); created++;
+        } catch { failures.push("Row " + row.line + ": network error"); }
+      }
+      setImportMessage("Imported " + created + " candidate(s). Skipped " + (importRows.length - eligible.length) + " invalid or duplicate row(s)." + (failures.length ? " Failed: " + failures.slice(0, 5).join("; ") : ""));
+      if (created > 0) { setImportRows([]); setImportFileName(""); }
+    } finally { setImporting(false); }
   }
 
   function openCreate() {
@@ -287,7 +370,7 @@ export default function CandidatesPage() {
               <h1>Candidates</h1>
               <p className="subtitle">Build and manage your searchable candidate pool.</p>
             </div>
-            <button className="btn primary" onClick={openCreate}>+ Add candidate</button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn" onClick={() => { setShowImport(true); setImportMessage(""); }}>↑ Import candidates</button><button className="btn primary" onClick={openCreate}>+ Add candidate</button></div>
           </div>
 
           <div className="card" style={{ marginBottom: 18 }}>
@@ -341,6 +424,23 @@ export default function CandidatesPage() {
           </div>
         </section>
       </main>
+
+      {showImport && (
+        <div className="modal-backdrop"><div className="modal" style={{ width: "min(960px, 96vw)", maxHeight: "88vh", overflow: "auto" }}>
+          <div className="card-head"><span className="card-title">Import candidates from CSV</span><button type="button" className="icon-button" onClick={() => { if (!importing) setShowImport(false); }}>×</button></div>
+          <p className="subtitle">Upload a CSV, review the preview, then import valid rows. Existing email matches and duplicate emails within the file are skipped.</p>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}><input type="file" accept=".csv,text/csv" onChange={(event) => void readImportFile(event.target.files?.[0])} disabled={importing} />{importFileName && <span className="muted-small">{importFileName}</span>}</div>
+          <p className="muted-small">Expected columns: first_name, last_name, email, phone, city, region, country_code, current_title, years_experience, skills, status. Only first_name is required. Save Excel workbooks as CSV before uploading.</p>
+          {importMessage && <div className="notice" style={{ marginBottom: 12 }}>{importMessage}</div>}
+          {importRows.length > 0 && <>
+            <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}><span className="badge green">{importRows.filter((row) => !row.errors.length && !row.duplicate).length} ready</span><span className="badge amber">{importRows.filter((row) => row.errors.length > 0).length} with errors</span><span className="badge amber">{importRows.filter((row) => row.duplicate).length} duplicates</span></div>
+            <div style={{ overflow: "auto", maxHeight: 320 }}><table className="table"><thead><tr><th>CSV row</th><th>Name</th><th>Email</th><th>Location</th><th>Status</th><th>Validation</th></tr></thead><tbody>{importRows.slice(0, 100).map((row) => <tr key={row.line}><td>{row.line}</td><td>{[row.first_name, row.last_name].filter(Boolean).join(" ") || "—"}</td><td>{row.email || "—"}</td><td>{[row.city, row.region, row.country_code].filter(Boolean).join(", ") || "—"}</td><td>{row.status.replaceAll("_", " ")}</td><td>{row.duplicate ? "Duplicate email" : row.errors.length ? row.errors.join(", ") : "Ready"}</td></tr>)}</tbody></table></div>
+            {importRows.length > 100 && <p className="muted-small">Previewing first 100 of {importRows.length} rows.</p>}
+            <div className="modal-actions"><button className="btn" disabled={importing} onClick={() => { setImportRows([]); setImportFileName(""); setImportMessage(""); }}>Clear</button><button className="btn primary" disabled={importing || !importRows.some((row) => !row.errors.length && !row.duplicate)} onClick={() => void runImport()}>{importing ? "Importing..." : "Import " + importRows.filter((row) => !row.errors.length && !row.duplicate).length + " candidates"}</button></div>
+          </>}
+          <div className="modal-actions"><button className="btn" disabled={importing} onClick={() => setShowImport(false)}>Close</button></div>
+        </div></div>
+      )}
 
       {showForm && (
         <div className="modal-backdrop">
