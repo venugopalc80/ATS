@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.candidates import CandidateCreate, CandidateOut, CandidateUpdate
 from app.services.candidate_service import CandidateService
@@ -84,7 +84,7 @@ async def delete_candidate(
         existing = await service.get_candidate(candidate_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
-        assert_org_member(user_id, existing["organization_id"])
+        assert_org_admin(user_id, existing["organization_id"])
         deleted = await service.delete_candidate(candidate_id)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
