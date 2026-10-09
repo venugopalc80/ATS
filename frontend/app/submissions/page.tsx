@@ -15,6 +15,7 @@ type Application = {
   job_id: string;
   candidate_id: string;
   status: ApplicationStatus;
+  source?: string | null;
   match_score?: number | null;
   human_reviewed: boolean;
   created_at: string;
