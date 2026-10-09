@@ -25,6 +25,8 @@ type Candidate = {
   ai_summary?: string | null;
 };
 
+type LatestNote = { candidate_id: string; note: string; created_at: string; author_user_id?: string | null };
+
 type CandidateForm = {
   first_name: string;
   last_name: string;
@@ -96,6 +98,7 @@ function formFromCandidate(candidate: Candidate): CandidateForm {
 
 export default function CandidatesPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [latestNotes, setLatestNotes] = useState<Record<string, LatestNote>>({});
   const [loading, setLoading] = useState(Boolean(API_BASE));
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -167,6 +170,29 @@ export default function CandidatesPage() {
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
+  useEffect(() => {
+    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    if (!API_BASE || !organizationId || !visibleCandidateIds) return;
+    let cancelled = false;
+    async function loadLatestNotes() {
+      try {
+        const params = new URLSearchParams({ organization_id: organizationId });
+        visibleCandidateIds.split(",").forEach((id) => params.append("candidate_ids", id));
+        const response = await apiFetch(API_BASE + "/api/notes/latest?" + params.toString());
+        if (!response.ok) return;
+        const rows: LatestNote[] = await response.json();
+        if (!cancelled) setLatestNotes((current) => {
+          const next = { ...current };
+          visibleCandidateIds.split(",").forEach((id) => { delete next[id]; });
+          rows.forEach((note) => { next[note.candidate_id] = note; });
+          return next;
+        });
+      } catch { /* Keep the register usable if notes are unavailable. */ }
+    }
+    void loadLatestNotes();
+    return () => { cancelled = true; };
+  }, [visibleCandidateIds]);
   const allVisibleSelected = visibleCandidates.length > 0 && visibleCandidates.every((candidate) => selectedIds.includes(candidate.id));
   function changeSort(field: typeof sortBy) { if (sortBy === field) setSortDirection((direction) => direction === "asc" ? "desc" : "asc"); else { setSortBy(field); setSortDirection("asc"); } }
   function saveCurrentView() {
@@ -458,16 +484,18 @@ export default function CandidatesPage() {
               <span className="card-title">Candidate register</span><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "API not configured"}</span><select className="filter" aria-label="Bulk status" value={bulkStatus} onChange={(e) => setBulkStatus(e.target.value as Candidate["status"])}><option value="active">Set Active</option><option value="inactive">Set Inactive</option><option value="placed">Set Placed</option><option value="do_not_contact">Set Do not contact</option></select><button className="btn" disabled={!selectedIds.length || saving} onClick={applyBulkStatus}>{saving ? "Updating..." : "Apply to " + selectedIds.length + " selected"}</button></div>
             </div>
             <div style={{ overflowX: "auto" }}><table className="table">
-              <thead><tr><th><input type="checkbox" aria-label="Select all visible candidates" checked={allVisibleSelected} onChange={(e) => setSelectedIds((current) => e.target.checked ? [...new Set([...current, ...visibleCandidates.map((candidate) => candidate.id)])] : current.filter((id) => !visibleCandidates.some((candidate) => candidate.id === id)))} /></th><th><button className="table-sort" onClick={() => changeSort("name")}>Candidate {sortBy === "name" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("title")}>Current role {sortBy === "title" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("location")}>Location {sortBy === "location" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Experience</th><th>Skills</th><th><button className="table-sort" onClick={() => changeSort("status")}>Status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Actions</th></tr></thead>
+              <thead><tr><th><input type="checkbox" aria-label="Select all visible candidates" checked={allVisibleSelected} onChange={(e) => setSelectedIds((current) => e.target.checked ? [...new Set([...current, ...visibleCandidates.map((candidate) => candidate.id)])] : current.filter((id) => !visibleCandidates.some((candidate) => candidate.id === id)))} /></th><th><button className="table-sort" onClick={() => changeSort("name")}>Candidate {sortBy === "name" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Phone</th><th><button className="table-sort" onClick={() => changeSort("title")}>Current role {sortBy === "title" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Latest recruiter note</th><th><button className="table-sort" onClick={() => changeSort("location")}>Location {sortBy === "location" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Experience</th><th>Skills</th><th><button className="table-sort" onClick={() => changeSort("status")}>Status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Actions</th></tr></thead>
               <tbody>
-                {loading ? (<tr><td colSpan={8}>Loading candidates...</td></tr>) : filtered.length === 0 ? (<tr><td colSpan={8}>No candidates match these filters. Adjust your search or add a candidate.</td></tr>) : visibleCandidates.map((candidate) => (
+                {loading ? (<tr><td colSpan={10}>Loading candidates...</td></tr>) : filtered.length === 0 ? (<tr><td colSpan={10}>No candidates match these filters. Adjust your search or add a candidate.</td></tr>) : visibleCandidates.map((candidate) => (
                   <tr key={candidate.id}>
                     <td><input type="checkbox" aria-label={"Select " + fullName(candidate)} checked={selectedIds.includes(candidate.id)} onChange={(e) => setSelectedIds((current) => e.target.checked ? [...current, candidate.id] : current.filter((id) => id !== candidate.id))} /></td>
                     <td>
                       <Link className="link" href={"/candidates/" + candidate.id}><strong>{fullName(candidate)}</strong></Link>
                       <div className="muted-small">{candidate.email ?? "No email"}</div>
                     </td>
+                    <td>{candidate.phone ? <a className="link" href={"tel:" + candidate.phone} title="Call candidate">{candidate.phone}</a> : <span className="muted-small">No phone</span>}</td>
                     <td>{candidate.current_title ?? "Not specified"}</td>
+                    <td style={{ minWidth: 240, maxWidth: 340 }}>{latestNotes[candidate.id] ? <div><div style={{ display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden", whiteSpace: "pre-wrap" }}>{latestNotes[candidate.id].note}</div><div className="muted-small" style={{ marginTop: 4 }}>{new Date(latestNotes[candidate.id].created_at).toLocaleDateString()} · <Link className="link" href={"/candidates/" + candidate.id}>View notes</Link></div></div> : <Link className="link" href={"/candidates/" + candidate.id}>+ Add note</Link>}</td>
                     <td>{[candidate.city, candidate.region].filter(Boolean).join(", ") || "Not specified"}</td>
                     <td>{candidate.years_experience != null ? candidate.years_experience + " yrs" : "-"}</td>
                     <td>{candidate.skills.slice(0, 3).join(", ") || "-"}</td>
