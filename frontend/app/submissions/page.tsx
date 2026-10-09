@@ -43,6 +43,14 @@ export default function SubmissionsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
+  const [query, setQuery] = useState("");
+  const [viewMode, setViewMode] = useState<"table" | "board">("table");
+  const [sortBy, setSortBy] = useState<"candidate" | "job" | "source" | "status" | "created">("created");
+  const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
+  const [page, setPage] = useState(1);
+  const pageSize = 25;
+  const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string }>>([]);
+  const [activeView, setActiveView] = useState("All applicants");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
   const [showCreate, setShowCreate] = useState(false);
@@ -53,6 +61,10 @@ export default function SubmissionsPage() {
 
   const jobMap = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
   const candidateMap = useMemo(() => new Map(candidates.map((candidate) => [candidate.id, candidate])), [candidates]);
+
+  useEffect(() => {
+    try { const stored = window.localStorage.getItem("talentos_applicant_views"); if (stored) setSavedViews(JSON.parse(stored)); } catch { /* Ignore invalid saved views. */ }
+  }, []);
 
   useEffect(() => {
     async function load() {
@@ -82,10 +94,37 @@ export default function SubmissionsPage() {
     load();
   }, []);
 
-  const filtered = useMemo(
-    () => applications.filter((application) => status === "all" || application.status === status),
-    [applications, status]
-  );
+  const filtered = useMemo(() => applications.filter((application) => {
+    const candidate = candidateMap.get(application.candidate_id);
+    const job = jobMap.get(application.job_id);
+    const haystack = [application.id, candidateName(candidate), candidate?.email, candidate?.phone, candidate?.city, candidate?.region, application.source, job?.title, application.status].filter(Boolean).join(" ").toLowerCase();
+    return (status === "all" || application.status === status) && haystack.includes(query.toLowerCase());
+  }).sort((a, b) => {
+    const candidateA = candidateMap.get(a.candidate_id); const candidateB = candidateMap.get(b.candidate_id);
+    const jobA = jobMap.get(a.job_id); const jobB = jobMap.get(b.job_id);
+    let comparison = 0;
+    if (sortBy === "candidate") comparison = candidateName(candidateA).localeCompare(candidateName(candidateB));
+    else if (sortBy === "job") comparison = (jobA?.title ?? "").localeCompare(jobB?.title ?? "");
+    else if (sortBy === "source") comparison = (a.source ?? "").localeCompare(b.source ?? "");
+    else if (sortBy === "status") comparison = a.status.localeCompare(b.status);
+    else comparison = a.created_at.localeCompare(b.created_at);
+    return sortDirection === "asc" ? comparison : -comparison;
+  }), [applications, candidateMap, jobMap, status, query, sortBy, sortDirection]);
+
+  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const pageApplications = filtered.slice((page - 1) * pageSize, page * pageSize);
+  function changeSort(field: typeof sortBy) { if (sortBy === field) setSortDirection((direction) => direction === "asc" ? "desc" : "asc"); else { setSortBy(field); setSortDirection(field === "created" ? "desc" : "asc"); } }
+  function saveView() {
+    const name = window.prompt("Name this applicant view"); if (!name?.trim()) return;
+    const next = [...savedViews.filter((view) => view.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), query, status }];
+    setSavedViews(next); setActiveView(name.trim()); window.localStorage.setItem("talentos_applicant_views", JSON.stringify(next)); setMessage("Applicant view saved.");
+  }
+  function applyView(name: string) {
+    setActiveView(name);
+    if (name === "All applicants") { setQuery(""); setStatus("all"); }
+    else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status as "all" | ApplicationStatus); } }
+    setPage(1);
+  }
 
   async function changeStatus(application: Application, nextStatus: ApplicationStatus) {
     if (application.status === nextStatus) return;
@@ -145,7 +184,7 @@ export default function SubmissionsPage() {
 
       <main className="main">
         <header className="topbar">
-          <input className="search" placeholder="Search submissions..." aria-label="Search submissions" />
+          <input className="search" placeholder="Search applicants, email, job, source..." aria-label="Search applicants" value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} />
           <div className="profile"><span>Acme Recruitment</span><div className="avatar">VG</div></div>
         </header>
 
@@ -153,16 +192,13 @@ export default function SubmissionsPage() {
           <div className="header-row">
             <div>
               <div className="eyebrow">Recruitment pipeline</div>
-              <h1>Submissions</h1>
-              <p className="subtitle">Move candidates through screening, submission, interview and offer stages.</p>
+              <h1>Applicants</h1>
+              <p className="subtitle">A unified applicant register and recruitment pipeline.</p>
             </div>
-            <button className="btn primary" onClick={() => { setMessage(""); setShowCreate(true); }}>+ New submission</button>
-            <select className="filter" value={status} onChange={(event) => setStatus(event.target.value as "all" | ApplicationStatus)}>
-              <option value="all">All statuses</option>
-              {statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}
-            </select>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className={"btn " + (viewMode === "table" ? "primary" : "")} onClick={() => setViewMode("table")}>Applicant register</button><button className={"btn " + (viewMode === "board" ? "primary" : "")} onClick={() => setViewMode("board")}>Pipeline board</button><button className="btn primary" onClick={() => { setMessage(""); setShowCreate(true); }}>+ New applicant</button></div>
           </div>
 
+          <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} applicant{filtered.length === 1 ? "" : "s"}</span></div></div>
           {message && <div className="notice">{message}</div>}
 
           {showCreate && (
@@ -222,7 +258,7 @@ export default function SubmissionsPage() {
             </div>
           )}
 
-          <div className="pipeline-board">
+          {viewMode === "board" && <div className="pipeline-board">
             {boardStatuses.map((stage) => {
               const stageApps = filtered.filter((application) => application.status === stage);
               return (
@@ -258,35 +294,30 @@ export default function SubmissionsPage() {
                 </div>
               );
             })}
-          </div>
+          </div>}
 
-          <div className="card">
-            <div className="card-head">
-              <span className="card-title">Application details</span>
-              <span className="muted-small">{loading ? "Loading..." : filtered.length + " application" + (filtered.length === 1 ? "" : "s")}</span>
-            </div>
-            <table className="table">
-              <thead><tr><th>Candidate</th><th>Position</th><th>Status</th><th>Match</th><th>Review</th><th>Created</th></tr></thead>
+          {viewMode === "table" && <div className="card">
+            <div className="card-head"><span className="card-title">Applicant register</span><span className="muted-small">{loading ? "Loading..." : "Live data · " + filtered.length + " records"}</span></div>
+            <div style={{ overflowX: "auto" }}><table className="table applicant-table">
+              <thead><tr><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={6}>Loading pipeline...</td></tr> :
-                  filtered.length === 0 ? <tr><td colSpan={6}>No applications yet.</td></tr> :
-                  filtered.map((application) => {
+                {loading ? <tr><td colSpan={10}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={10}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
                     const candidate = candidateMap.get(application.candidate_id);
                     const job = jobMap.get(application.job_id);
                     return (
                       <tr key={application.id}>
-                        <td><strong>{candidateName(candidate)}</strong></td>
-                        <td>{job?.title ?? "Unknown job"}</td>
-                        <td>{application.status}</td>
-                        <td>{application.match_score != null ? application.match_score + "%" : "Pending"}</td>
-                        <td><span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span></td>
-                        <td>{new Date(application.created_at).toLocaleDateString()}</td>
+                        <td><Link className="link" href={"/submissions/" + application.id}>{application.id.slice(0, 8).toUpperCase()}</Link></td>
+                        <td><Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link></td>
+                        <td>{candidate?.email ?? "—"}</td><td>{candidate?.phone ?? "—"}</td><td>{[candidate?.city, candidate?.region].filter(Boolean).join(", ") || "—"}</td><td>{application.source || "Direct"}</td>
+                        <td><select className="filter" aria-label={"Status for " + candidateName(candidate)} value={application.status} onChange={(event) => void changeStatus(application, event.target.value as ApplicationStatus)}><option value={application.status}>{application.status.replaceAll("_", " ")}</option>{allowedTransitions[application.status].map((next) => <option key={next} value={next}>{next.replaceAll("_", " ")}</option>)}</select></td>
+                        <td>{job?.title ?? "Unknown job"}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td><td>{new Date(application.created_at).toLocaleDateString()}</td>
                       </tr>
                     );
                   })}
               </tbody>
-            </table>
-          </div>
+            </table></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 14 }}><span className="muted-small">Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
+          </div>}
         </section>
       </main>
     </div>
