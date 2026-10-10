@@ -125,6 +125,8 @@ export default function JobsPage() {
   const [distributionByJob, setDistributionByJob] = useState<Record<string, JobDistribution>>({});
   const [distributionDraft, setDistributionDraft] = useState<JobDistribution>(initialDistribution);
   const [distributionStorageLoaded, setDistributionStorageLoaded] = useState(false);
+  const [distributionLoading, setDistributionLoading] = useState(false);
+  const [distributionSaving, setDistributionSaving] = useState(false);
 
   useEffect(() => {
     try {
@@ -176,18 +178,72 @@ export default function JobsPage() {
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
 
-  function openDistribution(job: Job) {
+  async function openDistribution(job: Job) {
+    const key = job.id ?? job.title;
     setDistributionJob(job);
-    setDistributionDraft(distributionByJob[job.id ?? job.title] ?? initialDistribution());
+    setDistributionDraft(distributionByJob[key] ?? initialDistribution());
     setMessage("");
+
+    const organizationId = job.organization_id || (typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") : null) || ORGANIZATION_ID;
+    const isPersistedJob = Boolean(job.id && !job.id.startsWith("demo-") && !job.id.startsWith("local-"));
+    if (!API_BASE || !organizationId || !isPersistedJob) return;
+
+    setDistributionLoading(true);
+    try {
+      const response = await apiFetch(`${API_BASE}/api/jobs/${job.id}/distribution?organization_id=${encodeURIComponent(organizationId)}`);
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || `Unable to load distribution settings (${response.status})`);
+      const saved: Array<{ channel_id: DistributionChannelId; selected: boolean; status: DistributionStatus }> = await response.json();
+      if (saved.length) {
+        const next = initialDistribution();
+        for (const item of saved) next[item.channel_id] = { selected: item.selected, status: item.status };
+        setDistributionDraft(next);
+        setDistributionByJob((current) => ({ ...current, [key]: next }));
+      }
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to load distribution settings.");
+    } finally {
+      setDistributionLoading(false);
+    }
   }
 
-  function saveDistribution() {
+  async function saveDistribution() {
     if (!distributionJob) return;
     const key = distributionJob.id ?? distributionJob.title;
+    const organizationId = distributionJob.organization_id || (typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") : null) || ORGANIZATION_ID;
+    const isPersistedJob = Boolean(distributionJob.id && !distributionJob.id.startsWith("demo-") && !distributionJob.id.startsWith("local-"));
+
+    if (API_BASE && organizationId && isPersistedJob) {
+      setDistributionSaving(true);
+      try {
+        const channels = distributionChannels.map((channel) => ({
+          channel_id: channel.id,
+          selected: distributionDraft[channel.id].selected,
+          status: !distributionDraft[channel.id].selected ? "not_selected" : channel.kind === "native" ? "ready" : channel.kind === "discovery" ? "needs_public_page" : "integration_required",
+        }));
+        const response = await apiFetch(`${API_BASE}/api/jobs/${distributionJob.id}/distribution?organization_id=${encodeURIComponent(organizationId)}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ channels }),
+        });
+        if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || `Unable to save distribution settings (${response.status})`);
+        const saved: Array<{ channel_id: DistributionChannelId; selected: boolean; status: DistributionStatus }> = await response.json();
+        const next = initialDistribution();
+        for (const item of saved) next[item.channel_id] = { selected: item.selected, status: item.status };
+        setDistributionDraft(next);
+        setDistributionByJob((current) => ({ ...current, [key]: next }));
+        setDistributionJob(null);
+        setMessage("Distribution preferences saved to the organisation database. External publishing is not enabled.");
+      } catch (error) {
+        setMessage(error instanceof Error ? error.message : "Unable to save distribution settings.");
+      } finally {
+        setDistributionSaving(false);
+      }
+      return;
+    }
+
     setDistributionByJob((current) => ({ ...current, [key]: distributionDraft }));
     setDistributionJob(null);
-    setMessage("Distribution preferences saved in this browser. They are not synced across users, and no external job board has been contacted or published to.");
+    setMessage("Demo distribution preferences saved in this browser. No external job board has been contacted or published to.");
   }
 
   function openCreate() {
@@ -362,7 +418,7 @@ export default function JobsPage() {
               <div><span className="card-title" id="distribution-title">Job distribution</span><div className="muted-small" style={{ marginTop: 5 }}>{distributionJob.title}</div></div>
               <button type="button" className="icon-button" aria-label="Close distribution settings" onClick={() => setDistributionJob(null)}>×</button>
             </div>
-            <div className="notice">Prototype: channel choices persist in this browser. Shared team storage and external publishing require backend persistence and configured partner APIs or feeds.</div>
+            <div className="notice">{distributionLoading ? "Loading saved channel preferences…" : API_BASE && distributionJob.id && !distributionJob.id.startsWith("demo-") && !distributionJob.id.startsWith("local-") ? "Channel preferences are saved per job in the organisation database. External publishing still requires configured partner APIs or feeds." : "Demo mode: channel choices persist in this browser. External publishing requires configured partner APIs or feeds."}</div>
             <div className="distribution-list">
               {distributionChannels.map((channel) => {
                 const entry = distributionDraft[channel.id];
@@ -394,7 +450,7 @@ export default function JobsPage() {
             <div className="muted-small">Publishing, indexing and applicant synchronisation are not simulated as successful. The status labels indicate what setup is still required.</div>
             <div className="modal-actions">
               <button type="button" className="btn" onClick={() => setDistributionJob(null)}>Cancel</button>
-              <button type="button" className="btn primary" onClick={saveDistribution}>Save distribution settings</button>
+              <button type="button" className="btn primary" disabled={distributionLoading || distributionSaving} onClick={saveDistribution}>{distributionSaving ? "Saving…" : "Save distribution settings"}</button>
             </div>
           </section>
         </div>
