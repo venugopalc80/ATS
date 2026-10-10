@@ -33,6 +33,20 @@ class DocumentOut(BaseModel):
     created_at: str | None = None
 
 
+def validate_document_bytes(data: bytes, mime: str) -> str:
+    """Validate the allowlisted file type, bounded size, and basic file signature."""
+    if mime not in ALLOWED:
+        raise HTTPException(status_code=415, detail="Only PDF and DOCX files are supported")
+    if not data:
+        raise HTTPException(status_code=422, detail="The uploaded file is empty")
+    if len(data) > MAX_BYTES:
+        raise HTTPException(status_code=413, detail="CV files must be 5 MB or smaller")
+    extension, signature = ALLOWED[mime]
+    if not data.startswith(signature):
+        raise HTTPException(status_code=415, detail="The file contents do not match the selected file type")
+    return extension
+
+
 def storage_client():
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
@@ -74,18 +88,8 @@ async def upload_candidate_document(
     verify_candidate(candidate_id, organization_id)
 
     mime = (file.content_type or "").lower()
-    if mime not in ALLOWED:
-        raise HTTPException(status_code=415, detail="Only PDF and DOCX files are supported")
-
     data = await file.read(MAX_BYTES + 1)
-    if not data:
-        raise HTTPException(status_code=422, detail="The uploaded file is empty")
-    if len(data) > MAX_BYTES:
-        raise HTTPException(status_code=413, detail="CV files must be 5 MB or smaller")
-
-    extension, signature = ALLOWED[mime]
-    if not data.startswith(signature):
-        raise HTTPException(status_code=415, detail="The file contents do not match the selected file type")
+    extension = validate_document_bytes(data, mime)
 
     if application_id:
         with get_connection() as connection:
