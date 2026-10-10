@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, Field, field_validator
 
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
@@ -17,10 +17,10 @@ PUBLIC_COLUMNS = """
 class PublicApplicationIn(BaseModel):
     first_name: str = Field(min_length=1, max_length=100)
     last_name: str = Field(default="", max_length=100)
-    email: EmailStr
+    email: str = Field(min_length=5, max_length=320)
     phone: str | None = Field(default=None, max_length=50)
     consent: bool
-    source: str = Field(default="careers_page", max_length=100)
+    source: str = Field(default="careers_page", max_length=100)\n\n    @field_validator("email")\n    @classmethod\n    def validate_email(cls, value: str) -> str:\n        value = value.strip().lower()\n        if "@" not in value or "." not in value.rsplit("@", 1)[-1] or any(ch.isspace() for ch in value):\n            raise ValueError("Enter a valid email address")\n        return value
 
 
 @router.get("")
