@@ -13,11 +13,7 @@ create table if not exists public.candidate_documents (
   sha256 text not null,
   uploaded_by uuid references auth.users(id) on delete set null,
   created_at timestamptz not null default now(),
-  deleted_at timestamptz,
-  constraint candidate_documents_candidate_org_fk
-    foreign key (candidate_id, organization_id)
-    references public.candidates(id, organization_id)
-    deferrable initially deferred
+  deleted_at timestamptz
 );
 create index if not exists candidate_documents_org_candidate_created_idx
   on public.candidate_documents (organization_id, candidate_id, created_at desc)
