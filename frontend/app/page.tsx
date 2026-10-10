@@ -12,11 +12,11 @@ const nav = ["Dashboard", "Jobs", "Candidates", "Submissions", "Interviews", "Cl
 
 export default function Dashboard() {
   const [data,setData]=useState<DashboardData|null>(null);
-  useEffect(()=>{const org=typeof window!=="undefined"?window.localStorage.getItem("talentos_active_org")||process.env.NEXT_PUBLIC_ORGANIZATION_ID:""; if(!API_BASE||!org)return; apiFetch(API_BASE+"/api/dashboard?organization_id="+encodeURIComponent(org)).then(r=>r.ok?r.json():null).then(setData).catch(()=>{});},[]);
+  useEffect(()=>{const org=typeof window!=="undefined"?window.localStorage.getItem("aqerith_active_org")||window.localStorage.getItem("talentos_active_org")||process.env.NEXT_PUBLIC_ORGANIZATION_ID:""; if(!API_BASE||!org)return; apiFetch(API_BASE+"/api/dashboard?organization_id="+encodeURIComponent(org)).then(r=>r.ok?r.json():null).then(setData).catch(()=>{});},[]);
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Link href="/" className="brand">Talent<span>OS</span></Link>
+        <Link href="/" className="brand">AQERITH</Link>
         <div className="nav-label">Workspace</div>
         {nav.map((item, i) => item === "Jobs"
           ? <Link key={item} href="/jobs" className="nav-item"><span>▣</span><span>{item}</span></Link>
