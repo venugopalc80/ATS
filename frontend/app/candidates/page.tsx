@@ -124,11 +124,11 @@ export default function CandidatesPage() {
 
 
   useEffect(() => {
-    try { const stored = window.localStorage.getItem("talentos_candidate_views"); if (stored) setSavedViews(JSON.parse(stored)); } catch { /* Ignore invalid saved view data. */ }
+    try { const stored = window.localStorage.getItem("aqerith_candidate_views") || window.localStorage.getItem("talentos_candidate_views"); if (stored) setSavedViews(JSON.parse(stored)); } catch { /* Ignore invalid saved view data. */ }
   }, []);
 
   useEffect(() => {
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
     if (!API_BASE || !organizationId) { setLoading(false); return; }
 
     let cancelled = false;
@@ -172,7 +172,7 @@ export default function CandidatesPage() {
   const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
   const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
   useEffect(() => {
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
     if (!API_BASE || !organizationId || !visibleCandidateIds) return;
     let cancelled = false;
     async function loadLatestNotes() {
@@ -198,7 +198,7 @@ export default function CandidatesPage() {
   function saveCurrentView() {
     const name = window.prompt("Name this saved view"); if (!name?.trim()) return;
     const next = [...savedViews.filter((view) => view.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), query, status, country }];
-    setSavedViews(next); setActiveView(name.trim()); window.localStorage.setItem("talentos_candidate_views", JSON.stringify(next)); setMessage("View saved.");
+    setSavedViews(next); setActiveView(name.trim()); window.localStorage.setItem("aqerith_candidate_views", JSON.stringify(next)); setMessage("View saved.");
   }
   function applyView(name: string) {
     setActiveView(name);
@@ -210,7 +210,7 @@ export default function CandidatesPage() {
     const escapeCsv = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
     const rows = [["Candidate ID","First name","Last name","Email","Phone","City","Region","Country","Current title","Years experience","Skills","Status"], ...filtered.map((candidate) => [candidate.id,candidate.first_name,candidate.last_name,candidate.email,candidate.phone,candidate.city,candidate.region,candidate.country_code,candidate.current_title,candidate.years_experience,candidate.skills.join("; "),candidate.status])];
     const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" })); const link = document.createElement("a"); link.href = url; link.download = "talentos-candidates.csv"; link.click(); URL.revokeObjectURL(url);
+    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" })); const link = document.createElement("a"); link.href = url; link.download = "aqerith-candidates.csv"; link.click(); URL.revokeObjectURL(url);
   }
   async function applyBulkStatus() {
     if (!selectedIds.length) return; setSaving(true); setMessage("");
@@ -325,7 +325,7 @@ export default function CandidatesPage() {
   async function runImport() {
     const eligible = importRows.filter((row) => row.errors.length === 0 && !row.duplicate);
     if (!eligible.length) { setImportMessage("There are no valid, non-duplicate rows to import."); return; }
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
     if (!API_BASE || !organizationId) { setImportMessage("API or active organisation is not configured."); return; }
     setImporting(true); let created = 0; const failures: string[] = [];
     try {
@@ -518,7 +518,7 @@ export default function CandidatesPage() {
       {showImport && (
         <div className="modal-backdrop"><div className="modal" style={{ width: "min(960px, 96vw)", maxHeight: "88vh", overflow: "auto" }}>
           <div className="card-head"><span className="card-title">Import candidates from CSV</span><button type="button" className="icon-button" onClick={() => { if (!importing) setShowImport(false); }}>×</button></div>
-          <p className="subtitle">Upload a CSV or Excel workbook. TalentOS scans worksheets, previews candidate rows, and skips email duplicates.</p>
+          <p className="subtitle">Upload a CSV or Excel workbook. AQERITH scans worksheets, previews candidate rows, and skips email duplicates.</p>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}><input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => void readImportFile(event.target.files?.[0])} disabled={importing} />{importFileName && <span className="muted-small">{importFileName}</span>}</div>
           <p className="muted-small">Recognised columns include applicant/candidate name, email, phone/mobile, location, skills, job title and status. Excel workbooks with multiple worksheets are scanned. Application history is not imported in this candidate-only workflow.</p>
           {importMessage && <div className="notice" style={{ marginBottom: 12 }}>{importMessage}</div>}
