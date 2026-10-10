@@ -12,7 +12,7 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [message, setMessage] = useState("");
-  const org = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || DEFAULT_ORG : DEFAULT_ORG;
+  const org = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || DEFAULT_ORG : DEFAULT_ORG;
 
   async function load() {
     if (!API_BASE || !org) { setMessage("API or organisation configuration is missing."); setLoading(false); return; }
