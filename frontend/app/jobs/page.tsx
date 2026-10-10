@@ -217,8 +217,17 @@ export default function JobsPage() {
         <Link href="/" className="brand">Talent<span>OS</span></Link>
         <div className="nav-label">Workspace</div>
         <Link href="/" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
-        <div className="nav-item active"><span>▣</span><span>Jobs</span></div>
-        {['Candidates','Submissions','Interviews','Clients','Vendors','Talent Bench','Onboarding','Placements','Leads','Reports'].map((item) => <div key={item} className="nav-item"><span>•</span><span>{item}</span></div>)}
+        <Link href="/jobs" className="nav-item active" aria-current="page"><span>▣</span><span>Jobs</span></Link>
+        <Link href="/candidates" className="nav-item"><span>♙</span><span>Candidates</span></Link>
+        <Link href="/submissions" className="nav-item"><span>↗</span><span>Submissions</span></Link>
+        <Link href="/interviews" className="nav-item"><span>◷</span><span>Interviews</span></Link>
+        <Link href="/clients" className="nav-item"><span>□</span><span>Clients</span></Link>
+        <div className="nav-item" aria-disabled="true" title="Not available yet"><span>◇</span><span>Vendors</span></div>
+        <div className="nav-item" aria-disabled="true" title="Not available yet"><span>♧</span><span>Talent Bench</span></div>
+        <Link href="/onboarding" className="nav-item"><span>✓</span><span>Onboarding</span></Link>
+        <Link href="/placements" className="nav-item"><span>◈</span><span>Placements</span></Link>
+        <div className="nav-item" aria-disabled="true" title="Not available yet"><span>◌</span><span>Leads</span></div>
+        <div className="nav-item" aria-disabled="true" title="Not available yet"><span>▤</span><span>Reports</span></div>
         <div className="nav-label">Administration</div>
         <div className="nav-item"><span>⚙</span><span>Settings</span></div>
       </aside>
