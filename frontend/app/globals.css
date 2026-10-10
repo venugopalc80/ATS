@@ -129,3 +129,23 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
 .public-apply-message.success { color: #067647; }
 .public-privacy-note { margin: 0; color: #858b9b; font-size: 11px; line-height: 1.6; }
 @media (max-width: 600px) { .public-apply-fields { grid-template-columns: 1fr; } }
+
+
+/* AQERITH login identity */
+.auth-card .brand {
+  color: #101828;
+  font-size: 30px;
+  font-weight: 850;
+  letter-spacing: .08em;
+  line-height: 1.1;
+  padding: 0;
+  margin: 0 0 7px;
+}
+.auth-card .auth-tagline {
+  color: #667085;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: .17em;
+  line-height: 1.6;
+  margin-bottom: 30px;
+}
