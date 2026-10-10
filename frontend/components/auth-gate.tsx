@@ -36,7 +36,8 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
         if (error) throw error;
 
         if (!data.session) {
-          if (active) router.replace("/login");
+          // Fail closed: never render a protected route without a session.
+          if (active) window.location.replace("/login");
           return;
         }
 
