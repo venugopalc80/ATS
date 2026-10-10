@@ -16,7 +16,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     async function check() {
       const { data } = await supabase.auth.getSession();
 
-      if (pathname === "/login") {
+      if (pathname === "/login" || pathname === "/careers" || pathname.startsWith("/careers/")) {
         if (active) setReady(true);
         return;
       }
@@ -59,7 +59,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
     };
   }, [pathname, router]);
 
-  if (!ready && pathname !== "/login") {
+  if (!ready && pathname !== "/login" && pathname !== "/careers" && !pathname.startsWith("/careers/")) {
     return <div className="auth-loading">Loading TalentOS...</div>;
   }
 
