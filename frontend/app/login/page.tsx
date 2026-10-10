@@ -47,11 +47,12 @@ export default function LoginPage() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="brand">Talent<span>OS</span></div>
-        <div className="eyebrow">Recruitment operations platform</div>
+        <div className="brand" aria-label="AQERITH">AQERITH</div>
+        <div className="auth-tagline">THE INTELLIGENCE OF HUMAN POTENTIAL</div>
+        <div className="eyebrow">Recruitment intelligence</div>
         <h1>{mode === "signin" ? "Welcome back" : "Create your workspace"}</h1>
         <p className="subtitle">
-          {mode === "signin" ? "Sign in to continue to your ATS." : "Start your recruitment workspace in minutes."}
+          {mode === "signin" ? "Sign in to your AQERITH workspace." : "Start your recruitment workspace in minutes."}
         </p>
 
         <form onSubmit={submit} className="auth-form">
@@ -61,9 +62,9 @@ export default function LoginPage() {
           <button className="btn primary auth-submit" disabled={busy}>{busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}</button>
         </form>
 
-        {message && <div className="notice">{message}</div>}
+        {message && <div className="notice" role="status">{message}</div>}
 
-        <button className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}>
+        <button type="button" className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}>
           {mode === "signin" ? "Need an account? Create one" : "Already have an account? Sign in"}
         </button>
       </section>
