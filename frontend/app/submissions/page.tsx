@@ -44,13 +44,14 @@ export default function SubmissionsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
+  const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
   const [viewMode, setViewMode] = useState<"table" | "board">("table");
   const [sortBy, setSortBy] = useState<"candidate" | "job" | "source" | "status" | "created">("created");
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const pageSize = 25;
-  const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string }>>([]);
+  const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string; sourceFilter?: string }>>([]);
   const [activeView, setActiveView] = useState("All applicants");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -99,7 +100,10 @@ export default function SubmissionsPage() {
     const candidate = candidateMap.get(application.candidate_id);
     const job = jobMap.get(application.job_id);
     const haystack = [application.id, candidateName(candidate), candidate?.email, candidate?.phone, candidate?.city, candidate?.region, application.source, job?.title, application.status].filter(Boolean).join(" ").toLowerCase();
-    return (status === "all" || application.status === status) && haystack.includes(query.toLowerCase());
+    const normalizedSource = (application.source || "Direct").trim();
+    return (status === "all" || application.status === status)
+      && (sourceFilter === "all" || normalizedSource.toLowerCase() === sourceFilter.toLowerCase())
+      && haystack.includes(query.toLowerCase());
   }).sort((a, b) => {
     const candidateA = candidateMap.get(a.candidate_id); const candidateB = candidateMap.get(b.candidate_id);
     const jobA = jobMap.get(a.job_id); const jobB = jobMap.get(b.job_id);
@@ -110,20 +114,25 @@ export default function SubmissionsPage() {
     else if (sortBy === "status") comparison = a.status.localeCompare(b.status);
     else comparison = a.created_at.localeCompare(b.created_at);
     return sortDirection === "asc" ? comparison : -comparison;
-  }), [applications, candidateMap, jobMap, status, query, sortBy, sortDirection]);
+  }), [applications, candidateMap, jobMap, status, sourceFilter, query, sortBy, sortDirection]);
+
+  const sourceOptions = useMemo(() => Array.from(new Set(applications.map((application) => (application.source || "Direct").trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b)), [applications]);
+  const newCount = applications.filter((application) => application.status === "new").length;
+  const screeningCount = applications.filter((application) => application.status === "screening").length;
+  const interviewCount = applications.filter((application) => application.status === "interview").length;
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const pageApplications = filtered.slice((page - 1) * pageSize, page * pageSize);
   function changeSort(field: typeof sortBy) { if (sortBy === field) setSortDirection((direction) => direction === "asc" ? "desc" : "asc"); else { setSortBy(field); setSortDirection(field === "created" ? "desc" : "asc"); } }
   function saveView() {
     const name = window.prompt("Name this applicant view"); if (!name?.trim()) return;
-    const next = [...savedViews.filter((view) => view.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), query, status }];
+    const next = [...savedViews.filter((view) => view.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), query, status, sourceFilter }];
     setSavedViews(next); setActiveView(name.trim()); window.localStorage.setItem("talentos_applicant_views", JSON.stringify(next)); setMessage("Applicant view saved.");
   }
   function applyView(name: string) {
     setActiveView(name);
-    if (name === "All applicants") { setQuery(""); setStatus("all"); }
-    else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status as "all" | ApplicationStatus); } }
+    if (name === "All applicants") { setQuery(""); setStatus("all"); setSourceFilter("all"); }
+    else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status as "all" | ApplicationStatus); setSourceFilter(view.sourceFilter ?? "all"); } }
     setPage(1);
   }
 
@@ -170,7 +179,7 @@ export default function SubmissionsPage() {
         <Link href="/" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
         <Link href="/jobs" className="nav-item"><span>▣</span><span>Jobs</span></Link>
         <Link href="/candidates" className="nav-item"><span>●</span><span>Candidates</span></Link>
-        <div className="nav-item active"><span>↗</span><span>Submissions</span></div>
+        <div className="nav-item active"><span>↗</span><span>Applications Inbox</span></div>
         <Link href="/interviews" className="nav-item"><span>◷</span><span>Interviews</span></Link>
         <div className="nav-item"><span>□</span><span>Clients</span></div>
         <div className="nav-item"><span>◇</span><span>Vendors</span></div>
@@ -192,14 +201,20 @@ export default function SubmissionsPage() {
         <section className="content">
           <div className="header-row">
             <div>
-              <div className="eyebrow">Recruitment pipeline</div>
-              <h1>Applicants</h1>
-              <p className="subtitle">A unified applicant register and recruitment pipeline.</p>
+              <div className="eyebrow">Recruitment operations</div>
+              <h1>Recruiter Applications Inbox</h1>
+              <p className="subtitle">Review incoming applications, identify their source and move each candidate through the hiring process.</p>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className={"btn " + (viewMode === "table" ? "primary" : "")} onClick={() => setViewMode("table")}>Applicant register</button><button className={"btn " + (viewMode === "board" ? "primary" : "")} onClick={() => setViewMode("board")}>Pipeline board</button><button className="btn primary" onClick={() => { setMessage(""); setShowCreate(true); }}>+ New applicant</button></div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className={"btn " + (viewMode === "table" ? "primary" : "")} onClick={() => setViewMode("table")}>Inbox list</button><button className={"btn " + (viewMode === "board" ? "primary" : "")} onClick={() => setViewMode("board")}>Pipeline board</button><button className="btn primary" onClick={() => { setMessage(""); setShowCreate(true); }}>+ Create application</button></div>
           </div>
 
-          <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} applicant{filtered.length === 1 ? "" : "s"}</span></div></div>
+          <div className="metrics" style={{ marginTop: 8 }}>
+            <button className="card" style={{ textAlign: "left", borderColor: status === "new" ? "var(--primary)" : "var(--line)" }} onClick={() => { setStatus(status === "new" ? "all" : "new"); setPage(1); }}><div className="metric-title">New applications</div><div className="metric-value">{newCount}</div><div className="metric-foot">Needs initial review</div></button>
+            <div className="card"><div className="metric-title">In screening</div><div className="metric-value">{screeningCount}</div><div className="metric-foot">Active review</div></div>
+            <div className="card"><div className="metric-title">Interviews</div><div className="metric-value">{interviewCount}</div><div className="metric-foot">Interview stage</div></div>
+            <div className="card"><div className="metric-title">All applications</div><div className="metric-value">{applications.length}</div><div className="metric-foot">Across all stages</div></div>
+          </div>
+          <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><select className="filter" aria-label="Filter application source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(1); }}><option value="all">All sources</option>{sourceOptions.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} application{filtered.length === 1 ? "" : "s"}</span></div></div>
           {message && <div className="notice">{message}</div>}
 
           {showCreate && (
@@ -233,7 +248,7 @@ export default function SubmissionsPage() {
                 }
               }}>
                 <div className="card-head">
-                  <span className="card-title">New submission</span>
+                  <span className="card-title">Create application</span>
                   <button type="button" className="icon-button" onClick={() => setShowCreate(false)}>×</button>
                 </div>
                 <label>Candidate
@@ -298,7 +313,7 @@ export default function SubmissionsPage() {
           </div>}
 
           {viewMode === "table" && <div className="card">
-            <div className="card-head"><span className="card-title">Applicant register</span><span className="muted-small">{loading ? "Loading..." : "Live data · " + filtered.length + " records"}</span></div>
+            <div className="card-head"><span className="card-title">Applications</span><span className="muted-small">{loading ? "Loading..." : "Live data · " + filtered.length + " records"}</span></div>
             <div style={{ overflowX: "auto" }}><table className="table applicant-table">
               <thead><tr><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
               <tbody>
