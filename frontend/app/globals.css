@@ -51,3 +51,16 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
 .auth-form input,.auth-form select{width:100%;box-sizing:border-box;padding:12px 13px;border:1px solid var(--border,#d9dde4);border-radius:10px;background:#fff;font:inherit;color:inherit}
 .auth-submit{width:100%;justify-content:center;margin-top:4px}
 .auth-switch{border:0;background:transparent;color:var(--accent,#3b5ccc);cursor:pointer;padding:14px 0 0;font:inherit;font-size:13px;width:100%}
+
+
+/* Job distribution prototype */
+.distribution-modal { width: min(680px, 100%); }
+.distribution-list { display: grid; gap: 10px; }
+.distribution-option { display: flex !important; grid-template-columns: none !important; align-items: flex-start; gap: 12px !important; padding: 14px; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.distribution-option > input[type="checkbox"] { width: 17px !important; height: 17px; margin: 3px 0 0; flex: none; accent-color: var(--primary); }
+.distribution-option-main { display: grid; gap: 5px; min-width: 0; }
+.distribution-option-main strong { font-size: 14px; }
+.distribution-option-main .muted-small { line-height: 1.45; }
+.distribution-status { display: inline-flex; width: fit-content; max-width: 100%; padding: 4px 8px; border-radius: 999px; background: #f2f4f7; color: #667085; font-size: 11px; font-weight: 700; }
+.distribution-status.status-ready { background: #eaf8f1; color: var(--success); }
+.distribution-status.status-pending { background: #fff6df; color: var(--warning); }
