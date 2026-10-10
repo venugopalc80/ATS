@@ -149,3 +149,20 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
   line-height: 1.6;
   margin-bottom: 30px;
 }
+
+
+/* Ensure the AQERITH wordmark remains visible on the light auth card. */
+.auth-card > .brand {
+  color: #101828 !important;
+  display: block;
+  visibility: visible;
+  opacity: 1;
+  font-size: 30px;
+  line-height: 1.1;
+  padding: 0;
+  margin: 0 0 7px;
+}
+.auth-card > .auth-tagline {
+  margin-top: 0;
+  margin-bottom: 30px;
+}
