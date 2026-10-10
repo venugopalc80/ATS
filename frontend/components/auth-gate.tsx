@@ -57,13 +57,14 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
             }
 
             if (firstOrg) {
+              window.localStorage.setItem("aqerith_active_org", firstOrg.id);
               window.localStorage.setItem("talentos_active_org", firstOrg.id);
             }
           }
         }
       } catch (error) {
         // Do not leave the whole application permanently hidden if auth/API is unavailable.
-        console.error("TalentOS auth check failed:", error);
+        console.error("AQERITH auth check failed:", error);
       } finally {
         if (active) setReady(true);
       }
@@ -79,7 +80,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
   }, [pathname, router]);
 
   if (!ready) {
-    return <div className="auth-loading">Loading TalentOS...</div>;
+    return <div className="auth-loading">Loading AQERITH...</div>;
   }
 
   return <>{children}</>;
