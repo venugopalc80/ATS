@@ -1,0 +1,1 @@
+"""AQERITH FastAPI application package."""
