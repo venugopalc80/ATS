@@ -56,11 +56,11 @@ export default function PublicApplyForm({ jobId }: { jobId: string }) {
         </div>
         <label className="public-consent">
           <input type="checkbox" name="consent" required />
-          <span>I agree that my details may be processed to assess this application and contact me about this role. I understand I can request access or deletion subject to applicable legal requirements.</span>
+          <span>I agree that my details may be processed to assess this application and contact me about this role. Read the <a href="/careers/privacy" target="_blank" rel="noreferrer">applicant privacy notice</a>. I understand I can request access or deletion subject to applicable legal requirements.</span>
         </label>
         <button className="public-apply-button" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit application"}</button>
         {message ? <p role="status" className={success ? "public-apply-message success" : "public-apply-message"}>{message}</p> : null}
-        <p className="public-privacy-note">Please submit only information relevant to this application. Resume upload and a dedicated privacy-notice link will be added in the next step.</p>
+        <p className="public-privacy-note">Please submit only information relevant to this application. Please read the privacy notice before submitting. Resume upload is not enabled yet.</p>
       </form>
     </section>
   );
