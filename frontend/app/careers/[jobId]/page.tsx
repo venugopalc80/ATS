@@ -1,6 +1,7 @@
 import Link from "next/link";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import PublicApplyForm from "./apply-form";
 
 type PublicJob = {
   id: string;
@@ -99,7 +100,7 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
         {(salaryMin !== undefined || salaryMax !== undefined) ? <p className="career-salary">{salaryMin?.toLocaleString()} {salaryMin !== undefined && salaryMax !== undefined ? "–" : ""} {salaryMax?.toLocaleString()} {job.salary_currency ?? "GBP"}</p> : null}
         <div className="career-detail-content">{job.description ? <p>{plainText(job.description)}</p> : <p>Contact the recruitment team for further role details.</p>}</div>
         {job.required_skills?.length ? <section className="career-requirements"><h2>Skills and experience</h2><div className="career-skills">{job.required_skills.map(skill => <span key={skill}>{skill}</span>)}</div></section> : null}
-        <div className="career-apply-note"><strong>Interested in this role?</strong><p>Application submission will be enabled when the public candidate application workflow is configured.</p></div>
+        <PublicApplyForm jobId={job.id} />
         <Link className="career-view-link" href="/careers">Browse more roles <span aria-hidden="true">→</span></Link>
       </article>
       <footer className="careers-footer">Powered by TalentOS · Recruitment, made more human.</footer>
