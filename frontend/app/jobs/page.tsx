@@ -124,6 +124,30 @@ export default function JobsPage() {
   const [distributionJob, setDistributionJob] = useState<Job | null>(null);
   const [distributionByJob, setDistributionByJob] = useState<Record<string, JobDistribution>>({});
   const [distributionDraft, setDistributionDraft] = useState<JobDistribution>(initialDistribution);
+  const [distributionStorageLoaded, setDistributionStorageLoaded] = useState(false);
+
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("talentos_job_distribution_v1");
+      if (saved) {
+        const parsed = JSON.parse(saved) as Record<string, JobDistribution>;
+        if (parsed && typeof parsed === "object") setDistributionByJob(parsed);
+      }
+    } catch {
+      // Keep the in-memory prototype usable if browser storage is unavailable.
+    } finally {
+      setDistributionStorageLoaded(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!distributionStorageLoaded) return;
+    try {
+      window.localStorage.setItem("talentos_job_distribution_v1", JSON.stringify(distributionByJob));
+    } catch {
+      // Storage can be disabled or full; keep this session functional.
+    }
+  }, [distributionByJob, distributionStorageLoaded]);
 
   useEffect(() => {
     if (!API_BASE || !ORGANIZATION_ID) return;
@@ -163,7 +187,7 @@ export default function JobsPage() {
     const key = distributionJob.id ?? distributionJob.title;
     setDistributionByJob((current) => ({ ...current, [key]: distributionDraft }));
     setDistributionJob(null);
-    setMessage("Distribution preferences saved for this session. No external job board has been contacted or published to.");
+    setMessage("Distribution preferences saved in this browser. They are not synced across users, and no external job board has been contacted or published to.");
   }
 
   function openCreate() {
@@ -338,7 +362,7 @@ export default function JobsPage() {
               <div><span className="card-title" id="distribution-title">Job distribution</span><div className="muted-small" style={{ marginTop: 5 }}>{distributionJob.title}</div></div>
               <button type="button" className="icon-button" aria-label="Close distribution settings" onClick={() => setDistributionJob(null)}>×</button>
             </div>
-            <div className="notice">Prototype only: channel selection is saved in this browser session. External publishing is not active until official APIs, partner access or feeds are configured.</div>
+            <div className="notice">Prototype: channel choices persist in this browser. Shared team storage and external publishing require backend persistence and configured partner APIs or feeds.</div>
             <div className="distribution-list">
               {distributionChannels.map((channel) => {
                 const entry = distributionDraft[channel.id];
