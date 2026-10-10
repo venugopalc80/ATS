@@ -1,6 +1,6 @@
-# ATS
+# AQERITH
 
-AI-powered Applicant Tracking System for modern recruitment agencies.
+AQERITH is a recruitment operations platform for modern recruitment agencies, bringing jobs, candidates, applications, interviews, clients, vendors, talent pools, onboarding, placements, leads and recruitment analytics into one workspace.
 
 ## Target markets
 
@@ -9,7 +9,7 @@ AI-powered Applicant Tracking System for modern recruitment agencies.
 - India
 - Australia
 
-## Planned stack
+## Technology stack
 
 - Frontend: Next.js + TypeScript
 - Backend: FastAPI + Python
@@ -21,10 +21,8 @@ AI-powered Applicant Tracking System for modern recruitment agencies.
 
 ## Product scope
 
-The ATS will cover job requisitions, candidates, CV parsing, applications/submissions, interviews, clients, vendors, talent bench, onboarding, placements, leads, reporting and AI-assisted recruitment workflows.
+AQERITH covers job requisitions, candidates, CV parsing, applications/submissions, interviews, clients, vendors, talent bench, onboarding, placements, leads, reporting and AI-assisted recruitment workflows.
 
 ## Privacy by design
 
 Privacy and security are first-class requirements. The product will support jurisdiction-aware configuration and controls for the UK, USA, India and Australia, including data minimisation, retention/deletion workflows, access controls, audit logging, transparency, human review of AI-assisted decisions, and configurable data-processing/consent records where applicable.
-
-This repository is the implementation of the product described in the ATS functional reference.
