@@ -14,7 +14,7 @@ export default function PublicApplyForm({ jobId }: { jobId: string }) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;\n    const form = new FormData(formElement);
     const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
     const source = params.get("utm_source") || params.get("source") || "careers_page";
     try {
@@ -34,7 +34,7 @@ export default function PublicApplyForm({ jobId }: { jobId: string }) {
       if (!response.ok) throw new Error(body.detail || "We couldn't submit your application. Please try again.");
       setSuccess(true);
       setMessage("Application received. Thank you for your interest.");
-      event.currentTarget.reset();
+      formElement.reset();
     } catch (error) {
       setSuccess(false);
       setMessage(error instanceof Error ? error.message : "Something went wrong. Please try again.");
