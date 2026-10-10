@@ -3,14 +3,18 @@ import { supabase } from "./supabase";
 export const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 
 export async function apiFetch(input: RequestInfo | URL, init: RequestInit = {}) {
-  const { data } = await supabase.auth.getSession();
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
   const token = data.session?.access_token;
   const headers = new Headers(init.headers);
   if (token) headers.set("Authorization", "Bearer " + token);
 
   let url = input.toString();
+  // Prefer the current AQERITH key. The TalentOS key is retained only for
+  // older browser sessions and should never override the new key.
   const activeOrg = typeof window !== "undefined"
-    ? window.localStorage.getItem("talentos_active_org")
+    ? window.localStorage.getItem("aqerith_active_org") ||
+      window.localStorage.getItem("talentos_active_org")
     : null;
 
   if (activeOrg) {
