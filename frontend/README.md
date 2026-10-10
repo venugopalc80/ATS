@@ -1,3 +1,3 @@
-# ATS Frontend
+# AQERITH Frontend
 
-Next.js + TypeScript application for the ATS recruiter and administration interface.
+Next.js + TypeScript application for the AQERITH recruitment operations and administration interface.
