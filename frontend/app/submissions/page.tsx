@@ -51,7 +51,7 @@ export default function SubmissionsPage() {
   const [sortDirection, setSortDirection] = useState<"asc" | "desc">("desc");
   const [page, setPage] = useState(1);
   const pageSize = 25;
-  const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string }>>([]);
+  const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string; sourceFilter?: string }>>([]);
   const [activeView, setActiveView] = useState("All applicants");
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState("");
@@ -126,13 +126,13 @@ export default function SubmissionsPage() {
   function changeSort(field: typeof sortBy) { if (sortBy === field) setSortDirection((direction) => direction === "asc" ? "desc" : "asc"); else { setSortBy(field); setSortDirection(field === "created" ? "desc" : "asc"); } }
   function saveView() {
     const name = window.prompt("Name this applicant view"); if (!name?.trim()) return;
-    const next = [...savedViews.filter((view) => view.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), query, status }];
+    const next = [...savedViews.filter((view) => view.name.toLowerCase() !== name.trim().toLowerCase()), { name: name.trim(), query, status, sourceFilter }];
     setSavedViews(next); setActiveView(name.trim()); window.localStorage.setItem("talentos_applicant_views", JSON.stringify(next)); setMessage("Applicant view saved.");
   }
   function applyView(name: string) {
     setActiveView(name);
-    if (name === "All applicants") { setQuery(""); setStatus("all"); }
-    else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status as "all" | ApplicationStatus); } }
+    if (name === "All applicants") { setQuery(""); setStatus("all"); setSourceFilter("all"); }
+    else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status as "all" | ApplicationStatus); setSourceFilter(view.sourceFilter ?? "all"); } }
     setPage(1);
   }
 
