@@ -24,6 +24,42 @@ type Job = {
   salary_currency?: string | null;
 };
 
+type DistributionChannelId = "careers" | "google" | "linkedin" | "indeed" | "monster" | "other";
+type DistributionStatus = "not_selected" | "ready" | "needs_public_page" | "integration_required";
+
+type DistributionChannel = {
+  id: DistributionChannelId;
+  name: string;
+  description: string;
+  kind: "native" | "discovery" | "partner";
+};
+
+const distributionChannels: DistributionChannel[] = [
+  { id: "careers", name: "TalentOS Careers", description: "Your public careers page", kind: "native" },
+  { id: "google", name: "Google for Jobs", description: "Search discovery via JobPosting structured data", kind: "discovery" },
+  { id: "linkedin", name: "LinkedIn", description: "Requires approved partner integration", kind: "partner" },
+  { id: "indeed", name: "Indeed", description: "Requires approved ATS / Job Sync access", kind: "partner" },
+  { id: "monster", name: "Monster", description: "Requires an approved integration or feed", kind: "partner" },
+  { id: "other", name: "Other job boards", description: "Configure supported partners or job feeds", kind: "partner" },
+];
+
+type JobDistribution = Record<DistributionChannelId, { selected: boolean; status: DistributionStatus }>;
+const initialDistribution = (): JobDistribution => ({
+  careers: { selected: true, status: "ready" },
+  google: { selected: true, status: "needs_public_page" },
+  linkedin: { selected: false, status: "integration_required" },
+  indeed: { selected: false, status: "integration_required" },
+  monster: { selected: false, status: "integration_required" },
+  other: { selected: false, status: "integration_required" },
+});
+
+function distributionStatusLabel(channel: DistributionChannel, entry: JobDistribution[DistributionChannelId]) {
+  if (!entry.selected) return "Not selected";
+  if (entry.status === "ready") return "Ready for careers page";
+  if (entry.status === "needs_public_page") return "Public page / indexing required";
+  return "Integration required";
+}
+
 type JobForm = {
   title: string;
   client: string;
@@ -85,6 +121,9 @@ export default function JobsPage() {
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [message, setMessage] = useState("");
   const [form, setForm] = useState<JobForm>(emptyForm);
+  const [distributionJob, setDistributionJob] = useState<Job | null>(null);
+  const [distributionByJob, setDistributionByJob] = useState<Record<string, JobDistribution>>({});
+  const [distributionDraft, setDistributionDraft] = useState<JobDistribution>(initialDistribution);
 
   useEffect(() => {
     if (!API_BASE || !ORGANIZATION_ID) return;
@@ -112,6 +151,20 @@ export default function JobsPage() {
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
+
+  function openDistribution(job: Job) {
+    setDistributionJob(job);
+    setDistributionDraft(distributionByJob[job.id ?? job.title] ?? initialDistribution());
+    setMessage("");
+  }
+
+  function saveDistribution() {
+    if (!distributionJob) return;
+    const key = distributionJob.id ?? distributionJob.title;
+    setDistributionByJob((current) => ({ ...current, [key]: distributionDraft }));
+    setDistributionJob(null);
+    setMessage("Distribution preferences saved for this session. No external job board has been contacted or published to.");
+  }
 
   function openCreate() {
     setEditingJob(null);
@@ -258,9 +311,9 @@ export default function JobsPage() {
           <div className="card">
             <div className="card-head"><span className="card-title">Requisitions</span><span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "Demo mode"}</span></div>
             <table className="table">
-              <thead><tr><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Distribution</th><th>Actions</th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={7}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={7}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
+                {loading ? <tr><td colSpan={8}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={8}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
                   <tr key={job.id ?? job.title}>
                     <td><strong>{job.title}</strong></td>
                     <td>{job.client ?? "Unassigned"}</td>
@@ -268,7 +321,8 @@ export default function JobsPage() {
                     <td>{job.employment_type ?? "-"}</td>
                     <td><span className={`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}`}>{job.status.replace("_", " ")}</span></td>
                     <td>{(job.required_skills ?? []).slice(0, 3).join(", ") || "-"}</td>
-                    <td><div style={{ display: "flex", gap: 6 }}><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
+                    <td><button className="btn" onClick={() => openDistribution(job)}>Distribute job</button></td>
+                    <td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -276,6 +330,51 @@ export default function JobsPage() {
           </div>
         </section>
       </main>
+
+      {distributionJob && (
+        <div className="modal-backdrop" role="presentation">
+          <section className="modal distribution-modal" role="dialog" aria-modal="true" aria-labelledby="distribution-title">
+            <div className="card-head">
+              <div><span className="card-title" id="distribution-title">Job distribution</span><div className="muted-small" style={{ marginTop: 5 }}>{distributionJob.title}</div></div>
+              <button type="button" className="icon-button" aria-label="Close distribution settings" onClick={() => setDistributionJob(null)}>×</button>
+            </div>
+            <div className="notice">Prototype only: channel selection is saved in this browser session. External publishing is not active until official APIs, partner access or feeds are configured.</div>
+            <div className="distribution-list">
+              {distributionChannels.map((channel) => {
+                const entry = distributionDraft[channel.id];
+                return (
+                  <label className="distribution-option" key={channel.id}>
+                    <input
+                      type="checkbox"
+                      checked={entry.selected}
+                      onChange={(event) => setDistributionDraft((current) => ({
+                        ...current,
+                        [channel.id]: {
+                          ...current[channel.id],
+                          selected: event.target.checked,
+                          status: channel.kind === "native" ? "ready" : channel.kind === "discovery" ? "needs_public_page" : "integration_required",
+                        },
+                      }))}
+                    />
+                    <span className="distribution-option-main">
+                      <strong>{channel.name}</strong>
+                      <span className="muted-small">{channel.description}</span>
+                      <span className={`distribution-status ${entry.selected && entry.status === "ready" ? "status-ready" : entry.selected ? "status-pending" : ""}`}>
+                        {distributionStatusLabel(channel, entry)}
+                      </span>
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+            <div className="muted-small">Publishing, indexing and applicant synchronisation are not simulated as successful. The status labels indicate what setup is still required.</div>
+            <div className="modal-actions">
+              <button type="button" className="btn" onClick={() => setDistributionJob(null)}>Cancel</button>
+              <button type="button" className="btn primary" onClick={saveDistribution}>Save distribution settings</button>
+            </div>
+          </section>
+        </div>
+      )}
 
       {showForm && (
         <div className="modal-backdrop">
