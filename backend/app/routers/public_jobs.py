@@ -20,7 +20,15 @@ class PublicApplicationIn(BaseModel):
     email: str = Field(min_length=5, max_length=320)
     phone: str | None = Field(default=None, max_length=50)
     consent: bool
-    source: str = Field(default="careers_page", max_length=100)\n\n    @field_validator("email")\n    @classmethod\n    def validate_email(cls, value: str) -> str:\n        value = value.strip().lower()\n        if "@" not in value or "." not in value.rsplit("@", 1)[-1] or any(ch.isspace() for ch in value):\n            raise ValueError("Enter a valid email address")\n        return value
+    source: str = Field(default="careers_page", max_length=100)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        if "@" not in value or "." not in value.rsplit("@", 1)[-1] or any(ch.isspace() for ch in value):
+            raise ValueError("Enter a valid email address")
+        return value
 
 
 @router.get("")
