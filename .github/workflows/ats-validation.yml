@@ -37,5 +37,5 @@ jobs:
         env:
           NEXT_PUBLIC_API_URL: https://example.invalid
           NEXT_PUBLIC_SUPABASE_URL: https://example.supabase.co
-          NEXT_PUBLIC_SUPABASE_ANON_KEY: validation-placeholder
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: validation-placeholder
           NEXT_PUBLIC_ORGANIZATION_ID: 00000000-0000-0000-0000-000000000000
