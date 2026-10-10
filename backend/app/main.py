@@ -13,6 +13,7 @@ from app.routers.placements import router as placements_router
 from app.routers.audit import router as audit_router
 from app.routers.notes import router as notes_router
 from app.routers.job_distribution import router as job_distribution_router
+from app.routers.public_jobs import router as public_jobs_router
 app=FastAPI(title="ATS API",version="0.9.0",description="AI-powered Applicant Tracking System API")
 frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
 app.add_middleware(CORSMiddleware,allow_origins=[frontend_url],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
@@ -28,6 +29,7 @@ app.include_router(placements_router)
 app.include_router(audit_router)
 app.include_router(notes_router)
 app.include_router(job_distribution_router)
+app.include_router(public_jobs_router)
 @app.get("/")
 async def root()->dict[str,str]: return {"status":"ok","service":"ats-api","docs":"/docs"}
 @app.get("/health")
