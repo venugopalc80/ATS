@@ -14,7 +14,8 @@ export default function PublicApplyForm({ jobId }: { jobId: string }) {
     event.preventDefault();
     setBusy(true);
     setMessage("");
-    const formElement = event.currentTarget;\n    const form = new FormData(formElement);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
     const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
     const source = params.get("utm_source") || params.get("source") || "careers_page";
     try {
