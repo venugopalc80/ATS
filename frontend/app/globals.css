@@ -166,3 +166,35 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
   margin-top: 0;
   margin-bottom: 30px;
 }
+
+
+.auth-card .auth-brand-lockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  margin: 0 auto 30px;
+}
+.auth-card .auth-brand-symbol {
+  display: block;
+  width: 112px;
+  height: 76px;
+  margin-bottom: 8px;
+  overflow: visible;
+}
+.auth-card .auth-brand-wordmark {
+  color: #101828;
+  font-size: 27px;
+  font-weight: 850;
+  letter-spacing: .12em;
+  line-height: 1.1;
+  margin: 0 0 7px;
+}
+.auth-card .auth-brand-lockup .auth-tagline {
+  color: #475467;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: .13em;
+  line-height: 1.5;
+  margin: 0;
+}
