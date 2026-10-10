@@ -18,7 +18,20 @@ from app.routers.documents import router as documents_router
 
 app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
 frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
-app.add_middleware(CORSMiddleware,allow_origins=[frontend_url],allow_credentials=True,allow_methods=["*"],allow_headers=["*"])
+frontend_origins = {
+    origin.strip().rstrip("/")
+    for origin in (
+        frontend_url + ",https://aqerith.com,https://www.aqerith.com"
+    ).split(",")
+    if origin.strip()
+}
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=sorted(frontend_origins),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 app.include_router(jobs_router)
 app.include_router(candidates_router)
 app.include_router(applications_router)
