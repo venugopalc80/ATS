@@ -3,7 +3,6 @@
 import { FormEvent, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 export default function PublicApplyForm({ jobId }: { jobId: string }) {
   const [busy, setBusy] = useState(false);
