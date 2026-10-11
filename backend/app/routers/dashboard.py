@@ -75,7 +75,7 @@ async def dashboard(
                        left join public.clients c on c.id=j.client_id and c.organization_id=j.organization_id
                        left join public.applications a on a.job_id=j.id and a.organization_id=j.organization_id
                        where j.organization_id=%s and j.status in ('open','on_hold')
-                       group by j.id,j.title,c.name,j.status,j.created_at
+                       group by j.id,j.title,c.name,j.status,j.created_at,j.opened_at
                        order by j.created_at asc limit 10""",
                     [organization_id],
                 )
