@@ -19,7 +19,7 @@ export default function PublicApplyForm({ jobId }: { jobId: string }) {
     const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
     const source = params.get("utm_source") || params.get("source") || "careers_page";
     try {
-      const response = await fetch(`${API_BASE}/api/public/jobs/${encodeURIComponent(jobId)}/applications?organization_id=${encodeURIComponent(ORGANIZATION_ID)}`, {
+      const response = await fetch(`${API_BASE}/api/public/jobs/${encodeURIComponent(jobId)}/applications`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
