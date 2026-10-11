@@ -129,6 +129,17 @@ export default function JobsPage() {
   const [distributionSaving, setDistributionSaving] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedStatus = params.get("status");
+    if (requestedStatus && ["draft", "open", "on_hold", "closed", "filled", "cancelled"].includes(requestedStatus)) {
+      setStatus(requestedStatus);
+    }
+    const requestedJobId = params.get("job_id");
+    if (requestedJobId) setQuery(requestedJobId);
+    if (params.get("create") === "1") setShowForm(true);
+  }, []);
+
+  useEffect(() => {
     try {
       const saved = window.localStorage.getItem("talentos_job_distribution_v1");
       if (saved) {
@@ -173,7 +184,7 @@ export default function JobsPage() {
   }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
-    const matchesQuery = (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = (job.id ?? "") === query || (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
