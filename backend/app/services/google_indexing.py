@@ -18,12 +18,13 @@ INDEXING_ENDPOINT = "https://indexing.googleapis.com/v3/urlNotifications:publish
 SCOPES = ["https://www.googleapis.com/auth/indexing"]
 
 
-def notify_google_indexing(job_id: str, notification_type: str) -> None:
+def notify_google_indexing(job_id: str, notification_type: str, preverified_publication: bool = False) -> None:
     """Send URL_UPDATED or URL_DELETED without failing the underlying ATS operation."""
     if os.getenv("GOOGLE_INDEXING_ENABLED", "").lower() not in {"1", "true", "yes"}:
         return
 
-    try:
+    if not preverified_publication:
+      try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -44,7 +45,7 @@ def notify_google_indexing(job_id: str, notification_type: str) -> None:
                 return
         elif not publication["selected"]:
             return
-    except (DatabaseConfigurationError, DatabaseConnectionError):
+      except (DatabaseConfigurationError, DatabaseConnectionError):
         logger.exception("Unable to verify Google publication status for job %s", job_id)
         return
 
@@ -59,7 +60,7 @@ def notify_google_indexing(job_id: str, notification_type: str) -> None:
             service_account_info, scopes=SCOPES
         )
         session = AuthorizedSession(credentials)
-        base_url = os.getenv("NEXT_PUBLIC_SITE_URL", "https://aqerith.com").rstrip("/")
+        base_url = os.getenv("PUBLIC_SITE_URL", "https://aqerith.com").rstrip("/")
         job_url = f"{base_url}/careers/{quote(str(job_id), safe='')}"
         response = session.post(
             INDEXING_ENDPOINT,
