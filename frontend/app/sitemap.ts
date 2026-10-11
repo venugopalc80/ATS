@@ -1,7 +1,6 @@
 import type { MetadataRoute } from "next";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 type PublicJob = { id: string; updated_at?: string };
 
