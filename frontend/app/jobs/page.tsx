@@ -163,12 +163,19 @@ export default function JobsPage() {
   }, [distributionByJob, distributionStorageLoaded]);
 
   useEffect(() => {
-    if (!API_BASE || !ORGANIZATION_ID) return;
+    const organizationId = typeof window !== "undefined"
+      ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID
+      : ORGANIZATION_ID;
+    if (!API_BASE || !organizationId) {
+      setLoading(false);
+      setMessage("Select an organisation to load vacancies.");
+      return;
+    }
     let cancelled = false;
 
     async function loadJobs() {
       try {
-        const response = await apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(ORGANIZATION_ID));
+        const response = await apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(organizationId));
         if (!response.ok) throw new Error("API returned " + response.status);
         const data: Job[] = await response.json();
         if (!cancelled) setJobs(data);
