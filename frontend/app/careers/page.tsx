@@ -10,6 +10,7 @@ export const metadata: Metadata = {
 type PublicJob = {
   id: string;
   title: string;
+  hiring_organization_name?: string | null;
   description?: string | null;
   location?: string | null;
   employment_type?: string | null;
@@ -21,7 +22,6 @@ type PublicJob = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 async function getJobs(): Promise<PublicJob[]> {
   if (!API_BASE) return [];
