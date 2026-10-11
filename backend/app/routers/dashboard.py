@@ -195,7 +195,7 @@ async def dashboard(
                 "type": "offer_expiring",
                 "title": "Offer approaching expiry",
                 "description": row["title"],
-                "href": f"/offers?offer_id={row['id']}",
+                "href": f"/offers/{row['id']}",
                 "due_at": row["expires_at"],
             })
         if awaiting_decision:
