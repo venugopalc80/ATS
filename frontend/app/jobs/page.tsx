@@ -347,9 +347,9 @@ export default function JobsPage() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Link href="/" className="brand">Talent<span>OS</span></Link>
+        <Link href="/dashboard" className="brand">AQERITH</Link>
         <div className="nav-label">Workspace</div>
-        <Link href="/" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
+        <Link href="/dashboard" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
         <Link href="/jobs" className="nav-item active" aria-current="page"><span>▣</span><span>Jobs</span></Link>
         <Link href="/candidates" className="nav-item"><span>♙</span><span>Candidates</span></Link>
         <Link href="/submissions" className="nav-item"><span>↗</span><span>Submissions</span></Link>
