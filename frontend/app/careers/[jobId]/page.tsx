@@ -6,6 +6,8 @@ import PublicApplyForm from "./apply-form";
 type PublicJob = {
   id: string;
   title: string;
+  hiring_organization_name?: string | null;
+  hiring_organization_website?: string | null;
   description?: string | null;
   location?: string | null;
   country_code?: string | null;
@@ -20,7 +22,6 @@ type PublicJob = {
 };
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 async function getJob(jobId: string): Promise<PublicJob | null> {
   if (!API_BASE) return null;
@@ -71,19 +72,14 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
     url: jobUrl,
     hiringOrganization: {
       "@type": "Organization",
-      name: process.env.NEXT_PUBLIC_JOB_POSTING_ORGANIZATION_NAME ?? "Confidential",
-      sameAs: process.env.NEXT_PUBLIC_JOB_POSTING_ORGANIZATION_URL ?? baseUrl,
+      name: job.hiring_organization_name || "Confidential",
+      ...(job.hiring_organization_website ? { sameAs: job.hiring_organization_website } : {}),
     },
     jobLocation: job.location && job.work_mode?.toLowerCase() !== "remote" ? {
       "@type": "Place",
       address: { "@type": "PostalAddress", addressLocality: job.location, addressCountry: job.country_code },
     } : undefined,
     jobLocationType: job.work_mode?.toLowerCase() === "remote" ? "TELECOMMUTE" : undefined,
-    baseSalary: salaryMin !== undefined || salaryMax !== undefined ? {
-      "@type": "MonetaryAmount",
-      currency: job.salary_currency ?? "GBP",
-      value: { "@type": "QuantitativeValue", minValue: salaryMin, maxValue: salaryMax, unitText: process.env.NEXT_PUBLIC_JOB_POSTING_SALARY_UNIT ?? "YEAR" },
-    } : undefined,
   };
 
   return (
