@@ -24,9 +24,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 async function getJobs(): Promise<PublicJob[]> {
-  if (!API_BASE || !ORGANIZATION_ID) return [];
+  if (!API_BASE) return [];
   try {
-    const response = await fetch(`${API_BASE}/api/public/jobs?organization_id=${encodeURIComponent(ORGANIZATION_ID)}`, { next: { revalidate: 60 } });
+    const response = await fetch(`${API_BASE}/api/public/jobs`, { next: { revalidate: 60 } });
     if (!response.ok) return [];
     return await response.json();
   } catch {
@@ -56,7 +56,7 @@ export default async function CareersPage() {
           <article className="career-job-card" key={job.id}>
             <div className="career-job-copy">
               <h3><Link href={`/careers/${job.id}`}>{job.title}</Link></h3>
-              <p>{[job.location, job.work_mode, job.employment_type].filter(Boolean).join(" · ") || "Details on job page"}</p>
+              <p>{[job.hiring_organization_name, job.location, job.work_mode, job.employment_type].filter(Boolean).join(" · ") || "Details on job page"}</p>
               {job.required_skills?.length ? <div className="career-skills">{job.required_skills.slice(0, 5).map(skill => <span key={skill}>{skill}</span>)}</div> : null}
             </div>
             <Link className="career-view-link" href={`/careers/${job.id}`}>View role <span aria-hidden="true">→</span></Link>
