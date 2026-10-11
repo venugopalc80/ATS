@@ -39,6 +39,7 @@ type Activity = {
   metadata: Record<string, unknown> | null;
   created_at: string;
   actor_user_id: string | null;
+  actor_name: string | null;
 };
 type DashboardData = {
   metrics: MetricSet;
@@ -290,8 +291,8 @@ export default function Dashboard() {
               ) : (
                 <div className="activity dashboard-activity">
                   {data.activity.map((item) => {
-                    const target = item.entity_type === "job" ? "/jobs?job_id=" + item.entity_id : item.entity_type === "candidate" ? "/candidates/" + item.entity_id : item.entity_type === "interview" ? "/interviews/" + item.entity_id : item.entity_type === "placement" ? "/placements/" + item.entity_id : item.entity_type === "offer" ? "/offers/" + item.entity_id : "/submissions/" + item.entity_id;
-                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at)}{item.actor_user_id ? " · User " + item.actor_user_id.slice(0, 8) : ""}</div></div></Link>;
+                    const target = ["job", "jobs"].includes(item.entity_type) ? "/jobs?job_id=" + item.entity_id : ["candidate", "candidates"].includes(item.entity_type) ? "/candidates/" + item.entity_id : ["interview", "interviews"].includes(item.entity_type) ? "/interviews/" + item.entity_id : ["placement", "placements"].includes(item.entity_type) ? "/placements/" + item.entity_id : ["offer", "offers"].includes(item.entity_type) ? "/offers/" + item.entity_id : "/submissions/" + item.entity_id;
+                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
                   })}
                 </div>
               )}
