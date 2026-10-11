@@ -48,7 +48,7 @@ async def dashboard(
                 interviews_today = cursor.fetchone()["total"]
 
                 cursor.execute(
-                    "select count(*)::int as total from public.placements where organization_id=%s and status in ('pending','active','completed')",
+                    "select count(*)::int as total from public.placements where organization_id=%s and status='active'",
                     [organization_id],
                 )
                 active_placements = cursor.fetchone()["total"]
@@ -70,7 +70,7 @@ async def dashboard(
                 cursor.execute(
                     """select j.id,j.title,coalesce(c.name,'Direct client') as client,j.status,
                               count(a.id)::int as applicants,
-                              (current_date - j.created_at::date)::int as days_open
+                              (current_date - coalesce(j.opened_at,j.created_at)::date)::int as days_open
                        from public.jobs j
                        left join public.clients c on c.id=j.client_id and c.organization_id=j.organization_id
                        left join public.applications a on a.job_id=j.id and a.organization_id=j.organization_id
