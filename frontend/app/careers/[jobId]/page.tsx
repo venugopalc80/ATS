@@ -36,9 +36,9 @@ async function getJob(jobId: string): Promise<PublicJob | null> {
 export async function generateMetadata({ params }: { params: Promise<{ jobId: string }> }): Promise<Metadata> {
   const { jobId } = await params;
   const job = await getJob(jobId);
-  if (!job) return { title: "Job not found | TalentOS Careers", robots: { index: false, follow: false } };
+  if (!job) return { title: "Job not found | AQERITH Careers", robots: { index: false, follow: false } };
   return {
-    title: `${job.title} | TalentOS Careers`,
+    title: `${job.title} | AQERITH Careers`,
     description: (job.description ?? `Explore the ${job.title} opportunity.`).replace(/<[^>]*>/g, " ").slice(0, 155),
     alternates: { canonical: `/careers/${job.id}` },
     robots: { index: true, follow: true },
@@ -54,7 +54,7 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
   const job = await getJob(jobId);
   if (!job) notFound();
 
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://ats-frontend-the-pixel-muses.vercel.app";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://aqerith.com";
   const jobUrl = `${baseUrl}/careers/${job.id}`;
   const salaryMin = job.salary_min == null ? undefined : Number(job.salary_min);
   const salaryMax = job.salary_max == null ? undefined : Number(job.salary_max);
@@ -62,19 +62,19 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
     "@context": "https://schema.org",
     "@type": "JobPosting",
     title: job.title,
-    description: plainText(job.description ?? job.title),
-    identifier: { "@type": "PropertyValue", name: "TalentOS", value: job.id },
+    description: job.description ?? job.title,
+    identifier: { "@type": "PropertyValue", name: "AQERITH", value: job.id },
     datePosted: job.created_at ? new Date(job.created_at).toISOString() : undefined,
     dateModified: job.updated_at ? new Date(job.updated_at).toISOString() : undefined,
-    employmentType: job.employment_type?.toUpperCase().replace(/[ -]+/g, "_"),
+    employmentType: job.employment_type ? job.employment_type.toUpperCase().replace(/[ -]+/g, "_") : undefined,
     directApply: true,
     url: jobUrl,
     hiringOrganization: {
       "@type": "Organization",
-      name: "TalentOS Careers",
-      sameAs: baseUrl,
+      name: process.env.NEXT_PUBLIC_JOB_POSTING_ORGANIZATION_NAME ?? "Confidential",
+      sameAs: process.env.NEXT_PUBLIC_JOB_POSTING_ORGANIZATION_URL ?? baseUrl,
     },
-    jobLocation: job.location ? {
+    jobLocation: job.location && job.work_mode?.toLowerCase() !== "remote" ? {
       "@type": "Place",
       address: { "@type": "PostalAddress", addressLocality: job.location, addressCountry: job.country_code },
     } : undefined,
@@ -82,7 +82,7 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
     baseSalary: salaryMin !== undefined || salaryMax !== undefined ? {
       "@type": "MonetaryAmount",
       currency: job.salary_currency ?? "GBP",
-      value: { "@type": "QuantitativeValue", minValue: salaryMin, maxValue: salaryMax, unitText: "YEAR" },
+      value: { "@type": "QuantitativeValue", minValue: salaryMin, maxValue: salaryMax, unitText: process.env.NEXT_PUBLIC_JOB_POSTING_SALARY_UNIT ?? "YEAR" },
     } : undefined,
   };
 
@@ -90,7 +90,7 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
     <main className="careers-page">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, "\\u003c") }} />
       <header className="careers-header">
-        <Link href="/careers" className="careers-brand">Talent<span>OS</span> Careers</Link>
+        <Link href="/careers" className="careers-brand">AQERITH Careers</Link>
         <Link href="/careers" className="career-back-link">← All opportunities</Link>
       </header>
       <article className="career-detail">
@@ -103,7 +103,7 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
         <PublicApplyForm jobId={job.id} />
         <Link className="career-view-link" href="/careers">Browse more roles <span aria-hidden="true">→</span></Link>
       </article>
-      <footer className="careers-footer">Powered by TalentOS · Recruitment, made more human.</footer>
+      <footer className="careers-footer">Powered by AQERITH · Recruitment, made clearer.</footer>
     </main>
   );
 }
