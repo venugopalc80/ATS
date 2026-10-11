@@ -11,6 +11,8 @@ from urllib.parse import quote
 from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.service_account import Credentials
 
+from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
+
 logger = logging.getLogger(__name__)
 INDEXING_ENDPOINT = "https://indexing.googleapis.com/v3/urlNotifications:publish"
 SCOPES = ["https://www.googleapis.com/auth/indexing"]
@@ -19,6 +21,31 @@ SCOPES = ["https://www.googleapis.com/auth/indexing"]
 def notify_google_indexing(job_id: str, notification_type: str) -> None:
     """Send URL_UPDATED or URL_DELETED without failing the underlying ATS operation."""
     if os.getenv("GOOGLE_INDEXING_ENABLED", "").lower() not in {"1", "true", "yes"}:
+        return
+
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select j.status, d.selected
+                       from public.jobs j
+                       left join public.job_distribution_channels d
+                         on d.job_id = j.id
+                        and d.organization_id = j.organization_id
+                        and d.channel_id = 'google'
+                       where j.id = %s""",
+                    [job_id],
+                )
+                publication = cursor.fetchone()
+        if publication is None:
+            return
+        if notification_type == "URL_UPDATED":
+            if publication["status"] != "open" or not publication["selected"]:
+                return
+        elif not publication["selected"]:
+            return
+    except (DatabaseConfigurationError, DatabaseConnectionError):
+        logger.exception("Unable to verify Google publication status for job %s", job_id)
         return
 
     raw_credentials = os.getenv("GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON")
