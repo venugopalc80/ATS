@@ -18,36 +18,42 @@ INDEXING_ENDPOINT = "https://indexing.googleapis.com/v3/urlNotifications:publish
 SCOPES = ["https://www.googleapis.com/auth/indexing"]
 
 
-def notify_google_indexing(job_id: str, notification_type: str, preverified_publication: bool = False) -> None:
+def notify_google_indexing(
+    job_id: str,
+    notification_type: str,
+    preverified_publication: bool = False,
+) -> None:
     """Send URL_UPDATED or URL_DELETED without failing the underlying ATS operation."""
     if os.getenv("GOOGLE_INDEXING_ENABLED", "").lower() not in {"1", "true", "yes"}:
         return
 
+    # A delete may cascade away both the job and its distribution row before this
+    # background task runs. In that case the caller must verify publication pre-delete.
     if not preverified_publication:
-      try:
-        with get_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    """select j.status, d.selected
-                       from public.jobs j
-                       left join public.job_distribution_channels d
-                         on d.job_id = j.id
-                        and d.organization_id = j.organization_id
-                        and d.channel_id = 'google'
-                       where j.id = %s""",
-                    [job_id],
-                )
-                publication = cursor.fetchone()
-        if publication is None:
-            return
-        if notification_type == "URL_UPDATED":
-            if publication["status"] != "open" or not publication["selected"]:
+        try:
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """select j.status, d.selected
+                           from public.jobs j
+                           left join public.job_distribution_channels d
+                             on d.job_id = j.id
+                            and d.organization_id = j.organization_id
+                            and d.channel_id = 'google'
+                           where j.id = %s""",
+                        [job_id],
+                    )
+                    publication = cursor.fetchone()
+            if publication is None:
                 return
-        elif not publication["selected"]:
+            if notification_type == "URL_UPDATED":
+                if publication["status"] != "open" or not publication["selected"]:
+                    return
+            elif not publication["selected"]:
+                return
+        except (DatabaseConfigurationError, DatabaseConnectionError):
+            logger.exception("Unable to verify Google publication status for job %s", job_id)
             return
-      except (DatabaseConfigurationError, DatabaseConnectionError):
-        logger.exception("Unable to verify Google publication status for job %s", job_id)
-        return
 
     raw_credentials = os.getenv("GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON")
     if not raw_credentials:
