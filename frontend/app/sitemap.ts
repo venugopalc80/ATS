@@ -6,7 +6,7 @@ const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 type PublicJob = { id: string; updated_at?: string };
 
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://ats-frontend-the-pixel-muses.vercel.app";
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "") ?? "https://aqerith.com";
   const entries: MetadataRoute.Sitemap = [
     { url: `${baseUrl}/careers`, changeFrequency: "hourly", priority: 0.8 },
   ];
