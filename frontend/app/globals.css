@@ -305,3 +305,13 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
  .dashboard-vacancy-row { flex-direction:column; }
  .dashboard-error { align-items:flex-start; flex-direction:column; }
 }
+
+
+.dashboard-user-menu { position:relative; }
+.dashboard-user-trigger { display:flex; align-items:center; gap:8px; border:0; background:transparent; padding:2px; color:var(--ink); }
+.dashboard-user-trigger .avatar { flex:none; }
+.dashboard-user-dropdown { position:absolute; z-index:30; right:0; top:calc(100% + 10px); width:200px; padding:8px; border:1px solid var(--line); border-radius:10px; background:#fff; box-shadow:0 12px 32px rgba(16,24,40,.14); }
+.dashboard-user-menu-title { padding:8px 10px; color:var(--muted); font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.05em; }
+.dashboard-user-dropdown button { width:100%; text-align:left; border:0; border-radius:7px; background:transparent; padding:10px; color:var(--ink); font-size:13px; }
+.dashboard-user-dropdown button:hover { background:var(--bg); }
+.dashboard-user-dropdown button:disabled { opacity:.6; cursor:wait; }
