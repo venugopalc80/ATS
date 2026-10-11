@@ -103,6 +103,15 @@ async def dashboard(
                         })
 
                 cursor.execute(
+                    """select count(*)::int as total from public.interviews
+                       where organization_id=%s and status in ('scheduled','rescheduled')
+                         and scheduled_at >= date_trunc('day', now())
+                         and scheduled_at < date_trunc('day', now()) + interval '1 day'""",
+                    [organization_id],
+                )
+                interviews_today_count = cursor.fetchone()["total"]
+
+                cursor.execute(
                     """select i.id,i.application_id,i.scheduled_at,i.status
                        from public.interviews i
                        where i.organization_id=%s
@@ -212,7 +221,7 @@ async def dashboard(
             "metrics": {
                 "open_jobs": open_jobs,
                 "active_candidates": active_candidates,
-                "interviews_today": interviews_today_count(todays_interviews),
+                "interviews_today": interviews_today_count,
                 "placements_active": active_placements,
                 "placements_this_month": placements_this_month,
             },
