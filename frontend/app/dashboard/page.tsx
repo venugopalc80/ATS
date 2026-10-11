@@ -150,20 +150,17 @@ export default function Dashboard() {
           ["Submissions", "/submissions", "↗"],
           ["Interviews", "/interviews", "◷"],
           ["Clients", "/clients", "□"],
-          ["Vendors", "/vendors", "◇"],
-          ["Talent Bench", "/talent-bench", "♧"],
           ["Onboarding", "/onboarding", "✓"],
+          ["Offers", "/offers", "＄"],
           ["Placements", "/placements", "◈"],
-          ["Leads", "/leads", "◌"],
-          ["Reports", "/reports", "▤"],
         ].map(([label, href, symbol]) => (
           <Link key={label} href={href} className={"nav-item" + (label === "Dashboard" ? " active" : "")}>
             <span aria-hidden="true">{symbol}</span><span>{label}</span>
           </Link>
         ))}
         <div className="nav-label">Administration</div>
-        <Link href="/settings" className="nav-item"><span aria-hidden="true">⚙</span><span>Settings</span></Link>
-        <Link href="/help" className="nav-item"><span aria-hidden="true">?</span><span>Help &amp; support</span></Link>
+        <div className="nav-item"><span aria-hidden="true">⚙</span><span>Settings</span></div>
+        <div className="nav-item"><span aria-hidden="true">?</span><span>Help &amp; support</span></div>
       </aside>
 
       <main className="main">
@@ -174,7 +171,7 @@ export default function Dashboard() {
           </form>
           <div className="profile">
             <Link href="/interviews" aria-label="View interviews and today's priorities" className="dashboard-notification" title="Review today's priorities">♧</Link>
-            <Link href="/settings" className="profile-link">Account &amp; settings</Link>
+            <span className="profile-link">AQERITH workspace</span>
           </div>
         </header>
 
@@ -187,7 +184,7 @@ export default function Dashboard() {
             </div>
             <div className="actions dashboard-actions">
               <Link href="/jobs" className="btn">View vacancies</Link>
-              <Link href="/jobs" className="btn primary">+ Create requisition</Link>
+              <Link href="/jobs?create=1" className="btn primary">+ Create requisition</Link>
             </div>
           </div>
 
@@ -242,8 +239,8 @@ export default function Dashboard() {
             <section className="card dashboard-quick-actions">
               <div className="card-head"><span className="card-title">Quick actions</span></div>
               <Link href="/jobs" className="dashboard-quick-action"><span aria-hidden="true">＋</span><span><strong>Create requisition</strong><small>Open vacancy management</small></span><span aria-hidden="true">→</span></Link>
-              <Link href="/candidates" className="dashboard-quick-action"><span aria-hidden="true">♙</span><span><strong>Add candidate</strong><small>Create or import a candidate profile</small></span><span aria-hidden="true">→</span></Link>
-              <Link href="/candidates" className="dashboard-quick-action"><span aria-hidden="true">⌕</span><span><strong>Find matches</strong><small>Search candidates and review matching tools</small></span><span aria-hidden="true">→</span></Link>
+              <Link href="/candidates?create=1" className="dashboard-quick-action"><span aria-hidden="true">♙</span><span><strong>Add candidate</strong><small>Create a candidate profile or import a CV</small></span><span aria-hidden="true">→</span></Link>
+              <Link href="/jobs" className="dashboard-quick-action"><span aria-hidden="true">⌕</span><span><strong>Find matches</strong><small>Choose a vacancy to begin candidate matching</small></span><span aria-hidden="true">→</span></Link>
               <Link href="/interviews" className="dashboard-quick-action"><span aria-hidden="true">◷</span><span><strong>Schedule interview</strong><small>Start interview scheduling</small></span><span aria-hidden="true">→</span></Link>
             </section>
           </div>
@@ -293,7 +290,7 @@ export default function Dashboard() {
               ) : (
                 <div className="activity dashboard-activity">
                   {data.activity.map((item) => {
-                    const target = item.entity_type === "job" ? "/jobs" : item.entity_type === "candidate" ? "/candidates" : item.entity_type === "interview" ? "/interviews" : item.entity_type === "placement" ? "/placements" : "/submissions";
+                    const target = item.entity_type === "job" ? "/jobs?job_id=" + item.entity_id : item.entity_type === "candidate" ? "/candidates/" + item.entity_id : item.entity_type === "interview" ? "/interviews/" + item.entity_id : item.entity_type === "placement" ? "/placements/" + item.entity_id : item.entity_type === "offer" ? "/offers/" + item.entity_id : "/submissions/" + item.entity_id;
                     return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at)}{item.actor_user_id ? " · User " + item.actor_user_id.slice(0, 8) : ""}</div></div></Link>;
                   })}
                 </div>
