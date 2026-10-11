@@ -124,6 +124,13 @@ export default function CandidatesPage() {
 
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedSearch = params.get("search");
+    if (requestedSearch) setQuery(requestedSearch);
+    if (params.get("create") === "1") setShowForm(true);
+  }, []);
+
+  useEffect(() => {
     try { const stored = window.localStorage.getItem("aqerith_candidate_views") || window.localStorage.getItem("talentos_candidate_views"); if (stored) setSavedViews(JSON.parse(stored)); } catch { /* Ignore invalid saved view data. */ }
   }, []);
 
