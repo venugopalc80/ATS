@@ -174,9 +174,9 @@ export default function SubmissionsPage() {
   return (
     <div className="shell">
       <aside className="sidebar">
-        <Link href="/" className="brand">Talent<span>OS</span></Link>
+        <Link href="/dashboard" className="brand">AQERITH</Link>
         <div className="nav-label">Workspace</div>
-        <Link href="/" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
+        <Link href="/dashboard" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
         <Link href="/jobs" className="nav-item"><span>▣</span><span>Jobs</span></Link>
         <Link href="/candidates" className="nav-item"><span>●</span><span>Candidates</span></Link>
         <div className="nav-item active"><span>↗</span><span>Applications Inbox</span></div>
