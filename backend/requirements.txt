@@ -5,3 +5,4 @@ python-multipart
 psycopg[binary]
 supabase
 redis
+google-auth

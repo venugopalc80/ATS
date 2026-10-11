@@ -2,8 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Careers | TalentOS",
-  description: "Explore open opportunities published through TalentOS Careers.",
+  title: "Careers | AQERITH",
+  description: "Explore open opportunities published through AQERITH Careers.",
   robots: { index: true, follow: true },
 };
 
@@ -39,7 +39,7 @@ export default async function CareersPage() {
   return (
     <main className="careers-page">
       <header className="careers-header">
-        <Link href="/careers" className="careers-brand">Talent<span>OS</span> Careers</Link>
+        <Link href="/careers" className="careers-brand">AQERITH Careers</Link>
         <span>Opportunities, made clearer.</span>
       </header>
       <section className="careers-hero">
@@ -63,7 +63,7 @@ export default async function CareersPage() {
           </article>
         )) : <div className="careers-empty"><h3>No open roles just yet</h3><p>Please check back soon for new opportunities.</p></div>}
       </section>
-      <footer className="careers-footer">Powered by TalentOS · Recruitment, made more human.</footer>
+      <footer className="careers-footer">Powered by AQERITH · Recruitment, made clearer.</footer>
     </main>
   );
 }

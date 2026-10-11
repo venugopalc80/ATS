@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.jobs import JobCreate, JobOut, JobUpdate
+from app.services.google_indexing import notify_google_indexing
 from app.services.job_service import JobService
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
@@ -32,11 +33,14 @@ async def list_jobs(
 @router.post("", response_model=JobOut, status_code=201)
 async def create_job(
     payload: JobCreate,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
 ) -> JobOut:
     assert_org_member(user_id, payload.organization_id)
     try:
         row = await service.create_job(payload)
+        if row.get("status") == "open":
+            background_tasks.add_task(notify_google_indexing, str(row["id"]), "URL_UPDATED")
         return JobOut.model_validate(row)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
@@ -61,6 +65,7 @@ async def get_job(
 async def update_job(
     job_id: UUID,
     payload: JobUpdate,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
 ) -> JobOut:
     try:
@@ -69,6 +74,11 @@ async def update_job(
             raise HTTPException(status_code=404, detail="Job not found")
         assert_org_member(user_id, existing["organization_id"])
         row = await service.update_job(job_id, payload)
+        if row is not None:
+            if row.get("status") == "open":
+                background_tasks.add_task(notify_google_indexing, str(row["id"]), "URL_UPDATED")
+            elif existing.get("status") == "open":
+                background_tasks.add_task(notify_google_indexing, str(row["id"]), "URL_DELETED")
         return JobOut.model_validate(row)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
@@ -77,6 +87,7 @@ async def update_job(
 @router.delete("/{job_id}", status_code=204)
 async def delete_job(
     job_id: UUID,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
 ) -> None:
     try:
@@ -85,6 +96,8 @@ async def delete_job(
             raise HTTPException(status_code=404, detail="Job not found")
         assert_org_member(user_id, existing["organization_id"])
         deleted = await service.delete_job(job_id)
+        if deleted and existing.get("status") == "open":
+            background_tasks.add_task(notify_google_indexing, str(job_id), "URL_DELETED")
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
     if not deleted:
