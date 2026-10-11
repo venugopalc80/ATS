@@ -65,6 +65,13 @@ export default function SubmissionsPage() {
   const candidateMap = useMemo(() => new Map(candidates.map((candidate) => [candidate.id, candidate])), [candidates]);
 
   useEffect(() => {
+    const requestedStatus = new URLSearchParams(window.location.search).get("status");
+    if (requestedStatus && ["new", "screening", "submitted", "interview", "offer", "hired", "rejected", "withdrawn"].includes(requestedStatus)) {
+      setStatus(requestedStatus as ApplicationStatus);
+    }
+  }, []);
+
+  useEffect(() => {
     try { const stored = window.localStorage.getItem("talentos_applicant_views"); if (stored) setSavedViews(JSON.parse(stored)); } catch { /* Ignore invalid saved views. */ }
   }, []);
 
