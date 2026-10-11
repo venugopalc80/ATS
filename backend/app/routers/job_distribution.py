@@ -22,7 +22,7 @@ async def get_job_distribution(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select organization_id, status from public.jobs where id = %s",
+                    "select organization_id from public.jobs where id = %s",
                     [job_id],
                 )
                 job = cursor.fetchone()
@@ -36,14 +36,7 @@ async def get_job_distribution(
                        order by channel_id""",
                     [organization_id, job_id],
                 )
-                saved = [DistributionChannelOut.model_validate(row) for row in cursor.fetchall()]
-                if job["status"] == "open" and is_google_selected:
-                    background_tasks.add_task(notify_google_indexing, str(job_id), "URL_UPDATED")
-                elif was_google_selected and not is_google_selected:
-                    background_tasks.add_task(
-                        notify_google_indexing, str(job_id), "URL_DELETED", True
-                    )
-                return saved
+                return [DistributionChannelOut.model_validate(row) for row in cursor.fetchall()]
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -66,7 +59,7 @@ async def save_job_distribution(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select organization_id from public.jobs where id = %s",
+                    "select organization_id, status from public.jobs where id = %s",
                     [job_id],
                 )
                 job = cursor.fetchone()
@@ -82,7 +75,6 @@ async def save_job_distribution(
                 google_item = next((item for item in payload.channels if item.channel_id == "google"), None)
                 is_google_selected = bool(google_item and google_item.selected)
                 for item in payload.channels:
-                    status = item.status
                     if not item.selected:
                         status = "not_selected"
                     elif item.channel_id == "careers":
@@ -112,7 +104,14 @@ async def save_job_distribution(
                        order by channel_id""",
                     [organization_id, job_id],
                 )
-                return [DistributionChannelOut.model_validate(row) for row in cursor.fetchall()]
+                saved = [DistributionChannelOut.model_validate(row) for row in cursor.fetchall()]
+                if job["status"] == "open" and is_google_selected:
+                    background_tasks.add_task(notify_google_indexing, str(job_id), "URL_UPDATED")
+                elif was_google_selected and not is_google_selected:
+                    background_tasks.add_task(
+                        notify_google_indexing, str(job_id), "URL_DELETED", True
+                    )
+                return saved
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
