@@ -145,12 +145,14 @@ async def dashboard(
                 expiring_offers = list(cursor.fetchall())
 
                 cursor.execute(
-                    """select id,action,entity_type,entity_id,metadata,created_at,actor_user_id
-                       from public.audit_events
-                       where organization_id=%s
-                         and (%s::date is null or created_at >= %s::date)
-                         and (%s::date is null or created_at < (%s::date + interval '1 day'))
-                       order by created_at desc limit 10""",
+                    """select ae.id,ae.action,ae.entity_type,ae.entity_id,ae.metadata,ae.created_at,
+                              ae.actor_user_id,p.full_name as actor_name
+                       from public.audit_events ae
+                       left join public.profiles p on p.id=ae.actor_user_id
+                       where ae.organization_id=%s
+                         and (%s::date is null or ae.created_at >= %s::date)
+                         and (%s::date is null or ae.created_at < (%s::date + interval '1 day'))
+                       order by ae.created_at desc limit 10""",
                     [organization_id, date_from, date_from, date_to, date_to],
                 )
                 activity = list(cursor.fetchall())
