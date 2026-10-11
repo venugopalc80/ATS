@@ -23,9 +23,9 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 async function getJob(jobId: string): Promise<PublicJob | null> {
-  if (!API_BASE || !ORGANIZATION_ID) return null;
+  if (!API_BASE) return null;
   try {
-    const response = await fetch(`${API_BASE}/api/public/jobs/${encodeURIComponent(jobId)}?organization_id=${encodeURIComponent(ORGANIZATION_ID)}`, { next: { revalidate: 60 } });
+    const response = await fetch(`${API_BASE}/api/public/jobs/${encodeURIComponent(jobId)}`, { next: { revalidate: 60 } });
     if (!response.ok) return null;
     return await response.json();
   } catch {
