@@ -33,7 +33,17 @@ The structured-data organisation name must identify the real hiring organisation
 5. Inspect the job URL in Search Console and request indexing where appropriate.
 6. Monitor Search Console for structured-data and indexing issues.
 
-## Indexing API credentials
+## Indexing API credentials and automatic notifications
+
+The backend includes a best-effort notification service. When enabled, creating an open job or updating an open job queues `URL_UPDATED`; moving an open job out of the open state or deleting an open job queues `URL_DELETED`. Notifications run after the API response in a FastAPI background task and failures are logged without failing the ATS job operation. This is a lightweight first implementation, not a durable retry queue.
+
+Set these **backend-only** Vercel environment variables after completing Google's setup:
+
+- `GOOGLE_INDEXING_ENABLED=true`
+- `GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON=<complete service-account JSON contents>`
+- `NEXT_PUBLIC_SITE_URL=https://aqerith.com` (used by the backend helper to form canonical URLs; ensure it is set in the backend project too)
+
+Keep the service-account JSON private; do not commit it to GitHub or use a `NEXT_PUBLIC_` prefix for the credentials.
 
 Google's Indexing API requires a Google Cloud project, the API enabled, a service account, Search Console access for the site, and production quota/approval as required by Google. Keep service-account credentials in backend-only Vercel environment variables or a secrets manager; never expose them as `NEXT_PUBLIC_*` values or commit credentials to GitHub.
 
