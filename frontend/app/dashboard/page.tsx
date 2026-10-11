@@ -4,6 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, API_BASE } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 
 type MetricSet = {
   open_jobs: number;
@@ -90,6 +91,8 @@ export default function Dashboard() {
   const [dateFrom, setDateFrom] = useState(localDate(30));
   const [dateTo, setDateTo] = useState(localDate());
   const [search, setSearch] = useState("");
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [signingOut, setSigningOut] = useState(false);
 
   const loadDashboard = useCallback(async () => {
     const org = typeof window !== "undefined"
@@ -171,8 +174,24 @@ export default function Dashboard() {
             <button className="btn" type="submit">Search</button>
           </form>
           <div className="profile">
-            <Link href="/interviews" aria-label="View interviews and today's priorities" className="dashboard-notification" title="Review today's priorities">♧</Link>
-            <span className="profile-link">AQERITH workspace</span>
+            <Link href="#priorities" aria-label="Jump to dashboard notifications and priorities" className="dashboard-notification" title="Review today's priorities">♧</Link>
+            <div className="dashboard-user-menu">
+              <button className="dashboard-user-trigger" type="button" aria-haspopup="menu" aria-expanded={userMenuOpen} onClick={() => setUserMenuOpen((open) => !open)}>
+                <span className="avatar">A</span><span className="profile-link">Account</span><span aria-hidden="true">⌄</span>
+              </button>
+              {userMenuOpen && <div className="dashboard-user-dropdown" role="menu">
+                <div className="dashboard-user-menu-title">AQERITH account</div>
+                <button role="menuitem" type="button" disabled={signingOut} onClick={async () => {
+                  setSigningOut(true);
+                  try {
+                    await supabase.auth.signOut();
+                    window.location.href = "/login";
+                  } finally {
+                    setSigningOut(false);
+                  }
+                }}>{signingOut ? "Signing out…" : "Sign out"}</button>
+              </div>}
+            </div>
           </div>
         </header>
 
