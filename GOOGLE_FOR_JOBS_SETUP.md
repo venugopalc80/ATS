@@ -35,7 +35,7 @@ Set these **backend-only** Vercel environment variables after completing Google'
 
 - `GOOGLE_INDEXING_ENABLED=true`
 - `GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON=<complete service-account JSON contents>`
-- `NEXT_PUBLIC_SITE_URL=https://aqerith.com` (used by the backend helper to form canonical URLs; ensure it is set in the backend project too)
+- `PUBLIC_SITE_URL=https://aqerith.com` (used by the backend helper to form canonical URLs)
 
 Keep the service-account JSON private; do not commit it to GitHub or use a `NEXT_PUBLIC_` prefix for the credentials.
 
