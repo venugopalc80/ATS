@@ -1,10 +1,13 @@
 import hashlib
+import io
 import os
 import re
 from pathlib import Path
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from docx import Document as DocxDocument
+from pypdf import PdfReader
 from pydantic import BaseModel
 from supabase import create_client
 
@@ -205,3 +208,175 @@ async def create_document_download(
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Document service unavailable") from exc
+
+
+MAX_BULK_FILES = 20
+MAX_BULK_BYTES = 4 * 1024 * 1024  # Stay below the Vercel Functions request-body limit.
+CV_SKILL_KEYWORDS = (
+    "python", "java", "javascript", "typescript", "react", "next.js", "node.js",
+    "sql", "postgresql", "mysql", "mongodb", "aws", "azure", "gcp", "docker",
+    "kubernetes", "machine learning", "deep learning", "tensorflow", "pytorch",
+    "data analysis", "power bi", "tableau", "excel", "django", "fastapi",
+    "project management", "salesforce", "account management", "recruitment",
+)
+
+
+def extract_cv_text(data: bytes, mime: str) -> str:
+    """Extract selectable text from supported CV formats; scanned PDFs need OCR separately."""
+    try:
+        if mime == "application/pdf":
+            reader = PdfReader(io.BytesIO(data))
+            return "\n".join((page.extract_text() or "") for page in reader.pages[:20])[:100_000]
+        if mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            document = DocxDocument(io.BytesIO(data))
+            parts = [paragraph.text for paragraph in document.paragraphs]
+            for table in document.tables:
+                for row in table.rows:
+                    parts.append(" ".join(cell.text for cell in row.cells))
+            return "\n".join(parts)[:100_000]
+    except Exception:
+        return ""
+    return ""
+
+
+def cv_candidate_fields(text: str, filename: str) -> dict:
+    email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
+    phone_match = re.search(r"(?<!\w)(?:\+?\d[\d ()\-.]{7,}\d)(?!\w)", text)
+    excluded = {
+        "curriculum vitae", "resume", "résumé", "cv", "professional summary",
+        "summary", "profile", "contact", "contact details", "work experience",
+        "professional experience", "education", "skills", "experience",
+    }
+    name = ""
+    for raw_line in text.splitlines()[:15]:
+        line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
+        if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+            continue
+        if line.casefold() in excluded or len(line.split()) > 5:
+            continue
+        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
+            name = line
+            break
+    if not name:
+        stem = Path(filename).stem
+        stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
+        stem = re.sub(r"[_-]+", " ", stem)
+        name = re.sub(r"\s+", " ", stem).strip(" .-_")
+    parts = name.split()
+    first_name = (parts[0] if parts else "CV candidate")[:100]
+    last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
+    skills = [skill for skill in CV_SKILL_KEYWORDS if re.search(r"(?<![a-z0-9])" + re.escape(skill) + r"(?![a-z0-9])", text, re.I)]
+    return {
+        "first_name": first_name,
+        "last_name": last_name[:100] if last_name else None,
+        "email": email_match.group(0).lower() if email_match else None,
+        "phone": re.sub(r"\s+", " ", phone_match.group(0)).strip()[:50] if phone_match else None,
+        "skills": skills[:30],
+    }
+
+
+@router.post("/bulk-cv", status_code=200)
+async def bulk_upload_cvs(
+    organization_id: UUID,
+    files: list[UploadFile] = File(...),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
+    assert_org_member(user_id, organization_id)
+    if not files:
+        raise HTTPException(status_code=422, detail="Choose at least one CV to upload")
+    if len(files) > MAX_BULK_FILES:
+        raise HTTPException(status_code=413, detail=f"Upload up to {MAX_BULK_FILES} CVs per batch")
+
+    declared_total = sum(file.size or 0 for file in files)
+    if declared_total > MAX_BULK_BYTES:
+        raise HTTPException(status_code=413, detail="The total batch must be 4 MB or smaller. Split larger batches into multiple uploads.")
+
+    results = []
+    for file in files:
+        filename = Path(file.filename or "resume.pdf").name
+        mime = (file.content_type or "").lower()
+        data = await file.read(MAX_BYTES + 1)
+        try:
+            extension = validate_document_bytes(data, mime)
+            filename = safe_filename(file.filename, extension)
+            digest = hashlib.sha256(data).hexdigest()
+            text = extract_cv_text(data, mime)
+            fields = cv_candidate_fields(text, filename)
+            if not fields["first_name"].strip():
+                fields["first_name"] = "CV candidate"
+
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    if fields["email"]:
+                        cursor.execute(
+                            "select id from public.candidates where organization_id=%s and lower(email)=lower(%s) limit 1",
+                            [organization_id, fields["email"]],
+                        )
+                        existing = cursor.fetchone()
+                        if existing:
+                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists", "candidate_id": str(existing["id"])})
+                            continue
+                    cursor.execute(
+                        "select id from public.candidate_documents where organization_id=%s and sha256=%s and deleted_at is null limit 1",
+                        [organization_id, digest],
+                    )
+                    if cursor.fetchone():
+                        results.append({"filename": filename, "status": "duplicate", "message": "This CV file has already been uploaded"})
+                        continue
+
+            candidate_id = uuid4()
+            document_id = uuid4()
+            path = f"{organization_id}/{candidate_id}/{document_id}{extension}"
+            storage_client().storage.from_(BUCKET).upload(
+                path, data, {"content-type": mime, "upsert": "false", "cache-control": "0"}
+            )
+            try:
+                with get_connection() as connection:
+                    with connection.cursor() as cursor:
+                        cursor.execute(
+                            """insert into public.candidates
+                               (id, organization_id, first_name, last_name, email, phone, status,
+                                skills, resume_path, resume_text, created_at, updated_at)
+                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
+                            [candidate_id, organization_id, fields["first_name"], fields["last_name"],
+                             fields["email"], fields["phone"], fields["skills"], path, text or None],
+                        )
+                        cursor.execute(
+                            """insert into public.candidate_documents
+                               (id, organization_id, candidate_id, application_id, document_type,
+                                original_filename, storage_bucket, storage_path, content_type,
+                                file_size_bytes, sha256, uploaded_by)
+                               values (%s,%s,%s,null,'cv',%s,%s,%s,%s,%s,%s,%s)""",
+                            [document_id, organization_id, candidate_id, filename, BUCKET, path,
+                             mime, len(data), digest, user_id],
+                        )
+                        cursor.execute(
+                            """insert into public.audit_events
+                               (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                               values (%s,%s,'candidate_cv_bulk_imported','candidate',%s,%s::jsonb)""",
+                            [organization_id, user_id, candidate_id,
+                             '{"filename":' + __import__("json").dumps(filename) + ',"document_id":"' + str(document_id) + '"}'],
+                        )
+                results.append({
+                    "filename": filename, "status": "imported", "candidate_id": str(candidate_id),
+                    "name": " ".join(part for part in [fields["first_name"], fields["last_name"]] if part),
+                    "email": fields["email"], "skills_found": fields["skills"],
+                    "text_extracted": bool(text.strip()),
+                })
+            except Exception:
+                try:
+                    storage_client().storage.from_(BUCKET).remove([path])
+                except Exception:
+                    pass
+                raise
+        except HTTPException as exc:
+            results.append({"filename": filename, "status": "error", "message": str(exc.detail)})
+        except Exception:
+            results.append({"filename": filename, "status": "error", "message": "Could not import this CV. Check storage/database configuration and try again."})
+        finally:
+            await file.close()
+
+    return {"total": len(files), "imported": sum(item["status"] == "imported" for item in results),
+            "duplicates": sum(item["status"] == "duplicate" for item in results),
+            "failed": sum(item["status"] == "error" for item in results), "results": results}
