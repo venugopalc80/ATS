@@ -27,6 +27,7 @@ type Candidate = {
 
 type LatestNote = { candidate_id: string; note: string; created_at: string; author_user_id?: string | null };
 type CandidateTag = { id: string; organization_id: string; name: string; colour: string };
+type CandidateTagAssignment = { candidate_id: string; tag_id: string; name: string; colour: string };
 type CandidateCv = { id: string; original_filename: string; content_type: string; file_size_bytes: number; created_at?: string | null };
 type CandidateCvPreview = { filename: string; kind: "pdf" | "text"; url?: string; text?: string };
 
@@ -127,6 +128,8 @@ export default function CandidatesPage() {
   const [tagLoading, setTagLoading] = useState(false);
   const [tagSaving, setTagSaving] = useState(false);
   const [tagError, setTagError] = useState("");
+  const [candidateTagAssignments, setCandidateTagAssignments] = useState<CandidateTagAssignment[]>([]);
+  const [tagFilter, setTagFilter] = useState("all");
   const [showImport, setShowImport] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importFileName, setImportFileName] = useState("");
@@ -208,6 +211,9 @@ export default function CandidatesPage() {
       const body = response.status === 204 ? null : await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.detail || "Could not update candidate tag.");
       setAssignedTagIds((current) => checked ? Array.from(new Set([...current, tag.id])) : current.filter((id) => id !== tag.id));
+      setCandidateTagAssignments((current) => checked
+        ? [...current.filter((item) => !(item.candidate_id === candidate.id && item.tag_id === tag.id)), { candidate_id: candidate.id, tag_id: tag.id, name: tag.name, colour: tag.colour }]
+        : current.filter((item) => !(item.candidate_id === candidate.id && item.tag_id === tag.id)));
     } catch (error) {
       setTagError(error instanceof Error ? error.message : "Could not update candidate tag.");
     } finally {
@@ -279,6 +285,25 @@ export default function CandidatesPage() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    const organizationId = activeOrganisationId();
+    if (!API_BASE || !organizationId || candidates.length === 0) {
+      if (!candidates.length) setCandidateTagAssignments([]);
+      return;
+    }
+    let cancelled = false;
+    apiFetch(API_BASE + "/api/candidate-tags/assignments?organization_id=" + encodeURIComponent(organizationId))
+      .then(async (response) => {
+        const body = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(body?.detail || "Could not load candidate tags.");
+        if (!cancelled) setCandidateTagAssignments(body as CandidateTagAssignment[]);
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage(error instanceof Error ? error.message : "Could not load candidate tags.");
+      });
+    return () => { cancelled = true; };
+  }, [candidates]);
+
   const filtered = useMemo(() => candidates.filter((candidate) => {
     const haystack = (
       fullName(candidate) + " " +
@@ -288,12 +313,12 @@ export default function CandidatesPage() {
       candidate.skills.join(" ")
     ).toLowerCase();
 
-    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country);
+    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country) && (tagFilter === "all" || candidateTagAssignments.some((assignment) => assignment.candidate_id === candidate.id && assignment.tag_id === tagFilter));
   }).sort((a, b) => {
     const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
     const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
     return sortDirection === "asc" ? comparison : -comparison;
-  }), [candidates, query, status, country, sortBy, sortDirection]);
+  }), [candidates, query, status, country, sortBy, sortDirection, tagFilter, candidateTagAssignments]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -637,6 +662,7 @@ export default function CandidatesPage() {
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
+              <select className="filter" aria-label="Filter by candidate tag" value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPage(1); }}><option value="all">All tags</option>{[...new Map(candidateTagAssignments.map((assignment) => [assignment.tag_id, assignment])).values()].sort((a, b) => a.name.localeCompare(b.name)).map((assignment) => <option key={assignment.tag_id} value={assignment.tag_id}>{assignment.name}</option>)}</select>
               <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
               <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
             </div>
@@ -657,6 +683,7 @@ export default function CandidatesPage() {
                     <td>
                       <Link className="link" href={"/candidates/" + candidate.id}><strong>{fullName(candidate)}</strong></Link>
                       <div className="muted-small">{candidate.email ?? "No email"}</div>
+                      {candidateTagAssignments.filter((assignment) => assignment.candidate_id === candidate.id).map((assignment) => <span key={assignment.tag_id} style={{ display: "inline-flex", alignItems: "center", gap: 5, margin: "5px 5px 0 0", padding: "2px 8px", borderRadius: 999, background: assignment.colour + "20", border: "1px solid " + assignment.colour, color: assignment.colour, fontSize: 11, fontWeight: 600 }}>{assignment.name}</span>)}
                     </td>
                     <td>{candidate.phone ? <a className="link" href={"tel:" + candidate.phone} title="Call candidate">{candidate.phone}</a> : <span className="muted-small">No phone</span>}</td>
                     <td>{candidate.current_title ?? "Not specified"}</td>
