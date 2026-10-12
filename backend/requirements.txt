@@ -7,3 +7,5 @@ supabase
 redis
 google-auth
 requests
+pypdf
+python-docx
