@@ -1,6 +1,8 @@
 from typing import Any
 from uuid import UUID
 
+from psycopg.errors import UniqueViolation
+
 from app.db import get_connection
 from app.schemas.candidate_tags import CandidateTagCreate
 
@@ -29,10 +31,13 @@ class CandidateTagService:
     async def create_tag(self, payload: CandidateTagCreate, user_id: UUID) -> dict[str, Any]:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f"insert into public.candidate_tags (organization_id, name, colour, created_by) values (%s, %s, %s, %s) returning {TAG_COLUMNS}",
-                    [payload.organization_id, payload.name, payload.colour, user_id],
-                )
+                try:
+                    cursor.execute(
+                        f"insert into public.candidate_tags (organization_id, name, colour, created_by) values (%s, %s, %s, %s) returning {TAG_COLUMNS}",
+                        [payload.organization_id, payload.name, payload.colour, user_id],
+                    )
+                except UniqueViolation as exc:
+                    raise ValueError("A tag with this name already exists in this organisation") from exc
                 return cursor.fetchone()
 
     async def delete_tag(self, organization_id: UUID, tag_id: UUID) -> bool:
