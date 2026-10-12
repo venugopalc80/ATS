@@ -23,7 +23,7 @@ create table if not exists public.candidate_tag_assignments (
       references public.candidate_tags(id, organization_id) on delete cascade
 );
 
-create index if not exists candidate_tags_org_name_idx
+create unique index if not exists candidate_tags_org_name_ci_unique
   on public.candidate_tags (organization_id, lower(name));
 create index if not exists candidate_tag_assignments_org_tag_idx
   on public.candidate_tag_assignments (organization_id, tag_id);
