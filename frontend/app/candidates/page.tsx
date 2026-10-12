@@ -246,8 +246,8 @@ export default function CandidatesPage() {
       setCvImportMessage("Select an organisation before importing CVs.");
       return;
     }
-    if (cvFiles.length > 20) {
-      setCvImportMessage("Choose up to 20 CVs per batch.");
+    if (cvFiles.length > 20 || cvFiles.reduce((total, file) => total + file.size, 0) > 4 * 1024 * 1024) {
+      setCvImportMessage("Choose up to 20 CVs with a combined size of 4 MB or less per batch.");
       return;
     }
     setCvImporting(true);
@@ -573,11 +573,11 @@ export default function CandidatesPage() {
           <label style={{ display: "block", margin: "12px 0" }}>Select CV files
             <input type="file" multiple accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={cvImporting} onChange={(event) => { setCvFiles(Array.from(event.target.files ?? [])); setCvImportResults([]); setCvImportMessage(""); }} />
           </label>
-          <p className="muted-small">{cvFiles.length} file(s) selected · PDF/DOCX only · maximum 5 MB per file · 20 files per batch</p>
+          <p className="muted-small">{cvFiles.length} file(s) selected · PDF/DOCX only · 20 files max · 4 MB combined batch limit</p>
           {cvFiles.length > 0 && <div style={{ overflow: "auto", maxHeight: 180, marginBottom: 12 }}><table className="table"><thead><tr><th>Filename</th><th>Size</th><th>Type</th></tr></thead><tbody>{cvFiles.map((file, index) => <tr key={file.name + file.size + index}><td>{file.name}</td><td>{(file.size / (1024 * 1024)).toFixed(2)} MB</td><td>{file.name.toLowerCase().endsWith(".pdf") ? "PDF" : file.name.toLowerCase().endsWith(".docx") ? "DOCX" : "Unsupported"}</td></tr>)}</tbody></table></div>}
           {cvImportMessage && <div className="notice" style={{ margin: "12px 0" }}>{cvImportMessage}</div>}
           {cvImportResults.length > 0 && <div style={{ overflow: "auto", maxHeight: 320 }}><table className="table"><thead><tr><th>CV</th><th>Result</th><th>Candidate</th><th>Extracted details</th></tr></thead><tbody>{cvImportResults.map((result, index) => <tr key={result.filename + index}><td>{result.filename}</td><td><span className={"badge " + (result.status === "imported" ? "green" : result.status === "duplicate" ? "amber" : "red")}>{result.status}</span></td><td>{result.name || "—"}<div className="muted-small">{result.email || ""}</div></td><td>{result.skills_found?.length ? result.skills_found.join(", ") : result.text_extracted === false ? "No readable text found" : result.message || "—"}</td></tr>)}</tbody></table></div>}
-          <div className="modal-actions"><button className="btn" disabled={cvImporting} onClick={() => { setCvFiles([]); setCvImportResults([]); setCvImportMessage(""); }}>Clear</button><button className="btn primary" disabled={cvImporting || cvFiles.length === 0 || cvFiles.length > 20 || cvFiles.some((file) => !/\.pdf$|\.docx$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0)} onClick={() => void runBulkCvImport()}>{cvImporting ? "Importing CVs…" : "Import " + cvFiles.length + " CVs"}</button><button className="btn" disabled={cvImporting} onClick={() => setShowCvImport(false)}>Close</button></div>
+          <div className="modal-actions"><button className="btn" disabled={cvImporting} onClick={() => { setCvFiles([]); setCvImportResults([]); setCvImportMessage(""); }}>Clear</button><button className="btn primary" disabled={cvImporting || cvFiles.length === 0 || cvFiles.length > 20 || cvFiles.reduce((total, file) => total + file.size, 0) > 4 * 1024 * 1024 || cvFiles.some((file) => !/\.pdf$|\.docx$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0)} onClick={() => void runBulkCvImport()}>{cvImporting ? "Importing CVs…" : "Import " + cvFiles.length + " CVs"}</button><button className="btn" disabled={cvImporting} onClick={() => setShowCvImport(false)}>Close</button></div>
         </div></div>
       )}
 
