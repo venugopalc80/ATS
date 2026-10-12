@@ -208,7 +208,7 @@ async def create_document_download(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
-        result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60)
+        result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": False})
         signed_url = result.get("signedURL") or result.get("signedUrl")
         if not signed_url:
             raise HTTPException(status_code=503, detail="Unable to create secure download link")
