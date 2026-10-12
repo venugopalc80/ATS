@@ -1,5 +1,6 @@
 import hashlib
 import io
+import logging
 import os
 import re
 from pathlib import Path
@@ -15,6 +16,7 @@ from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/documents", tags=["candidate documents"])
+logger = logging.getLogger(__name__)
 BUCKET = "candidate-documents"
 MAX_BYTES = 5 * 1024 * 1024
 ALLOWED = {
@@ -163,8 +165,8 @@ async def list_candidate_documents(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, organization_id)
-    verify_candidate(candidate_id, organization_id)
     try:
+        verify_candidate(candidate_id, organization_id)
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -176,8 +178,14 @@ async def list_candidate_documents(
                     [organization_id, candidate_id],
                 )
                 return list(cursor.fetchall())
+    except HTTPException:
+        raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
-        raise HTTPException(status_code=503, detail="Document service unavailable") from exc
+        logger.exception("Database failure while listing candidate documents")
+        raise HTTPException(status_code=503, detail="Document service unavailable; please retry shortly") from exc
+    except Exception as exc:
+        logger.exception("Unexpected failure while listing candidate documents")
+        raise HTTPException(status_code=503, detail="Unable to load candidate documents; please retry shortly") from exc
 
 
 @router.post("/{document_id}/download")
