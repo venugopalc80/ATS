@@ -1,7 +1,6 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from psycopg.errors import UniqueViolation
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
@@ -46,8 +45,8 @@ async def create_tag(payload: CandidateTagCreate, user_id: UUID = Depends(get_cu
     try:
         row = await service.create_tag(payload, user_id)
         return CandidateTagOut.model_validate(row)
-    except UniqueViolation as exc:
-        raise HTTPException(status_code=409, detail="A tag with this name already exists in this organisation") from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
