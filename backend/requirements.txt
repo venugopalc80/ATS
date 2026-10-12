@@ -6,3 +6,4 @@ psycopg[binary]
 supabase
 redis
 google-auth
+requests
