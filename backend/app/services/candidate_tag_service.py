@@ -28,6 +28,23 @@ class CandidateTagService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
+    async def list_candidate_assignments(self, organization_id: UUID) -> list[dict[str, Any]]:
+        """Return tag labels for candidates in one organisation in a single query."""
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """
+                    select a.candidate_id, t.id as tag_id, t.name, t.colour
+                    from public.candidate_tag_assignments a
+                    join public.candidate_tags t
+                      on t.id = a.tag_id and t.organization_id = a.organization_id
+                    where a.organization_id = %s
+                    order by lower(t.name), a.candidate_id
+                    """,
+                    [organization_id],
+                )
+                return list(cursor.fetchall())
+
     async def create_tag(self, payload: CandidateTagCreate, user_id: UUID) -> dict[str, Any]:
         with get_connection() as connection:
             with connection.cursor() as cursor:
