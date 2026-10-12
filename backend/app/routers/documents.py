@@ -211,6 +211,7 @@ async def create_document_download(
 
 
 MAX_BULK_FILES = 20
+MAX_BULK_BYTES = 4 * 1024 * 1024  # Stay below the Vercel Functions request-body limit.
 CV_SKILL_KEYWORDS = (
     "python", "java", "javascript", "typescript", "react", "next.js", "node.js",
     "sql", "postgresql", "mysql", "mongodb", "aws", "azure", "gcp", "docker",
@@ -287,8 +288,13 @@ async def bulk_upload_cvs(
     if len(files) > MAX_BULK_FILES:
         raise HTTPException(status_code=413, detail=f"Upload up to {MAX_BULK_FILES} CVs per batch")
 
+    declared_total = sum(file.size or 0 for file in files)
+    if declared_total > MAX_BULK_BYTES:
+        raise HTTPException(status_code=413, detail="The total batch must be 4 MB or smaller. Split larger batches into multiple uploads.")
+
     results = []
     for file in files:
+        filename = Path(file.filename or "resume.pdf").name
         mime = (file.content_type or "").lower()
         data = await file.read(MAX_BYTES + 1)
         try:
