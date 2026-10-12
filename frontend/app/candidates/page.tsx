@@ -26,6 +26,8 @@ type Candidate = {
 };
 
 type LatestNote = { candidate_id: string; note: string; created_at: string; author_user_id?: string | null };
+type CandidateCv = { id: string; original_filename: string; content_type: string; file_size_bytes: number; created_at?: string | null };
+type CandidateCvPreview = { filename: string; kind: "pdf" | "text"; url?: string; text?: string };
 
 type CandidateForm = {
   first_name: string;
@@ -126,6 +128,36 @@ export default function CandidatesPage() {
   const [cvImporting, setCvImporting] = useState(false);
   const [cvImportMessage, setCvImportMessage] = useState("");
   const [cvImportResults, setCvImportResults] = useState<Array<{ filename: string; status: string; message?: string; name?: string; email?: string | null; skills_found?: string[]; text_extracted?: boolean }>>([]);
+  const [cvPreviewCandidate, setCvPreviewCandidate] = useState<Candidate | null>(null);
+  const [cvPreviewDocuments, setCvPreviewDocuments] = useState<CandidateCv[]>([]);
+  const [cvPreviewLoading, setCvPreviewLoading] = useState(false);
+  const [cvPreviewMessage, setCvPreviewMessage] = useState("");
+  const [cvPreview, setCvPreview] = useState<CandidateCvPreview | null>(null);
+  const [cvPreviewDocumentId, setCvPreviewDocumentId] = useState<string | null>(null);
+  async function openCandidateCv(candidate: Candidate) {
+    setCvPreviewCandidate(candidate); setCvPreviewDocuments([]); setCvPreview(null); setCvPreviewDocumentId(null); setCvPreviewMessage(""); setCvPreviewLoading(true);
+    const organizationId = window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID;
+    try {
+      if (!API_BASE || !organizationId) throw new Error("Organisation configuration is missing.");
+      const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id));
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not load this candidate's CVs.");
+      const docs: CandidateCv[] = await response.json(); setCvPreviewDocuments(docs);
+      if (!docs.length) setCvPreviewMessage("No CV is available for this candidate yet.");
+      else if (docs.length === 1) await previewCandidateCv(docs[0], organizationId);
+    } catch (error) { setCvPreviewMessage(error instanceof Error ? error.message : "Could not load this candidate's CVs."); }
+    finally { setCvPreviewLoading(false); }
+  }
+  async function previewCandidateCv(document: CandidateCv, knownOrganizationId?: string) {
+    const organizationId = knownOrganizationId || window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID;
+    setCvPreviewLoading(true); setCvPreviewMessage(""); setCvPreviewDocumentId(document.id);
+    try {
+      const response = await apiFetch(API_BASE + "/api/documents/" + document.id + "/preview?organization_id=" + encodeURIComponent(organizationId), { method: "POST" });
+      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not preview this CV.");
+      setCvPreview(await response.json());
+    } catch (error) { setCvPreviewMessage(error instanceof Error ? error.message : "Could not preview this CV."); }
+    finally { setCvPreviewLoading(false); }
+  }
+
   const cvTotalBytes = cvFiles.reduce((total, file) => total + file.size, 0);
   const cvUnsupportedFiles = cvFiles.filter((file) => !/\.pdf$|\.docx$/i.test(file.name) || file.size === 0 || file.size > 4 * 1024 * 1024);
 
@@ -554,7 +586,7 @@ export default function CandidatesPage() {
                     <td><span className={"badge " + (candidate.status === "active" ? "green" : candidate.status === "placed" ? "blue" : "amber")}>{candidate.status.replaceAll("_", " ")}</span></td>
                     <td>
                       <div style={{ display: "flex", gap: 6 }}>
-                        <Link className="btn" href={"/candidates/" + candidate.id}>View</Link><button className="btn" onClick={() => openEdit(candidate)}>Edit</button>
+                        <button className="btn" type="button" title={"Preview CV for " + fullName(candidate)} aria-label={"Preview CV for " + fullName(candidate)} onClick={() => void openCandidateCv(candidate)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h3l2 5 2-5h3l2 5v9a2 2 0 0 1-2 2h-2l-3-5-3 5H7a2 2 0 0 1-2-2V9z"/><circle cx="8.5" cy="13" r="2.5"/><circle cx="15.5" cy="13" r="2.5"/></svg></button><Link className="btn" href={"/candidates/" + candidate.id}>View</Link><button className="btn" onClick={() => openEdit(candidate)}>Edit</button>
                         <button className="btn" onClick={() => deleteCandidate(candidate)}>Delete</button>
                       </div>
                     </td>
@@ -638,6 +670,13 @@ export default function CandidatesPage() {
           </form>
         </div>
       )}
+      {cvPreviewCandidate && <div role="dialog" aria-modal="true" aria-label={"CV preview for " + fullName(cvPreviewCandidate)} onClick={(event) => { if (event.target === event.currentTarget) { setCvPreviewCandidate(null); setCvPreview(null); } }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15, 23, 42, 0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <section className="card" style={{ width: "min(1100px, 96vw)", height: "min(88vh, 900px)", display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }}>
+          <header className="card-head" style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}><div><div className="card-title">CV preview</div><div className="muted-small">{fullName(cvPreviewCandidate)}</div></div><button type="button" className="btn" onClick={() => { setCvPreviewCandidate(null); setCvPreview(null); }} aria-label="Close CV preview">Close ✕</button></header>
+          {cvPreviewDocuments.length > 1 && <div style={{ padding: "12px 20px", borderBottom: "1px solid #e5e7eb", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><label htmlFor="candidate-cv-choice" className="muted-small">Choose CV</label><select id="candidate-cv-choice" value={cvPreviewDocumentId || ""} onChange={(event) => { const doc = cvPreviewDocuments.find((item) => item.id === event.target.value); if (doc) void previewCandidateCv(doc); }}><option value="" disabled>Select a CV…</option>{cvPreviewDocuments.map((doc) => <option key={doc.id} value={doc.id}>{doc.original_filename}</option>)}</select></div>}
+          {cvPreviewLoading ? <div style={{ padding: 24 }}>Loading CV…</div> : cvPreviewMessage ? <div className="notice" role="status" style={{ margin: 20 }}>{cvPreviewMessage}</div> : cvPreview?.kind === "pdf" && cvPreview.url ? <iframe title={"CV preview for " + fullName(cvPreviewCandidate)} src={cvPreview.url} style={{ border: 0, width: "100%", height: "100%", background: "#f8fafc" }} /> : cvPreview?.kind === "text" ? <div style={{ overflowY: "auto", padding: "28px 36px", whiteSpace: "pre-wrap", lineHeight: 1.65 }}>{cvPreview.text}</div> : cvPreviewDocuments.length > 1 ? <div style={{ padding: 24 }}>Choose a CV to preview.</div> : null}
+        </section>
+      </div>}
     </div>
   );
 }
