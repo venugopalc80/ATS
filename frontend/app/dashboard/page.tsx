@@ -260,7 +260,7 @@ export default function Dashboard() {
               <div className="card-head"><span className="card-title">Quick actions</span></div>
               <Link href="/jobs?create=1" className="dashboard-quick-action"><span aria-hidden="true">＋</span><span><strong>Create requisition</strong><small>Open vacancy management</small></span><span aria-hidden="true">→</span></Link>
               <Link href="/candidates?create=1" className="dashboard-quick-action"><span aria-hidden="true">♙</span><span><strong>Add candidate</strong><small>Create a candidate profile or import a CV</small></span><span aria-hidden="true">→</span></Link>
-              <Link href="/jobs" className="dashboard-quick-action"><span aria-hidden="true">⌕</span><span><strong>Find matches</strong><small>Choose a vacancy to begin candidate matching</small></span><span aria-hidden="true">→</span></Link>
+              <Link href="/match-lab" className="dashboard-quick-action"><span aria-hidden="true">⌕</span><span><strong>Find matches</strong><small>Choose a vacancy to begin candidate matching</small></span><span aria-hidden="true">→</span></Link>
               <Link href="/interviews?create=1" className="dashboard-quick-action"><span aria-hidden="true">◷</span><span><strong>Schedule interview</strong><small>Start interview scheduling</small></span><span aria-hidden="true">→</span></Link>
             </section>
           </div>
