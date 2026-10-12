@@ -39,6 +39,18 @@ async def list_tags(
         raise db_unavailable(exc) from exc
 
 
+@router.get("/assignments")
+async def list_candidate_assignments(
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, organization_id)
+    try:
+        return await service.list_candidate_assignments(organization_id)
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
+
+
 @router.post("", response_model=CandidateTagOut, status_code=201)
 async def create_tag(payload: CandidateTagCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_admin(user_id, payload.organization_id)
