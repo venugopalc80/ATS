@@ -219,6 +219,50 @@ async def create_document_download(
         raise HTTPException(status_code=503, detail="Document service unavailable") from exc
 
 
+@router.post("/{document_id}/preview")
+async def preview_candidate_document(
+    document_id: UUID,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Return a short-lived inline PDF URL or extracted DOCX text for an authorised recruiter."""
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select candidate_id, storage_bucket, storage_path, original_filename, content_type
+                       from public.candidate_documents
+                       where id=%s and organization_id=%s and deleted_at is null""",
+                    [document_id, organization_id],
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise HTTPException(status_code=404, detail="Document not found")
+        if row["content_type"] == "application/pdf":
+            result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(
+                row["storage_path"], 60, options={"download": False}
+            )
+            signed_url = result.get("signedURL") or result.get("signedUrl")
+            if not signed_url:
+                raise HTTPException(status_code=503, detail="Unable to create secure preview link")
+            return {"kind": "pdf", "url": signed_url, "filename": row["original_filename"], "expires_in": 60}
+
+        if row["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            data = storage_client().storage.from_(row["storage_bucket"]).download(row["storage_path"])
+            text = extract_cv_text(data, row["content_type"])
+            if not text.strip():
+                raise HTTPException(status_code=422, detail="No readable text was found in this DOCX file")
+            return {"kind": "text", "text": text, "filename": row["original_filename"]}
+
+        raise HTTPException(status_code=415, detail="Preview is not supported for this file type")
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("Failed to preview candidate document")
+        raise HTTPException(status_code=503, detail="Unable to preview this document right now") from exc
+
+
 MAX_BULK_FILES = 20
 MAX_BULK_BYTES = 4 * 1024 * 1024  # Stay below the Vercel Functions request-body limit.
 CV_SKILL_KEYWORDS = (
