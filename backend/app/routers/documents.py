@@ -4,6 +4,7 @@ import logging
 import os
 import re
 from pathlib import Path
+from datetime import datetime
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
@@ -35,7 +36,7 @@ class DocumentOut(BaseModel):
     content_type: str
     file_size_bytes: int
     sha256: str
-    created_at: str | None = None
+    created_at: datetime | None = None
 
 
 def validate_document_bytes(data: bytes, mime: str) -> str:
