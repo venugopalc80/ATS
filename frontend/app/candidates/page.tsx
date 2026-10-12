@@ -292,11 +292,19 @@ export default function CandidatesPage() {
       return;
     }
     let cancelled = false;
-    apiFetch(API_BASE + "/api/candidate-tags/assignments?organization_id=" + encodeURIComponent(organizationId))
-      .then(async (response) => {
-        const body = await response.json().catch(() => null);
-        if (!response.ok) throw new Error(body?.detail || "Could not load candidate tags.");
-        if (!cancelled) setCandidateTagAssignments(body as CandidateTagAssignment[]);
+    Promise.all([
+      apiFetch(API_BASE + "/api/candidate-tags/assignments?organization_id=" + encodeURIComponent(organizationId)),
+      apiFetch(API_BASE + "/api/candidate-tags?organization_id=" + encodeURIComponent(organizationId)),
+    ])
+      .then(async ([assignmentResponse, tagResponse]) => {
+        const assignmentBody = await assignmentResponse.json().catch(() => null);
+        const tagBody = await tagResponse.json().catch(() => null);
+        if (!assignmentResponse.ok) throw new Error(assignmentBody?.detail || "Could not load candidate tag assignments.");
+        if (!tagResponse.ok) throw new Error(tagBody?.detail || "Could not load organisation tags.");
+        if (!cancelled) {
+          setCandidateTagAssignments(assignmentBody as CandidateTagAssignment[]);
+          setOrganisationTags(tagBody as CandidateTag[]);
+        }
       })
       .catch((error) => {
         if (!cancelled) setMessage(error instanceof Error ? error.message : "Could not load candidate tags.");
@@ -662,7 +670,7 @@ export default function CandidatesPage() {
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
-              <select className="filter" aria-label="Filter by candidate tag" value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPage(1); }}><option value="all">All tags</option>{[...new Map(candidateTagAssignments.map((assignment) => [assignment.tag_id, assignment])).values()].sort((a, b) => a.name.localeCompare(b.name)).map((assignment) => <option key={assignment.tag_id} value={assignment.tag_id}>{assignment.name}</option>)}</select>
+              <select className="filter" aria-label="Filter by candidate tag" value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPage(1); }}><option value="all">All tags</option>{organisationTags.slice().sort((a, b) => a.name.localeCompare(b.name)).map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select>
               <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
               <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
             </div>
