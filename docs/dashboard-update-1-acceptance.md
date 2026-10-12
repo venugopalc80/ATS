@@ -6,10 +6,10 @@
 
 ## 1. Dashboard navigation and actions
 
-- [ ] **NOT VERIFIED** — “Find matches” opens Match Lab for a selected vacancy. Current dashboard action links to `/jobs`; no Match Lab page was found at the expected `/match-lab`, `/matches`, or `/matching` routes during the initial inspection.
+- [ ] **IMPLEMENTED; NOT VERIFIED** — “Find matches” now links to `/match-lab`. The new Match Lab page loads organisation-scoped jobs/candidates and compares explicit required-skill overlap after a vacancy is selected; browser/build verification is still pending.
 - [ ] **NOT VERIFIED** — KPI cards open the correct filtered records. Current links: open jobs → `/jobs?status=open`; candidates → `/candidates`; interviews → `/interviews`; placements → `/placements`.
 - [ ] **NOT VERIFIED** — Pipeline stages and priority items link to the intended filtered records. Pipeline currently links to `/submissions?status=<stage>`; decision priorities link to the general submissions page.
-- [ ] **NOT VERIFIED** — Create requisition, Add candidate/import CV, Find matches, and Schedule interview actions work end to end. The requisition quick action currently links to `/jobs` while the header link uses `/jobs?create=1`.
+- [ ] **PARTIALLY IMPLEMENTED; NOT VERIFIED** — Dashboard quick actions now link to `/jobs?create=1`, `/candidates?create=1`, `/match-lab`, and `/interviews?create=1`; the interviews page now opens its create form for `?create=1`. Verify each flow end to end in browser testing.
 
 ## 2. Metrics and business logic
 
@@ -28,7 +28,7 @@
 
 - [ ] **NOT VERIFIED** — Loading, empty, API-error, and retry states behave correctly in browser testing. UI implementations are present in the current page.
 - [ ] **NOT VERIFIED** — Desktop, tablet, and mobile layouts are checked at representative viewport sizes.
-- [ ] **NOT VERIFIED** — Automated tests cover dashboard calculations, critical navigation/interaction, and access control. A file at `backend/tests/test_dashboard.py` was not found; inspect the full existing test layout before adding tests.
+- [ ] **NOT VERIFIED** — Automated tests cover dashboard calculations, Match Lab skill-overlap logic, critical navigation/interaction, and access control. A file at `backend/tests/test_dashboard.py` was not found; inspect the full existing test layout before adding tests.
 - [ ] **NOT VERIFIED** — Production smoke tests are run and the results are recorded against the criteria above.
 
 ## Initial code-review evidence
