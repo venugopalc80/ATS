@@ -121,6 +121,11 @@ export default function CandidatesPage() {
   const [importFileName, setImportFileName] = useState("");
   const [importing, setImporting] = useState(false);
   const [importMessage, setImportMessage] = useState("");
+  const [showCvImport, setShowCvImport] = useState(false);
+  const [cvFiles, setCvFiles] = useState<File[]>([]);
+  const [cvImporting, setCvImporting] = useState(false);
+  const [cvImportMessage, setCvImportMessage] = useState("");
+  const [cvImportResults, setCvImportResults] = useState<Array<{ filename: string; status: string; message?: string; name?: string; email?: string | null; skills_found?: string[]; text_extracted?: boolean }>>([]);
 
 
   useEffect(() => {
@@ -230,6 +235,44 @@ export default function CandidatesPage() {
       const byId = new Map(results.map((candidate) => [candidate.id, candidate])); setCandidates((current) => current.map((candidate) => byId.get(candidate.id) ?? candidate)); setSelectedIds([]); setMessage("Updated " + results.length + " candidate(s).");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Bulk update failed. Some updates may have succeeded; refresh to verify."); }
     finally { setSaving(false); }
+  }
+
+  async function runBulkCvImport() {
+    if (!cvFiles.length || cvImporting) return;
+    const organizationId = typeof window !== "undefined"
+      ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID
+      : ORGANIZATION_ID;
+    if (!API_BASE || !organizationId) {
+      setCvImportMessage("Select an organisation before importing CVs.");
+      return;
+    }
+    if (cvFiles.length > 20) {
+      setCvImportMessage("Choose up to 20 CVs per batch.");
+      return;
+    }
+    setCvImporting(true);
+    setCvImportMessage("");
+    setCvImportResults([]);
+    try {
+      const formData = new FormData();
+      cvFiles.forEach((file) => formData.append("files", file));
+      const response = await apiFetch(API_BASE + "/api/documents/bulk-cv?organization_id=" + encodeURIComponent(organizationId), {
+        method: "POST",
+        body: formData,
+      });
+      const payload = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(payload?.detail || "CV import failed (HTTP " + response.status + ").");
+      setCvImportResults(payload.results ?? []);
+      setCvImportMessage("Finished: " + payload.imported + " imported, " + payload.duplicates + " duplicates skipped, " + payload.failed + " failed.");
+      if (payload.imported > 0) {
+        const refreshed = await apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId));
+        if (refreshed.ok) setCandidates(await refreshed.json());
+      }
+    } catch (error) {
+      setCvImportMessage(error instanceof Error ? error.message : "Unable to import CVs.");
+    } finally {
+      setCvImporting(false);
+    }
   }
 
   async function readImportFile(file?: File) {
@@ -465,7 +508,7 @@ export default function CandidatesPage() {
               <h1>Candidates</h1>
               <p className="subtitle">Build and manage your searchable candidate pool.</p>
             </div>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn" onClick={() => { setShowImport(true); setImportMessage(""); }}>↑ Import candidates</button><button className="btn primary" onClick={openCreate}>+ Add candidate</button></div>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><button className="btn" onClick={() => { setShowImport(true); setImportMessage(""); }}>↑ Import candidates</button><button className="btn" onClick={() => { setShowCvImport(true); setCvImportMessage(""); setCvImportResults([]); }}>↑ Bulk upload CVs</button><button className="btn primary" onClick={openCreate}>+ Add candidate</button></div>
           </div>
 
           <div className="card" style={{ marginBottom: 18 }}>
@@ -521,6 +564,22 @@ export default function CandidatesPage() {
           </div>
         </section>
       </main>
+
+      {showCvImport && (
+        <div className="modal-backdrop"><div className="modal" style={{ width: "min(900px, 96vw)", maxHeight: "88vh", overflow: "auto" }}>
+          <div className="card-head"><span className="card-title">Bulk upload CVs</span><button type="button" className="icon-button" disabled={cvImporting} onClick={() => setShowCvImport(false)}>×</button></div>
+          <p className="subtitle">Upload up to 20 PDF or DOCX CVs at once. AQERITH creates a candidate profile, stores the original CV in private storage, and extracts available name, email, phone and recognised skills.</p>
+          <div className="notice" style={{ margin: "12px 0" }}>Only upload CVs you are authorised to process. Check your lawful basis, candidate privacy notice and retention policy before importing. Scanned/image-only PDFs may need OCR and will not have text extracted in this version.</div>
+          <label style={{ display: "block", margin: "12px 0" }}>Select CV files
+            <input type="file" multiple accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={cvImporting} onChange={(event) => { setCvFiles(Array.from(event.target.files ?? [])); setCvImportResults([]); setCvImportMessage(""); }} />
+          </label>
+          <p className="muted-small">{cvFiles.length} file(s) selected · PDF/DOCX only · maximum 5 MB per file · 20 files per batch</p>
+          {cvFiles.length > 0 && <div style={{ overflow: "auto", maxHeight: 180, marginBottom: 12 }}><table className="table"><thead><tr><th>Filename</th><th>Size</th><th>Type</th></tr></thead><tbody>{cvFiles.map((file, index) => <tr key={file.name + file.size + index}><td>{file.name}</td><td>{(file.size / (1024 * 1024)).toFixed(2)} MB</td><td>{file.name.toLowerCase().endsWith(".pdf") ? "PDF" : file.name.toLowerCase().endsWith(".docx") ? "DOCX" : "Unsupported"}</td></tr>)}</tbody></table></div>}
+          {cvImportMessage && <div className="notice" style={{ margin: "12px 0" }}>{cvImportMessage}</div>}
+          {cvImportResults.length > 0 && <div style={{ overflow: "auto", maxHeight: 320 }}><table className="table"><thead><tr><th>CV</th><th>Result</th><th>Candidate</th><th>Extracted details</th></tr></thead><tbody>{cvImportResults.map((result, index) => <tr key={result.filename + index}><td>{result.filename}</td><td><span className={"badge " + (result.status === "imported" ? "green" : result.status === "duplicate" ? "amber" : "red")}>{result.status}</span></td><td>{result.name || "—"}<div className="muted-small">{result.email || ""}</div></td><td>{result.skills_found?.length ? result.skills_found.join(", ") : result.text_extracted === false ? "No readable text found" : result.message || "—"}</td></tr>)}</tbody></table></div>}
+          <div className="modal-actions"><button className="btn" disabled={cvImporting} onClick={() => { setCvFiles([]); setCvImportResults([]); setCvImportMessage(""); }}>Clear</button><button className="btn primary" disabled={cvImporting || cvFiles.length === 0 || cvFiles.length > 20 || cvFiles.some((file) => !/\.pdf$|\.docx$/i.test(file.name) || file.size > 5 * 1024 * 1024 || file.size === 0)} onClick={() => void runBulkCvImport()}>{cvImporting ? "Importing CVs…" : "Import " + cvFiles.length + " CVs"}</button><button className="btn" disabled={cvImporting} onClick={() => setShowCvImport(false)}>Close</button></div>
+        </div></div>
+      )}
 
       {showImport && (
         <div className="modal-backdrop"><div className="modal" style={{ width: "min(960px, 96vw)", maxHeight: "88vh", overflow: "auto" }}>
