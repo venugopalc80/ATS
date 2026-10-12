@@ -289,11 +289,11 @@ async def bulk_upload_cvs(
 
     results = []
     for file in files:
-        filename = safe_filename(file.filename, Path(file.filename or "resume.pdf").suffix.lower() or ".pdf")
         mime = (file.content_type or "").lower()
         data = await file.read(MAX_BYTES + 1)
         try:
             extension = validate_document_bytes(data, mime)
+            filename = safe_filename(file.filename, extension)
             digest = hashlib.sha256(data).hexdigest()
             text = extract_cv_text(data, mime)
             fields = cv_candidate_fields(text, filename)
