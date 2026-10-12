@@ -53,7 +53,7 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
     <div className="card-head"><span className="card-title">CV & documents</span><span className="muted-small">Private storage · PDF/DOCX · 5 MB max</span></div>
     <p className="muted-small mb-3">Files are private and downloads use short-lived links. Upload only documents you are authorised to process.</p>
     <label className="btn inline-flex cursor-pointer">{uploading ? "Uploading..." : "↑ Upload CV"}<input className="sr-only" type="file" accept=".pdf,.docx,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document" disabled={uploading} onChange={(event) => { void upload(event.target.files?.[0]); event.currentTarget.value = ""; }} /></label>
-    {message && <p className="notice mt-3">{message}</p>}
+    {message && <div className="notice mt-3" role="status"><p>{message}</p><button className="btn mt-2" type="button" onClick={() => { setLoading(true); void load(); }}>Retry loading CVs</button></div>}
     {loading ? <p className="muted-small mt-3">Loading documents...</p> : documents.length ? <div className="mt-3 space-y-3">{documents.map((doc) => <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><div><strong>{doc.original_filename}</strong><div className="muted-small">{(doc.file_size_bytes / 1024).toFixed(0)} KB · {doc.created_at ? new Date(doc.created_at).toLocaleString() : "Uploaded"}</div></div><button className="btn" onClick={() => void download(doc)}>Secure download</button></div>)}</div> : <p className="muted-small mt-3">No CV documents uploaded yet.</p>}
   </section>;
 }
