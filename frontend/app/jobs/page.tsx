@@ -129,6 +129,17 @@ export default function JobsPage() {
   const [distributionSaving, setDistributionSaving] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const requestedStatus = params.get("status");
+    if (requestedStatus && ["draft", "open", "on_hold", "closed", "filled", "cancelled"].includes(requestedStatus)) {
+      setStatus(requestedStatus);
+    }
+    const requestedJobId = params.get("job_id");
+    if (requestedJobId) setQuery(requestedJobId);
+    if (params.get("create") === "1") setShowForm(true);
+  }, []);
+
+  useEffect(() => {
     try {
       const saved = window.localStorage.getItem("talentos_job_distribution_v1");
       if (saved) {
@@ -152,12 +163,19 @@ export default function JobsPage() {
   }, [distributionByJob, distributionStorageLoaded]);
 
   useEffect(() => {
-    if (!API_BASE || !ORGANIZATION_ID) return;
+    const organizationId = typeof window !== "undefined"
+      ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID
+      : ORGANIZATION_ID;
+    if (!API_BASE || !organizationId) {
+      setLoading(false);
+      setMessage("Select an organisation to load vacancies.");
+      return;
+    }
     let cancelled = false;
 
     async function loadJobs() {
       try {
-        const response = await apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(ORGANIZATION_ID));
+        const response = await apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(organizationId));
         if (!response.ok) throw new Error("API returned " + response.status);
         const data: Job[] = await response.json();
         if (!cancelled) setJobs(data);
@@ -173,7 +191,7 @@ export default function JobsPage() {
   }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
-    const matchesQuery = (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = (job.id ?? "") === query || (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
