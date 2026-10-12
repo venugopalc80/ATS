@@ -63,20 +63,13 @@ alter table public.candidate_tag_assignments enable row level security;
 drop policy if exists candidate_tags_member_read on public.candidate_tags;
 create policy candidate_tags_member_read on public.candidate_tags
   for select to authenticated using (public.is_org_member(organization_id));
-drop policy if exists candidate_tags_member_write on public.candidate_tags;
-create policy candidate_tags_member_write on public.candidate_tags
-  for all to authenticated
-  using (public.is_org_member(organization_id))
-  with check (public.is_org_member(organization_id));
+-- Mutations go through the authenticated backend API, which applies role checks.
+-- Do not grant direct browser-role writes that could bypass admin-only tag management.
 
 drop policy if exists candidate_tag_assignments_member_read on public.candidate_tag_assignments;
 create policy candidate_tag_assignments_member_read on public.candidate_tag_assignments
   for select to authenticated using (public.is_org_member(organization_id));
-drop policy if exists candidate_tag_assignments_member_write on public.candidate_tag_assignments;
-create policy candidate_tag_assignments_member_write on public.candidate_tag_assignments
-  for all to authenticated
-  using (public.is_org_member(organization_id))
-  with check (public.is_org_member(organization_id));
+-- Assignment mutations also go through the backend API after membership checks.
 
 comment on table public.candidate_tags is 'Reusable tags scoped to one organisation.';
 comment on table public.candidate_tag_assignments is 'Organisation-scoped candidate-to-tag assignments.';
