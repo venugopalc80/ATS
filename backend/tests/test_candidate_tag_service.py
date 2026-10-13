@@ -24,7 +24,7 @@ class CandidateTagServiceTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.services.candidate_tag_service.get_connection") as get_connection:
             get_connection.return_value.__enter__.return_value = self.connection
             get_connection.return_value.__exit__.return_value = False
-            with self.assertRaisesRegex(ValueError, "same organisation"):
+            with self.assertRaisesRegex(ValueError, "selected organisation"):
                 await self.service.assign_tag(
                     self.organization_id, self.candidate_id, self.tag_id, self.user_id
                 )
