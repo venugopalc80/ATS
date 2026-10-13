@@ -1,33 +1,32 @@
 # Staging baseline recovery — current checkpoint
 
-This is a repair branch, not a deployable release. Do not merge until a clean database replay and schema/security acceptance checks pass.
+This branch repairs the migration history and establishes a non-production staging schema. Do not merge until a clean replay and acceptance checks pass.
 
 ## Changes in this branch
-- Added `007_placements.sql` so the workflow audit trigger has its required relation.
-- Added `010_team_invitations.sql` with invitation schema, indexes, and authenticated member/admin policies.
-- Reconciled both candidate-document migration definitions to the production column/check/index catalog: document type includes `certificate`, uploader FK points to `public.profiles`, SHA-256 format check and live SHA index included. Removed direct table policies from `013_candidate_documents.sql` because the live production catalog reports RLS enabled with no `candidate_documents` policies; API access must remain server-side.
-- Added `docs/staging-baseline-recovery.md`.
+- Added the missing 002_security_performance_hardening.sql and 003_clients_dashboard_indexes.sql files based on the live production catalog.
+- Added 007_placements.sql before workflow audit triggers, and 014_team_invitations.sql with the live invitation schema, indexes, and authenticated member/admin policies.
+- Removed the duplicate 010_team_invitations.sql and the duplicate timestamped candidate-document definition; retained 013_candidate_documents.sql as the canonical checked-in definition.
+- Aligned candidate-document constraints/indexes with production: document type includes certificate, uploader FK points to public.profiles, SHA-256 format check and live SHA index included. Production and staging both have RLS enabled with no direct candidate-document policies; keep access through the server-side API with explicit tenant checks.
+- Restricted direct execution of trigger functions and role helper RPCs; retained authenticated execution of is_org_member(uuid) because tenant RLS policies call it.
+- Added 015_restrict_security_definer_execution.sql to harden privileges at the end of the chain.
+- Fixed a malformed dollar-quote in the candidate-tags trigger migration on the candidate-tags branch.
 
-## Remaining blocking gaps
-- The migration chain still does not contain the recorded production baseline/security hardening/dashboard-index migrations as replayable checked-in files. There are two candidate-document migration files (`013_candidate_documents.sql` and `20261012090000_candidate_documents.sql`); their history/order must be reconciled so the table is created once with the intended constraints.
-- Existing migrations have historical naming/version drift. In particular, `004_global_country_support.sql` drops country checks and `008_workflow_audit_actor.sql` assumes placements already exists.
-- Staging remains empty. No schema has been applied yet.
-- Candidate-tags migration is not applied and needs a real staging schema and tenant/RLS verification before acceptance.
+## Staging state
+- Project: ATS-Staging (riauyrhfnlsxmtgipuxi), region eu-west-1, Postgres 17.
+- The 15 baseline public ATS tables were created; candidate-tags migration was then applied, resulting in 17 public application tables.
+- All 17 public application tables currently have RLS enabled.
+- Candidate tags and assignments each have one authenticated SELECT policy. The assignment tenant-guard trigger exists and its SECURITY DEFINER function is not directly executable by anon/authenticated.
+- Catalog checks show audit_workflow_status_change() and capture_record_change() cannot be executed directly by anon/authenticated; current_user_org_role(uuid) and is_org_admin(uuid) are also not directly executable. is_org_member(uuid) is executable by authenticated only, as required by policies.
+- Staging contains no application rows.
+- Staging advisors still report: no direct policies on candidate documents (intentional only if server-side API access is correctly enforced), the vector extension in the public schema, and an authenticated-callable SECURITY DEFINER warning for is_org_member(uuid). These findings require review; do not label the project security-clean.
 
-## Live production findings (catalog/advisors only; no writes)
-- All 15 public application tables have RLS enabled.
-- Security advisor currently flags SECURITY DEFINER functions callable by anon/authenticated: `audit_workflow_status_change()`, `capture_record_change()`, `is_org_member(uuid)`, and `rls_auto_enable()`.
-- Security advisor flags `candidate_documents` as RLS-enabled with no recognized policy in its current analysis, despite catalog policies existing; investigate advisor/policy state before considering this resolved.
-- Auth leaked-password protection is disabled in project settings.
-- Performance advisor reports 12 unindexed foreign keys, two recruiter-notes RLS init-plan warnings, multiple permissive policies on job distribution and invitations, duplicate indexes on jobs/candidates/applications, and unused indexes. Do not delete indexes solely from low-traffic advisor results without workload review.
-
-## Required next checks
-1. Reconstruct/review the missing initial security hardening and dashboard index migration history against production catalog.
-2. Build a clean, ordered bootstrap or restore exact historical migrations, including auth/storage dependencies.
-3. Apply only to the empty staging project.
-4. Compare table/column/constraint/index/trigger/function/grant/policy/bucket metadata against the intended schema. Live catalog checks confirm placements FK delete actions (application/job/candidate RESTRICT; offer/client SET NULL; organization CASCADE), invitation inviter RESTRICT and organization CASCADE, and no direct candidate-document policies.
-5. Re-run advisors; validate anon denial, authenticated member isolation, audit triggers, invitation role restrictions, and candidate-tag composite tenant guard.
-6. Run backend/frontend tests tied to exact commits and record their results. No claim of real DB/API verification until executed.
+## Remaining validation before merge
+1. Replay the lexically ordered migration files into a fresh disposable database to confirm clean bootstrap order. Staging was applied through connector migrations in an order that was not strictly lexical, so this is not yet a clean-room replay proof.
+2. Compare columns, defaults, constraints, indexes, policies, grants, triggers, storage bucket settings and functions against production catalog.
+3. Exercise the candidate assignment trigger with valid and cross-tenant fixtures, then run authenticated API integration tests for member isolation and admin-only create/delete.
+4. Run backend/frontend CI on the final candidate-tags commit and record the exact SHA and status.
+5. Investigate whether the vector extension can be moved safely and document the intended authenticated execution of is_org_member(uuid).
+6. Re-run security/performance advisors after the remaining changes.
 
 ## Safety
-No production DDL/DML was executed. No production rows were copied. Do not merge PR #26, #27, or #29 as part of this work.
+No production DDL/DML was executed. No production rows were copied. PRs #26, #27 and #29 remain unmerged. Staging is non-production and currently has no application rows.
