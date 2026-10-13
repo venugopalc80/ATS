@@ -10,7 +10,7 @@ create table if not exists public.organization_invitations (
   accepted_at timestamptz,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint organization_invitations_expiry_check check (expires_at > created_at)
+  check (expires_at > created_at)
 );
 
 create index if not exists organization_invitations_org_created_idx
