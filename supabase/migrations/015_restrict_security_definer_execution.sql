@@ -25,3 +25,10 @@ ALTER POLICY memberships_member_read ON public.organization_members TO authentic
 ALTER POLICY organizations_member_read ON public.organizations TO authenticated;
 ALTER POLICY offers_member_all ON public.offers TO authenticated;
 ALTER POLICY placements_member_all ON public.placements TO authenticated;
+
+-- These role-query helpers are not called by RLS policies. Keep them private to
+-- the database/API layer unless a future route has an explicit, reviewed need.
+REVOKE EXECUTE ON FUNCTION public.current_user_org_role(uuid) FROM PUBLIC, anon, authenticated;
+REVOKE EXECUTE ON FUNCTION public.is_org_admin(uuid) FROM PUBLIC, anon, authenticated;
+ALTER FUNCTION public.current_user_org_role(uuid) SET search_path = pg_catalog, public;
+ALTER FUNCTION public.is_org_admin(uuid) SET search_path = pg_catalog, public;
