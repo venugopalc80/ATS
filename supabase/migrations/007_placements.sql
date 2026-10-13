@@ -18,7 +18,7 @@ create table if not exists public.placements (
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
-  constraint placements_end_date_check check (end_date is null or end_date >= start_date)
+  check (end_date is null or end_date >= start_date)
 );
 
 create index if not exists placements_org_status_idx on public.placements (organization_id, status);
