@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, API_BASE } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 type MetricSet = {
   open_jobs: number;
@@ -184,7 +184,7 @@ export default function Dashboard() {
                 <button role="menuitem" type="button" disabled={signingOut} onClick={async () => {
                   setSigningOut(true);
                   try {
-                    await supabase.auth.signOut();
+                    await getSupabaseClient().auth.signOut();
                     window.location.href = "/login";
                   } finally {
                     setSigningOut(false);
