@@ -13,7 +13,7 @@ create table if not exists public.candidate_documents (
   content_type text not null check (content_type in ('application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document')),
   file_size_bytes bigint not null check (file_size_bytes > 0 and file_size_bytes <= 5242880),
   sha256 text not null check (sha256 ~ '^[a-f0-9]{64}$'),
-  uploaded_by uuid references public.profiles(id) on delete set null,
+  uploaded_by uuid,
   created_at timestamptz not null default now(),
   deleted_at timestamptz
 );
