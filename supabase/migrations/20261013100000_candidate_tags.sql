@@ -35,8 +35,8 @@ create or replace function public.validate_candidate_tag_assignment()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
-as $$
+set search_path = pg_catalog, public
+as $
 begin
   if not exists (
     select 1 from public.candidates c
