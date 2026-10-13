@@ -36,7 +36,7 @@ returns trigger
 language plpgsql
 security definer
 set search_path = pg_catalog, public
-as $
+as $$
 begin
   if not exists (
     select 1 from public.candidates c
