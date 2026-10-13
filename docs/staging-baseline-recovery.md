@@ -5,11 +5,11 @@ This is a repair branch, not a deployable release. Do not merge until a clean da
 ## Changes in this branch
 - Added `007_placements.sql` so the workflow audit trigger has its required relation.
 - Added `010_team_invitations.sql` with invitation schema, indexes, and authenticated member/admin policies.
-- Reconciled `013_candidate_documents.sql` to production catalog details: document type set includes `certificate`, uploader FK points to `public.profiles`, SHA-256 format check and live SHA index included.
+- Reconciled both candidate-document migration definitions to the production column/check/index catalog: document type includes `certificate`, uploader FK points to `public.profiles`, SHA-256 format check and live SHA index included. Removed direct table policies from `013_candidate_documents.sql` because the live production catalog reports RLS enabled with no `candidate_documents` policies; API access must remain server-side.
 - Added `docs/staging-baseline-recovery.md`.
 
 ## Remaining blocking gaps
-- The migration chain still does not contain the recorded production baseline/security hardening/dashboard-index migrations as replayable checked-in files.
+- The migration chain still does not contain the recorded production baseline/security hardening/dashboard-index migrations as replayable checked-in files. There are two candidate-document migration files (`013_candidate_documents.sql` and `20261012090000_candidate_documents.sql`); their history/order must be reconciled so the table is created once with the intended constraints.
 - Existing migrations have historical naming/version drift. In particular, `004_global_country_support.sql` drops country checks and `008_workflow_audit_actor.sql` assumes placements already exists.
 - Staging remains empty. No schema has been applied yet.
 - Candidate-tags migration is not applied and needs a real staging schema and tenant/RLS verification before acceptance.
@@ -25,7 +25,7 @@ This is a repair branch, not a deployable release. Do not merge until a clean da
 1. Reconstruct/review the missing initial security hardening and dashboard index migration history against production catalog.
 2. Build a clean, ordered bootstrap or restore exact historical migrations, including auth/storage dependencies.
 3. Apply only to the empty staging project.
-4. Compare table/column/constraint/index/trigger/function/grant/policy/bucket metadata against the intended schema.
+4. Compare table/column/constraint/index/trigger/function/grant/policy/bucket metadata against the intended schema. Live catalog checks confirm placements FK delete actions (application/job/candidate RESTRICT; offer/client SET NULL; organization CASCADE), invitation inviter RESTRICT and organization CASCADE, and no direct candidate-document policies.
 5. Re-run advisors; validate anon denial, authenticated member isolation, audit triggers, invitation role restrictions, and candidate-tag composite tenant guard.
 6. Run backend/frontend tests tied to exact commits and record their results. No claim of real DB/API verification until executed.
 
