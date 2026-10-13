@@ -93,5 +93,25 @@ class CandidateTagRouterTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(raised.exception.status_code, 503)
 
 
+    async def test_delete_tag_requires_admin(self):
+        with patch.object(router, "assert_org_admin", side_effect=HTTPException(403)), patch.object(
+            router.service, "delete_tag", new_callable=AsyncMock
+        ) as delete_tag:
+            with self.assertRaises(HTTPException) as raised:
+                await router.delete_tag(self.tag_id, self.organization_id, self.user_id)
+        self.assertEqual(raised.exception.status_code, 403)
+        delete_tag.assert_not_awaited()
+
+    async def test_unassign_requires_org_membership(self):
+        with patch.object(router, "assert_org_member", side_effect=HTTPException(403)), patch.object(
+            router.service, "unassign_tag", new_callable=AsyncMock
+        ) as unassign_tag:
+            with self.assertRaises(HTTPException) as raised:
+                await router.unassign_tag(
+                    self.tag_id, self.candidate_id, self.organization_id, self.user_id
+                )
+        self.assertEqual(raised.exception.status_code, 403)
+        unassign_tag.assert_not_awaited()
+
 if __name__ == "__main__":
     unittest.main()
