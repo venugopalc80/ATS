@@ -10,3 +10,5 @@ CREATE INDEX IF NOT EXISTS jobs_organization_client_idx ON public.jobs (organiza
 CREATE INDEX IF NOT EXISTS jobs_organization_status_idx ON public.jobs (organization_id, status);
 CREATE INDEX IF NOT EXISTS jobs_recruiter_idx ON public.jobs (recruiter_id);
 CREATE INDEX IF NOT EXISTS organization_members_user_idx ON public.organization_members (user_id);
+CREATE INDEX IF NOT EXISTS applications_organization_status_idx ON public.applications (organization_id, status);
+CREATE INDEX IF NOT EXISTS candidates_organization_status_idx ON public.candidates (organization_id, status);
