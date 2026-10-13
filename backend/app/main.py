@@ -21,7 +21,7 @@ frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
 frontend_origins = {
     origin.strip().rstrip("/")
     for origin in (
-        frontend_url + ",https://aqerith.com,https://www.aqerith.com,https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app"
+        frontend_url + ",https://aqerith.com,https://www.aqerith.com,https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app,https://aqerith-git-fix-dashboard-update-1-acceptance-the-pixel-muses.vercel.app"
     ).split(",")
     if origin.strip()
 }
