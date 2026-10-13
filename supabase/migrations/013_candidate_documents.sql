@@ -25,16 +25,10 @@ create index if not exists candidate_documents_org_sha256_idx
   on public.candidate_documents (organization_id, sha256)
   where deleted_at is null;
 
+-- Production has RLS enabled and no direct table policies. The application API
+-- accesses metadata through its server-side database role after checking tenant
+-- membership; do not grant browser clients direct access through permissive policies.
 alter table public.candidate_documents enable row level security;
-drop policy if exists candidate_documents_member_read on public.candidate_documents;
-create policy candidate_documents_member_read on public.candidate_documents
-  for select using (public.is_org_member(organization_id));
-drop policy if exists candidate_documents_member_insert on public.candidate_documents;
-create policy candidate_documents_member_insert on public.candidate_documents
-  for insert with check (public.is_org_member(organization_id) and uploaded_by = auth.uid());
-drop policy if exists candidate_documents_member_update on public.candidate_documents;
-create policy candidate_documents_member_update on public.candidate_documents
-  for update using (public.is_org_member(organization_id)) with check (public.is_org_member(organization_id));
 
 -- Bucket is private. The API uses service credentials only after checking user and tenant membership.
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
