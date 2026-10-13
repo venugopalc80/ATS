@@ -135,6 +135,17 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn("organization_id", sql, f"Missing tenant scope in query: {sql}")
             self.assertIn(ORG, params, f"Missing requested organisation parameter: {sql}")
 
+    async def test_rejects_non_member_before_database_access(self):
+        with patch.object(
+            dashboard_router, "assert_org_member", side_effect=HTTPException(status_code=403, detail="forbidden")
+        ), patch.object(dashboard_router, "get_connection") as connection:
+            with self.assertRaises(HTTPException) as error:
+                await dashboard_router.dashboard(
+                    organization_id=ORG, date_from=None, date_to=None, user_id=USER,
+                )
+        self.assertEqual(error.exception.status_code, 403)
+        connection.assert_not_called()
+
     async def test_rejects_inverted_date_range_before_database_access(self):
         with patch.object(dashboard_router, "assert_org_member"), patch.object(
             dashboard_router, "get_connection"
