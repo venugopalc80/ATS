@@ -166,6 +166,8 @@ export default function CandidatesPage() {
     const params = new URLSearchParams(window.location.search);
     const requestedSearch = params.get("search");
     if (requestedSearch) setQuery(requestedSearch);
+    const requestedStatus = params.get("status");
+    if (requestedStatus && ["active", "inactive", "placed", "do_not_contact"].includes(requestedStatus)) setStatus(requestedStatus);
     if (params.get("create") === "1") setShowForm(true);
   }, []);
 
