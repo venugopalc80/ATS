@@ -4,7 +4,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.schemas.interviews import InterviewCreate, InterviewUpdate
+from app.schemas.interviews import InterviewCreate, InterviewOut, InterviewUpdate
 
 
 class InterviewSchedulingSchemaTests(unittest.TestCase):
@@ -39,6 +39,20 @@ class InterviewSchedulingSchemaTests(unittest.TestCase):
     def test_duration_is_bounded(self):
         with self.assertRaises(ValidationError):
             InterviewCreate(**{**self.base_payload, "duration_minutes": 600})
+
+    def test_response_accepts_completed_interview(self):
+        now = datetime.now(timezone.utc)
+        response = InterviewOut(
+            **self.base_payload,
+            id=uuid4(),
+            status="completed",
+            feedback="Structured feedback",
+            outcome="strong_hire",
+            created_by=uuid4(),
+            created_at=now,
+            updated_at=now,
+        )
+        self.assertEqual(response.status, "completed")
 
 
 if __name__ == "__main__":
