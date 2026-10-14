@@ -149,7 +149,7 @@ export default function CandidatesPage() {
     finally { setCvPreviewLoading(false); }
   }
   async function previewCandidateCv(document: CandidateCv, knownOrganizationId?: string) {
-    const organizationId = getActiveOrganizationId(knownOrganizationId || ORGANIZATION_ID);
+    const organizationId = knownOrganizationId || getActiveOrganizationId(ORGANIZATION_ID);
     setCvPreviewLoading(true); setCvPreviewMessage(""); setCvPreviewDocumentId(document.id);
     try {
       const response = await apiFetch(API_BASE + "/api/documents/" + document.id + "/preview?organization_id=" + encodeURIComponent(organizationId), { method: "POST" });
