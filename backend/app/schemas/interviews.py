@@ -50,6 +50,8 @@ class InterviewUpdate(BaseModel):
 
 class InterviewOut(InterviewCreate):
     id: UUID
+    # Responses must represent the full lifecycle, not just the create state.
+    status: InterviewStatus
     feedback: str | None
     outcome: str | None
     created_by: UUID | None
