@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
@@ -136,7 +137,7 @@ export default function CandidatesPage() {
   const [cvPreviewDocumentId, setCvPreviewDocumentId] = useState<string | null>(null);
   async function openCandidateCv(candidate: Candidate) {
     setCvPreviewCandidate(candidate); setCvPreviewDocuments([]); setCvPreview(null); setCvPreviewDocumentId(null); setCvPreviewMessage(""); setCvPreviewLoading(true);
-    const organizationId = window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     try {
       if (!API_BASE || !organizationId) throw new Error("Organisation configuration is missing.");
       const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id));
