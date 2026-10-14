@@ -1,9 +1,6 @@
 name: Dashboard Update 1 Acceptance
 
 on:
-  push:
-    branches:
-      - "fix/dashboard-update-1-acceptance"
   pull_request:
     paths:
       - "backend/**"
