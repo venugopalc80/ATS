@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
@@ -22,9 +23,7 @@ export default function MatchLabPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    const org = window.localStorage.getItem("aqerith_active_org")
-      || window.localStorage.getItem("talentos_active_org")
-      || DEFAULT_ORG;
+    const org = getActiveOrganizationId(DEFAULT_ORG);
     const requestedJobId = new URLSearchParams(window.location.search).get("job_id") ?? "";
     setSelectedJobId(requestedJobId);
     if (!API_BASE || !org) {
