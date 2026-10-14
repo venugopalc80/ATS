@@ -149,7 +149,7 @@ export default function CandidatesPage() {
     finally { setCvPreviewLoading(false); }
   }
   async function previewCandidateCv(document: CandidateCv, knownOrganizationId?: string) {
-    const organizationId = knownOrganizationId || window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(knownOrganizationId || ORGANIZATION_ID);
     setCvPreviewLoading(true); setCvPreviewMessage(""); setCvPreviewDocumentId(document.id);
     try {
       const response = await apiFetch(API_BASE + "/api/documents/" + document.id + "/preview?organization_id=" + encodeURIComponent(organizationId), { method: "POST" });
@@ -175,7 +175,7 @@ export default function CandidatesPage() {
   }, []);
 
   useEffect(() => {
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setLoading(false); return; }
 
     let cancelled = false;
@@ -447,7 +447,7 @@ export default function CandidatesPage() {
     setMessage("");
 
     const payload = {
-      ...(editing ? {} : { organization_id: ORGANIZATION_ID }),
+      ...(editing ? {} : { organization_id: getActiveOrganizationId(ORGANIZATION_ID) }),
       first_name: form.first_name,
       last_name: form.last_name || null,
       email: form.email || null,
