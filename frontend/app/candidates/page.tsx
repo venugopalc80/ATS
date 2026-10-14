@@ -152,7 +152,7 @@ export default function CandidatesPage() {
     const organizationId = knownOrganizationId || getActiveOrganizationId(ORGANIZATION_ID);
     setCvPreviewLoading(true); setCvPreviewMessage(""); setCvPreviewDocumentId(document.id);
     try {
-      const response = await apiFetch(API_BASE + "/api/documents/" + document.id + "/preview?organization_id=" + encodeURIComponent(organizationId), { method: "POST" });
+      const response = await apiFetch(API_BASE + "/api/documents/" + document.id + "/preview?organization_id=" + encodeURIComponent(organizationId), { method: "POST" }, { preserveOrganization: true });
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not preview this CV.");
       setCvPreview(await response.json());
     } catch (error) { setCvPreviewMessage(error instanceof Error ? error.message : "Could not preview this CV."); }
