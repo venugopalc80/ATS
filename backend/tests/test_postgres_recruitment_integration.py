@@ -17,6 +17,10 @@ from app.services.application_service import ApplicationService
 def integration_database_is_safe() -> bool:
     if os.getenv("ATS_INTEGRATION_TESTS") != "1":
         return False
+    # Require GitHub Actions explicitly: a developer's local ats_test database
+    # must never be modified merely because the opt-in flag was set.
+    if os.getenv("GITHUB_ACTIONS") != "true" or os.getenv("CI") != "true":
+        raise RuntimeError("Integration tests may run only in the disposable GitHub Actions service")
     url = os.getenv("DATABASE_URL", "")
     parsed = urlparse(url)
     # Fail closed: only the local disposable CI database is permitted.
