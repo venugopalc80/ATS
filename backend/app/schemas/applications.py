@@ -15,7 +15,8 @@ class ApplicationCreate(BaseModel):
     job_id: UUID
     candidate_id: UUID
     source: str | None = Field(default=None, max_length=100)
-    status: ApplicationStatus = "new"
+    # New applications must begin at the first stage; later stages use the transition API.
+    status: Literal["new"] = "new"
 
 
 class ApplicationUpdate(BaseModel):
