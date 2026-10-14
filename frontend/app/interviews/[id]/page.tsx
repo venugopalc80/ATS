@@ -6,8 +6,6 @@ import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
-const DEFAULT_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
-
 const transitions: Record<string, string[]> = {
   scheduled: ["completed", "cancelled", "rescheduled", "no_show"],
   rescheduled: ["scheduled", "cancelled", "no_show"],
