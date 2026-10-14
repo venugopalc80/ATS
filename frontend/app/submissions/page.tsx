@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { DragEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
@@ -77,7 +78,7 @@ export default function SubmissionsPage() {
 
   useEffect(() => {
     async function load() {
-      const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") || DEFAULT_ORGANIZATION_ID : DEFAULT_ORGANIZATION_ID;
+      const organizationId = getActiveOrganizationId(DEFAULT_ORGANIZATION_ID);
       if (!API_BASE || !organizationId) {
         setMessage("API configuration is missing.");
         setLoading(false);
@@ -231,7 +232,7 @@ export default function SubmissionsPage() {
                 if (!selectedJob || !selectedCandidate) { setMessage("Select both a job and candidate."); return; }
                 setSaving(true);
                 try {
-                  const organizationId = localStorage.getItem("talentos_active_org") || DEFAULT_ORGANIZATION_ID;
+                  const organizationId = getActiveOrganizationId(DEFAULT_ORGANIZATION_ID);
                   const response = await apiFetch(API_BASE + "/api/applications", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
