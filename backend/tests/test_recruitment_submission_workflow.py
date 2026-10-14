@@ -1,12 +1,12 @@
 import unittest
 from contextlib import contextmanager
 from datetime import datetime, timezone
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 from fastapi import HTTPException
 
-from app.routers import public_jobs
+from app.routers import applications, public_jobs
 from app.schemas.applications import ApplicationUpdate
 from app.services.application_service import ApplicationService
 
@@ -212,7 +212,8 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(after_refresh["id"], APPLICATION)
         self.assertTrue(any(sql.startswith("update public.applications set") for sql, _ in executed))
         self.assertTrue(any("select set_config('app.actor_user_id'" in sql for sql, _ in executed))
-        self.assertTrue(any("where organization_id = %s" in sql for sql, _ in executed) is False)  # ID lookup is followed by router membership checks.
+        # Tenant membership is enforced at the router boundary; service queries are ID-scoped.
+        self.assertTrue(any("where id=%s" in sql for sql, _ in executed))
 
     async def test_invalid_stage_transition_is_rejected_without_update(self):
         state = {"status": "new"}
@@ -247,3 +248,59 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_get_application_denies_non_member_before_returning_application(self):
+        from fastapi import HTTPException
+
+        row = {
+            "id": APPLICATION,
+            "organization_id": ORG,
+            "job_id": JOB,
+            "candidate_id": CANDIDATE,
+            "source": "careers_page",
+            "status": "new",
+            "match_score": None,
+            "match_explanation": None,
+            "human_reviewed": False,
+            "human_reviewed_by": None,
+            "human_reviewed_at": None,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+                with self.assertRaises(HTTPException) as error:
+                    await applications.get_application(APPLICATION, USER)
+
+        self.assertEqual(error.exception.status_code, 403)
+
+    async def test_update_application_does_not_mutate_before_membership_check(self):
+        from fastapi import HTTPException
+
+        row = {
+            "id": APPLICATION,
+            "organization_id": ORG,
+            "job_id": JOB,
+            "candidate_id": CANDIDATE,
+            "source": "careers_page",
+            "status": "new",
+            "match_score": None,
+            "match_explanation": None,
+            "human_reviewed": False,
+            "human_reviewed_by": None,
+            "human_reviewed_at": None,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+                with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
+                    with self.assertRaises(HTTPException) as error:
+                        await applications.update_application(
+                            APPLICATION, ApplicationUpdate(status="screening"), USER
+                        )
+
+        self.assertEqual(error.exception.status_code, 403)
+        update.assert_not_awaited()
