@@ -246,10 +246,6 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(updates, [])
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_application_denies_non_member_before_returning_application(self):
         from fastapi import HTTPException
@@ -304,3 +300,7 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
 
         self.assertEqual(error.exception.status_code, 403)
         update.assert_not_awaited()
+
+
+if __name__ == "__main__":
+    unittest.main()
