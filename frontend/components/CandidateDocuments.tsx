@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
@@ -15,7 +16,7 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
   const [message, setMessage] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
-  const org = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || DEFAULT_ORG : DEFAULT_ORG;
+  const org = getActiveOrganizationId(DEFAULT_ORG);
 
   async function load() {
     if (!API_BASE || !org) { setMessage("API or organisation configuration is missing."); setLoading(false); return; }

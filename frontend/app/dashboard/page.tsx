@@ -5,6 +5,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, API_BASE } from "@/lib/api";
 import { getSupabaseClient } from "@/lib/supabase";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 type MetricSet = {
   open_jobs: number;
@@ -95,11 +96,7 @@ export default function Dashboard() {
   const [signingOut, setSigningOut] = useState(false);
 
   const loadDashboard = useCallback(async () => {
-    const org = typeof window !== "undefined"
-      ? window.localStorage.getItem("aqerith_active_org") ||
-        window.localStorage.getItem("talentos_active_org") ||
-        process.env.NEXT_PUBLIC_ORGANIZATION_ID || ""
-      : process.env.NEXT_PUBLIC_ORGANIZATION_ID || "";
+    const org = getActiveOrganizationId();
     if (!API_BASE || !org) {
       setError("Dashboard configuration is missing. Select an organisation and try again.");
       setData(null);

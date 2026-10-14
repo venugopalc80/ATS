@@ -29,6 +29,7 @@ export default function OnboardingPage() {
       }
 
       const result = await response.json();
+      window.localStorage.setItem("aqerith_active_org", result.organization.id);
       window.localStorage.setItem("talentos_active_org", result.organization.id);
       router.replace("/");
     } catch (error) {
