@@ -191,5 +191,37 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
         self.assertEqual(error.exception.status_code, 404)
 
 
+    async def test_duplicate_active_application_is_rejected_without_creating_a_second_record(self):
+        from fastapi import HTTPException
+
+        email = f"{uuid4().hex}@example.test"
+        payload = PublicApplicationIn(
+            first_name="Duplicate",
+            last_name="Candidate",
+            email=email,
+            consent=True,
+            source="careers_page",
+        )
+        first = await apply_for_public_job(self.job_id, payload, self.organization_id)
+        with self.assertRaises(HTTPException) as error:
+            await apply_for_public_job(self.job_id, payload, self.organization_id)
+
+        self.assertEqual(error.exception.status_code, 409)
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select count(*) as total from public.applications where organization_id=%s and job_id=%s",
+                    [self.organization_id, self.job_id],
+                )
+                self.assertEqual(cursor.fetchone()["total"], 1)
+                cursor.execute(
+                    "select count(*) as total from public.candidates where organization_id=%s and lower(email)=lower(%s)",
+                    [self.organization_id, email],
+                )
+                self.assertEqual(cursor.fetchone()["total"], 1)
+        self.assertTrue(first["success"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
