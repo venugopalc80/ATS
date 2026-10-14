@@ -100,8 +100,8 @@ async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn, organ
                     cursor.execute(
                         """update public.candidates
                            set consent_recorded_at=%s, consent_purpose=%s, updated_at=now()
-                           where id=%s""",
-                        [now, f"Application for job {job_id}", candidate_id],
+                           where id=%s and organization_id=%s""",
+                        [now, f"Application for job {job_id}", candidate_id, organization_id],
                     )
                 else:
                     cursor.execute(
