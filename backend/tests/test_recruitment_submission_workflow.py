@@ -142,6 +142,9 @@ class PublicCareersSubmissionTests(unittest.IsolatedAsyncioTestCase):
                 await public_jobs.apply_for_public_job(JOB, payload, ORG)
         self.assertEqual(error.exception.status_code, 409)
         self.assertFalse(any("insert into public.applications" in sql for sql, _ in cursor.queries))
+        candidate_update = next((sql, params) for sql, params in cursor.queries if "update public.candidates" in sql)
+        self.assertIn("where id=%s and organization_id=%s", candidate_update[0])
+        self.assertEqual(candidate_update[1][-1], ORG)
 
 
 class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
