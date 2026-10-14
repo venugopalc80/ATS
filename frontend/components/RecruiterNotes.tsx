@@ -1,6 +1,7 @@
 "use client";
 import {useEffect,useState} from "react";
 import {apiFetch} from "@/lib/api";
+import {getActiveOrganizationId} from "@/lib/organization";
 const A=process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/,"")??"";
 const O=process.env.NEXT_PUBLIC_ORGANIZATION_ID??"";
 export default function RecruiterNotes({candidateId}:{candidateId:string}){
