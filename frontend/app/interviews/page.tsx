@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
@@ -19,7 +20,7 @@ export default function InterviewsPage(){
  const [items,setItems]=useState<Interview[]>([]),[apps,setApps]=useState<Application[]>([]),[candidates,setCandidates]=useState<Candidate[]>([]),[jobs,setJobs]=useState<Job[]>([]);
  const [loading,setLoading]=useState(true),[message,setMessage]=useState(""),[showCreate,setShowCreate]=useState(false),[saving,setSaving]=useState(false);
  const [applicationId,setApplicationId]=useState(""),[scheduledAt,setScheduledAt]=useState(""),[type,setType]=useState("video"),[duration,setDuration]=useState("60"),[location,setLocation]=useState("");
- const org=typeof window!=="undefined"?(window.localStorage.getItem("aqerith_active_org")||window.localStorage.getItem("talentos_active_org")||DEFAULT_ORG):DEFAULT_ORG;
+ const org=getActiveOrganizationId(DEFAULT_ORG);
  const appMap=useMemo(()=>new Map(apps.map(a=>[a.id,a])),[apps]), candidateMap=useMemo(()=>new Map(candidates.map(c=>[c.id,c])),[candidates]), jobMap=useMemo(()=>new Map(jobs.map(j=>[j.id,j])),[jobs]);
  const load=async()=>{try{const q=encodeURIComponent(org);const [ir,ar,cr,jr]=await Promise.all([apiFetch(API_BASE+`/api/interviews?organization_id=${q}`),apiFetch(API_BASE+`/api/applications?organization_id=${q}`),apiFetch(API_BASE+`/api/candidates?organization_id=${q}`),apiFetch(API_BASE+`/api/jobs?organization_id=${q}`)]);if(!ir.ok||!ar.ok||!cr.ok||!jr.ok)throw new Error("Unable to load interview workspace.");setItems(await ir.json());setApps(await ar.json());setCandidates(await cr.json());setJobs(await jr.json())}catch(e){setMessage(e instanceof Error?e.message:"Unable to load interviews.")}finally{setLoading(false)}};
  useEffect(()=>{void load();if(new URLSearchParams(window.location.search).get("create")==="1")setShowCreate(true)},[]);
