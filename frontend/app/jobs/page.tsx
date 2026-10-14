@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
@@ -163,9 +164,7 @@ export default function JobsPage() {
   }, [distributionByJob, distributionStorageLoaded]);
 
   useEffect(() => {
-    const organizationId = typeof window !== "undefined"
-      ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID
-      : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) {
       setLoading(false);
       setMessage("Select an organisation to load vacancies.");
@@ -202,7 +201,7 @@ export default function JobsPage() {
     setDistributionDraft(distributionByJob[key] ?? initialDistribution());
     setMessage("");
 
-    const organizationId = job.organization_id || (typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") : null) || ORGANIZATION_ID;
+    const organizationId = job.organization_id || getActiveOrganizationId(ORGANIZATION_ID);
     const isPersistedJob = Boolean(job.id && !job.id.startsWith("demo-") && !job.id.startsWith("local-"));
     if (!API_BASE || !organizationId || !isPersistedJob) return;
 
@@ -227,7 +226,7 @@ export default function JobsPage() {
   async function saveDistribution() {
     if (!distributionJob) return;
     const key = distributionJob.id ?? distributionJob.title;
-    const organizationId = distributionJob.organization_id || (typeof window !== "undefined" ? window.localStorage.getItem("talentos_active_org") : null) || ORGANIZATION_ID;
+    const organizationId = distributionJob.organization_id || getActiveOrganizationId(ORGANIZATION_ID);
     const isPersistedJob = Boolean(distributionJob.id && !distributionJob.id.startsWith("demo-") && !distributionJob.id.startsWith("local-"));
 
     if (API_BASE && organizationId && isPersistedJob) {
@@ -280,11 +279,12 @@ export default function JobsPage() {
 
   async function saveJob(event: FormEvent) {
     event.preventDefault();
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     setSaving(true);
     setMessage("");
 
     const payload = {
-      ...(editingJob ? {} : { organization_id: ORGANIZATION_ID }),
+      ...(editingJob ? {} : { organization_id: organizationId }),
       title: form.title,
       location: form.location || null,
       employment_type: form.employment_type || null,
@@ -298,7 +298,7 @@ export default function JobsPage() {
     };
 
     try {
-      if (!API_BASE || !ORGANIZATION_ID) {
+      if (!API_BASE || !organizationId) {
         if (editingJob) {
           setJobs((current) => current.map((job) => job.id === editingJob.id ? { ...job, ...payload, client: form.client } : job));
           setMessage("Demo requisition updated.");
@@ -339,6 +339,7 @@ export default function JobsPage() {
 
   async function deleteJob(job: Job) {
     if (!job.id) return;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
 
     setDeletingId(job.id);
