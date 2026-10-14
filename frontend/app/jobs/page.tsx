@@ -345,7 +345,7 @@ export default function JobsPage() {
     setDeletingId(job.id);
     setMessage("");
     try {
-      if (!API_BASE || !ORGANIZATION_ID) {
+      if (!API_BASE || !organizationId) {
         setJobs((current) => current.filter((item) => item.id !== job.id));
       } else {
         const response = await apiFetch(`${API_BASE}/api/jobs/${job.id}`, { method: "DELETE" });
