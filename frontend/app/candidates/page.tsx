@@ -219,7 +219,7 @@ export default function CandidatesPage() {
   const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
   const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
   useEffect(() => {
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId || !visibleCandidateIds) return;
     let cancelled = false;
     async function loadLatestNotes() {
@@ -274,9 +274,7 @@ export default function CandidatesPage() {
 
   async function runBulkCvImport() {
     if (!cvFiles.length || cvImporting) return;
-    const organizationId = typeof window !== "undefined"
-      ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID
-      : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) {
       setCvImportMessage("Select an organisation before importing CVs.");
       return;
@@ -410,7 +408,7 @@ export default function CandidatesPage() {
   async function runImport() {
     const eligible = importRows.filter((row) => row.errors.length === 0 && !row.duplicate);
     if (!eligible.length) { setImportMessage("There are no valid, non-duplicate rows to import."); return; }
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setImportMessage("API or active organisation is not configured."); return; }
     setImporting(true); let created = 0; const failures: string[] = [];
     try {
