@@ -102,14 +102,9 @@ async def dashboard(
                             "reasons": reasons,
                         })
 
-                cursor.execute(
-                    """select count(*)::int as total from public.interviews
-                       where organization_id=%s and status in ('scheduled','rescheduled')
-                         and scheduled_at >= date_trunc('day', now())
-                         and scheduled_at < date_trunc('day', now()) + interval '1 day'""",
-                    [organization_id],
-                )
-                interviews_today_count = cursor.fetchone()["total"]
+                # Reuse the interviews-today metric fetched above rather than
+                # issuing the same organisation-scoped count query twice.
+                interviews_today_count = interviews_today
 
                 cursor.execute(
                     """select i.id,i.application_id,i.scheduled_at,i.status

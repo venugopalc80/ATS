@@ -4,7 +4,7 @@ import Link from "next/link";
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, API_BASE } from "@/lib/api";
-import { supabase } from "@/lib/supabase";
+import { getSupabaseClient } from "@/lib/supabase";
 
 type MetricSet = {
   open_jobs: number;
@@ -184,7 +184,7 @@ export default function Dashboard() {
                 <button role="menuitem" type="button" disabled={signingOut} onClick={async () => {
                   setSigningOut(true);
                   try {
-                    await supabase.auth.signOut();
+                    await getSupabaseClient().auth.signOut();
                     window.location.href = "/login";
                   } finally {
                     setSigningOut(false);
@@ -200,7 +200,7 @@ export default function Dashboard() {
             <div>
               <div className="eyebrow">Recruitment operations</div>
               <h1>Dashboard</h1>
-              <p className="subtitle">Your hiring activity, priorities and vacancy health in one place.</p>
+              <p className="subtitle">Current recruitment snapshot. Pipeline and recent activity follow the selected date range.</p>
             </div>
             <div className="actions dashboard-actions">
               <Link href="/jobs" className="btn">View vacancies</Link>
