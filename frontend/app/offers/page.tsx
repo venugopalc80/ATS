@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE=process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/,"")??"";
 const DEFAULT_ORG=process.env.NEXT_PUBLIC_ORGANIZATION_ID??"";
@@ -15,7 +16,7 @@ const name=(c?:Candidate)=>c?[c.first_name,c.last_name].filter(Boolean).join(" "
 export default function OffersPage(){
  const [items,setItems]=useState<Offer[]>([]),[apps,setApps]=useState<Application[]>([]),[candidates,setCandidates]=useState<Candidate[]>([]),[jobs,setJobs]=useState<Job[]>([]),[loading,setLoading]=useState(true),[message,setMessage]=useState(""),[showCreate,setShowCreate]=useState(false),[saving,setSaving]=useState(false);
  const [applicationId,setApplicationId]=useState(""),[title,setTitle]=useState(""),[employmentType,setEmploymentType]=useState("Permanent"),[startDate,setStartDate]=useState(""),[salary,setSalary]=useState(""),[currency,setCurrency]=useState("GBP");
- const org=typeof window!=="undefined"?(window.localStorage.getItem("talentos_active_org")||DEFAULT_ORG):DEFAULT_ORG;
+ const org=getActiveOrganizationId(DEFAULT_ORG);
  const appMap=useMemo(()=>new Map(apps.map(a=>[a.id,a])),[apps]),candidateMap=useMemo(()=>new Map(candidates.map(c=>[c.id,c])),[candidates]),jobMap=useMemo(()=>new Map(jobs.map(j=>[j.id,j])),[jobs]);
  const load=async()=>{try{const q=encodeURIComponent(org);const [or,ar,cr,jr]=await Promise.all([apiFetch(API_BASE+`/api/offers?organization_id=${q}`),apiFetch(API_BASE+`/api/applications?organization_id=${q}`),apiFetch(API_BASE+`/api/candidates?organization_id=${q}`),apiFetch(API_BASE+`/api/jobs?organization_id=${q}`)]);if(!or.ok||!ar.ok||!cr.ok||!jr.ok)throw new Error("Unable to load offer workspace.");setItems(await or.json());setApps(await ar.json());setCandidates(await cr.json());setJobs(await jr.json())}catch(e){setMessage(e instanceof Error?e.message:"Unable to load offers.")}finally{setLoading(false)}};
  useEffect(()=>{void load()},[]);

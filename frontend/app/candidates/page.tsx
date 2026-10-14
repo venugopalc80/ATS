@@ -3,6 +3,7 @@
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 import { FormEvent, useEffect, useMemo, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
@@ -136,7 +137,7 @@ export default function CandidatesPage() {
   const [cvPreviewDocumentId, setCvPreviewDocumentId] = useState<string | null>(null);
   async function openCandidateCv(candidate: Candidate) {
     setCvPreviewCandidate(candidate); setCvPreviewDocuments([]); setCvPreview(null); setCvPreviewDocumentId(null); setCvPreviewMessage(""); setCvPreviewLoading(true);
-    const organizationId = window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     try {
       if (!API_BASE || !organizationId) throw new Error("Organisation configuration is missing.");
       const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id));
@@ -148,10 +149,10 @@ export default function CandidatesPage() {
     finally { setCvPreviewLoading(false); }
   }
   async function previewCandidateCv(document: CandidateCv, knownOrganizationId?: string) {
-    const organizationId = knownOrganizationId || window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID;
+    const organizationId = knownOrganizationId || getActiveOrganizationId(ORGANIZATION_ID);
     setCvPreviewLoading(true); setCvPreviewMessage(""); setCvPreviewDocumentId(document.id);
     try {
-      const response = await apiFetch(API_BASE + "/api/documents/" + document.id + "/preview?organization_id=" + encodeURIComponent(organizationId), { method: "POST" });
+      const response = await apiFetch(API_BASE + "/api/documents/" + document.id + "/preview?organization_id=" + encodeURIComponent(organizationId), { method: "POST" }, { preserveOrganization: true });
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not preview this CV.");
       setCvPreview(await response.json());
     } catch (error) { setCvPreviewMessage(error instanceof Error ? error.message : "Could not preview this CV."); }
@@ -174,7 +175,7 @@ export default function CandidatesPage() {
   }, []);
 
   useEffect(() => {
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setLoading(false); return; }
 
     let cancelled = false;
@@ -218,7 +219,7 @@ export default function CandidatesPage() {
   const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
   const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
   useEffect(() => {
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId || !visibleCandidateIds) return;
     let cancelled = false;
     async function loadLatestNotes() {
@@ -273,9 +274,7 @@ export default function CandidatesPage() {
 
   async function runBulkCvImport() {
     if (!cvFiles.length || cvImporting) return;
-    const organizationId = typeof window !== "undefined"
-      ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID
-      : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) {
       setCvImportMessage("Select an organisation before importing CVs.");
       return;
@@ -409,7 +408,7 @@ export default function CandidatesPage() {
   async function runImport() {
     const eligible = importRows.filter((row) => row.errors.length === 0 && !row.duplicate);
     if (!eligible.length) { setImportMessage("There are no valid, non-duplicate rows to import."); return; }
-    const organizationId = typeof window !== "undefined" ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID : ORGANIZATION_ID;
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setImportMessage("API or active organisation is not configured."); return; }
     setImporting(true); let created = 0; const failures: string[] = [];
     try {
@@ -446,7 +445,7 @@ export default function CandidatesPage() {
     setMessage("");
 
     const payload = {
-      ...(editing ? {} : { organization_id: ORGANIZATION_ID }),
+      ...(editing ? {} : { organization_id: getActiveOrganizationId(ORGANIZATION_ID) }),
       first_name: form.first_name,
       last_name: form.last_name || null,
       email: form.email || null,
