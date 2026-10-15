@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 ApplicationStatus = Literal[
     "new", "screening", "submitted", "interview", "offer", "hired", "rejected", "withdrawn"
@@ -15,7 +15,8 @@ class ApplicationCreate(BaseModel):
     job_id: UUID
     candidate_id: UUID
     source: str | None = Field(default=None, max_length=100)
-    status: ApplicationStatus = "new"
+    # New applications must begin at the first stage; later stages use the transition API.
+    status: Literal["new"] = "new"
 
 
 class ApplicationUpdate(BaseModel):
@@ -24,8 +25,8 @@ class ApplicationUpdate(BaseModel):
     match_score: Decimal | None = Field(default=None, ge=0, le=100)
     match_explanation: str | None = None
     human_reviewed: bool | None = None
-    human_reviewed_by: UUID | None = None
-    human_reviewed_at: datetime | None = None
+
+    model_config = ConfigDict(extra="forbid")
 
 
 class ApplicationOut(BaseModel):
