@@ -42,5 +42,80 @@ REVOKE INSERT, UPDATE, DELETE, TRUNCATE, REFERENCES, TRIGGER
   ON TABLE public.rate_cards FROM authenticated;
 GRANT SELECT ON TABLE public.rate_cards TO authenticated;
 
+-- Audit only commercial fields; do not duplicate free-text notes into audit logs.
+CREATE OR REPLACE FUNCTION public.audit_rate_card_change()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  actor_text text;
+  actor_id uuid;
+  old_terms jsonb := '{}'::jsonb;
+  new_terms jsonb := '{}'::jsonb;
+  org_id uuid;
+  card_id uuid;
+  action_name text;
+BEGIN
+  actor_text := current_setting('app.actor_user_id', true);
+  IF actor_text IS NOT NULL AND actor_text <> '' THEN
+    actor_id := actor_text::uuid;
+  ELSE
+    actor_id := NULL;
+  END IF;
+
+  IF TG_OP = 'DELETE' THEN
+    org_id := OLD.organization_id;
+    card_id := OLD.id;
+    action_name := 'rate_card.deleted';
+    old_terms := jsonb_build_object(
+      'client_id', OLD.client_id, 'job_id', OLD.job_id, 'name', OLD.name,
+      'employment_type', OLD.employment_type, 'rate_basis', OLD.rate_basis,
+      'currency', OLD.currency, 'rate_amount', OLD.rate_amount,
+      'fee_percentage', OLD.fee_percentage, 'effective_from', OLD.effective_from,
+      'effective_to', OLD.effective_to, 'status', OLD.status, 'version', OLD.version
+    );
+  ELSE
+    org_id := NEW.organization_id;
+    card_id := NEW.id;
+    action_name := CASE WHEN TG_OP = 'INSERT' THEN 'rate_card.created' ELSE 'rate_card.updated' END;
+    new_terms := jsonb_build_object(
+      'client_id', NEW.client_id, 'job_id', NEW.job_id, 'name', NEW.name,
+      'employment_type', NEW.employment_type, 'rate_basis', NEW.rate_basis,
+      'currency', NEW.currency, 'rate_amount', NEW.rate_amount,
+      'fee_percentage', NEW.fee_percentage, 'effective_from', NEW.effective_from,
+      'effective_to', NEW.effective_to, 'status', NEW.status, 'version', NEW.version
+    );
+    IF TG_OP = 'UPDATE' THEN
+      old_terms := jsonb_build_object(
+        'client_id', OLD.client_id, 'job_id', OLD.job_id, 'name', OLD.name,
+        'employment_type', OLD.employment_type, 'rate_basis', OLD.rate_basis,
+        'currency', OLD.currency, 'rate_amount', OLD.rate_amount,
+        'fee_percentage', OLD.fee_percentage, 'effective_from', OLD.effective_from,
+        'effective_to', OLD.effective_to, 'status', OLD.status, 'version', OLD.version
+      );
+      IF old_terms = new_terms THEN RETURN NEW; END IF;
+    END IF;
+  END IF;
+
+  INSERT INTO public.audit_events
+    (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+  VALUES
+    (org_id, actor_id, action_name, 'rate_card', card_id,
+     jsonb_build_object('old_terms', old_terms, 'new_terms', new_terms));
+
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS rate_cards_audit ON public.rate_cards;
+CREATE TRIGGER rate_cards_audit
+AFTER INSERT OR UPDATE OR DELETE ON public.rate_cards
+FOR EACH ROW EXECUTE FUNCTION public.audit_rate_card_change();
+
+REVOKE ALL ON FUNCTION public.audit_rate_card_change() FROM PUBLIC;
+
 COMMENT ON TABLE public.rate_cards IS
   'Versioned organisation-scoped commercial rate terms. Writes must go through the authenticated backend API.';
