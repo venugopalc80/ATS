@@ -8,7 +8,7 @@ class OfferCreate(BaseModel):
     organization_id: UUID
     application_id: UUID
     title: str = Field(min_length=2,max_length=200)
-    status: OfferStatus = "draft"
+    status: Literal["draft"] = "draft"
     employment_type: str | None = Field(default=None,max_length=50)
     start_date: date | None = None
     salary_amount: Decimal | None = Field(default=None,ge=0)
