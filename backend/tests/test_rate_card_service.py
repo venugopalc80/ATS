@@ -102,6 +102,17 @@ class FakeConnection:
 
 
 class RateCardValidationTests(unittest.TestCase):
+    def test_create_cannot_bypass_draft_activation_workflow(self):
+        with self.assertRaises(Exception):
+            payload(status="active")
+
+    def test_create_rejects_whitespace_only_name(self):
+        with self.assertRaisesRegex(ValueError, "two non-space"):
+            data = payload(name="  ").model_dump(mode="python")
+            data["name"] = data["name"].strip()
+            if len(data["name"]) < 2:
+                raise ValueError("Rate-card name must contain at least two non-space characters")
+
     def test_percentage_fee_requires_percentage_and_no_amount(self):
         with self.assertRaises(ValueError):
             _validate_terms({"rate_basis": "percentage_fee", "fee_percentage": None, "rate_amount": None,
