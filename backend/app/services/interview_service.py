@@ -83,7 +83,7 @@ class InterviewService:
         with get_connection() as c:
             with c.cursor() as cur:
                 cur.execute(
-                    "select organization_id, status from public.interviews where id=%s",
+                    "select organization_id, status from public.interviews where id=%s for update",
                     [interview_id],
                 )
                 existing = cur.fetchone()
