@@ -5,6 +5,22 @@ from fastapi import HTTPException
 from app.db import get_connection
 from app.schemas.placements import PlacementCreate, PlacementUpdate
 
+def _validate_fee_terms(data: dict) -> None:
+    amount = data.get("fee_amount")
+    percentage = data.get("fee_percentage")
+    fee_type = data.get("fee_type")
+    if amount is not None and percentage is not None:
+        raise ValueError("Use either a fixed fee amount or a percentage fee, not both")
+    if amount is not None and (fee_type != "fixed" or not data.get("fee_currency")):
+        raise ValueError("A fixed fee amount requires fixed fee type and a currency")
+    if percentage is not None and (fee_type != "percentage" or percentage <= 0 or percentage > 100):
+        raise ValueError("A percentage fee must be greater than 0 and no more than 100")
+    if fee_type == "fixed" and percentage is not None:
+        raise ValueError("Fixed fees cannot include a percentage")
+    if fee_type == "percentage" and amount is not None:
+        raise ValueError("Percentage fees cannot include a fixed amount")
+
+
 ALLOWED_PLACEMENT_TRANSITIONS = {
     "pending": {"active", "cancelled"},
     "active": {"completed", "cancelled"},
@@ -28,6 +44,7 @@ def list_placements(organization_id: UUID, status: str | None = None):
 
 def create_placement(payload: PlacementCreate, user_id: UUID):
     d = payload.model_dump()
+    _validate_fee_terms(d)
     d["created_by"] = user_id
     with get_connection() as c:
         with c.cursor() as cur:
@@ -100,7 +117,7 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
 
     with get_connection() as c:
         with c.cursor() as cur:
-            cur.execute("select status, start_date, end_date, application_id, job_id from public.placements where id=%s and organization_id=%s for update", [placement_id, organization_id])
+            cur.execute("select status, start_date, end_date, application_id, job_id, fee_amount, fee_currency, fee_type, fee_percentage, client_id from public.placements where id=%s and organization_id=%s for update", [placement_id, organization_id])
             existing = cur.fetchone()
             if not existing:
                 raise HTTPException(404, "Placement not found")
@@ -134,6 +151,11 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
                 job = cur.fetchone()
                 if job is None or (job.get("client_id") is not None and job["client_id"] != d["client_id"]):
                     raise HTTPException(422, "Placement client must match the job's client")
+
+            if {"fee_amount", "fee_currency", "fee_type", "fee_percentage"}.intersection(d):
+                merged_fee_terms = dict(existing)
+                merged_fee_terms.update(d)
+                _validate_fee_terms(merged_fee_terms)
 
             start_date = d.get("start_date", existing["start_date"])
             end_date = d.get("end_date", existing["end_date"])
