@@ -12,7 +12,7 @@ class PlacementCreate(BaseModel):
     job_id: UUID
     candidate_id: UUID
     client_id: UUID | None = None
-    status: PlacementStatus = "pending"
+    status: Literal["pending"] = "pending"
     start_date: date
     end_date: date | None = None
     fee_amount: Decimal | None = Field(default=None,ge=0)
