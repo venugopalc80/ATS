@@ -113,9 +113,20 @@ export default function RateCardsPage() {
 
   async function changeStatus(card: RateCard, status: RateCard["status"]) {
     setMessage("");
+    let effectiveTo: string | undefined;
+    if (status === "expired" && card.status === "active") {
+      const suggested = card.effective_to || new Date().toISOString().slice(0, 10);
+      const entered = window.prompt("Effective through date (YYYY-MM-DD)", suggested);
+      if (!entered) return;
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(entered) || entered < card.effective_from) {
+        setMessage("Enter a valid end date on or after the effective start date.");
+        return;
+      }
+      effectiveTo = entered;
+    }
     try {
       const response = await apiFetch(API_BASE + "/api/rate-cards/" + card.id + "?organization_id=" + encodeURIComponent(org), {
-        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }),
+        method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status, ...(effectiveTo ? { effective_to: effectiveTo } : {}) }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.detail || "Unable to update rate-card status.");
@@ -130,7 +141,9 @@ export default function RateCardsPage() {
       employment_type: card.employment_type, rate_basis: card.rate_basis, currency: card.currency,
       rate_amount: card.rate_amount == null ? "" : String(card.rate_amount),
       fee_percentage: card.fee_percentage == null ? "" : String(card.fee_percentage),
-      effective_from: card.effective_to || new Date().toISOString().slice(0, 10),
+      effective_from: card.effective_to
+        ? new Date(new Date(card.effective_to + "T00:00:00").getTime() + 86400000).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10),
       effective_to: "", notes: card.notes || "",
     });
     setShowForm(true);
