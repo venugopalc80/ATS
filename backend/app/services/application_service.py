@@ -44,24 +44,30 @@ class ApplicationService:
                       exists(
                         select 1 from public.candidates
                         where id = %s and organization_id = %s
-                      ) as candidate_ok,
-                      exists(
-                        select 1 from public.applications
-                        where organization_id = %s and job_id = %s and candidate_id = %s
-                      ) as duplicate_application
+                      ) as candidate_ok
                     """,
-                    [
-                        payload.job_id, payload.organization_id,
-                        payload.candidate_id, payload.organization_id,
-                        payload.organization_id, payload.job_id, payload.candidate_id,
-                    ],
+                    [payload.job_id, payload.organization_id, payload.candidate_id, payload.organization_id],
                 )
                 links = cursor.fetchone()
                 if links["job_status"] != "open":
                     raise ValueError("Applications can only be added to open jobs")
                 if not links["candidate_ok"]:
                     raise ValueError("Job and candidate must belong to the same organization")
-                if links.get("duplicate_application", False):
+
+                # Serialise concurrent requests for the same tenant/job/candidate tuple.
+                # The transaction-scoped lock is released automatically on commit/rollback.
+                lock_key = f"{payload.organization_id}:{payload.job_id}:{payload.candidate_id}"
+                cursor.execute("select pg_advisory_xact_lock(hashtextextended(%s, 0))", [lock_key])
+                cursor.execute(
+                    """
+                    select exists(
+                      select 1 from public.applications
+                      where organization_id = %s and job_id = %s and candidate_id = %s
+                    ) as duplicate_application
+                    """,
+                    [payload.organization_id, payload.job_id, payload.candidate_id],
+                )
+                if cursor.fetchone()["duplicate_application"]:
                     raise ValueError("This candidate already has an application for that job")
                 cursor.execute(
                     "insert into public.applications (organization_id, job_id, candidate_id, source, status) values (%s, %s, %s, %s, 'new') returning " + APPLICATION_COLUMNS,
