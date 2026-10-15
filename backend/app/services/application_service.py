@@ -90,6 +90,13 @@ class ApplicationService:
         data = payload.model_dump(mode="python", exclude_unset=True)
         if not data:
             return await self.get_application(application_id)
+        if "human_reviewed" in data:
+            if data["human_reviewed"]:
+                data["human_reviewed_by"] = actor_user_id
+                data["human_reviewed_at"] = "now()"
+            else:
+                data["human_reviewed_by"] = None
+                data["human_reviewed_at"] = None
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("select status from public.applications where id=%s for update", [application_id])
@@ -99,8 +106,15 @@ class ApplicationService:
                 if "status" in data and data["status"] != existing["status"] and data["status"] not in ALLOWED_APPLICATION_TRANSITIONS.get(existing["status"], set()):
                     raise ValueError("Invalid application stage transition")
                 cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
-                assignments = ", ".join(f"{column} = %s" for column in data)
-                cursor.execute("update public.applications set " + assignments + ", updated_at=now() where id=%s returning " + APPLICATION_COLUMNS, list(data.values()) + [application_id])
+                assignments = []
+                values = []
+                for column, value in data.items():
+                    if column == "human_reviewed_at" and value == "now()":
+                        assignments.append("human_reviewed_at = now()")
+                    else:
+                        assignments.append(f"{column} = %s")
+                        values.append(value)
+                cursor.execute("update public.applications set " + ", ".join(assignments) + ", updated_at=now() where id=%s returning " + APPLICATION_COLUMNS, values + [application_id])
                 return cursor.fetchone()
 
     async def delete_application(self, application_id: UUID) -> bool:
