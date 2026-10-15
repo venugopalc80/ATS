@@ -142,7 +142,7 @@ export default function RateCardsPage() {
       rate_amount: card.rate_amount == null ? "" : String(card.rate_amount),
       fee_percentage: card.fee_percentage == null ? "" : String(card.fee_percentage),
       effective_from: card.effective_to
-        ? new Date(new Date(card.effective_to + "T00:00:00").getTime() + 86400000).toISOString().slice(0, 10)
+        ? new Date(Date.parse(card.effective_to + "T00:00:00Z") + 86400000).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10),
       effective_to: "", notes: card.notes || "",
     });
