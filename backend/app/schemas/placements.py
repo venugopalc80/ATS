@@ -18,7 +18,7 @@ class PlacementCreate(BaseModel):
     fee_amount: Decimal | None = Field(default=None,ge=0)
     fee_currency: str | None = Field(default=None,min_length=3,max_length=3)
     fee_type: FeeType | None = None
-    fee_percentage: Decimal | None = Field(default=None,ge=0,le=100)
+    fee_percentage: Decimal | None = Field(default=None,gt=0,le=100)
     notes: str | None = None
 class PlacementUpdate(BaseModel):
     status: PlacementStatus | None = None
