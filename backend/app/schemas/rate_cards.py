@@ -22,7 +22,7 @@ class RateCardCreate(BaseModel):
     fee_percentage: Decimal | None = Field(default=None, gt=0, le=100)
     effective_from: date
     effective_to: date | None = None
-    status: RateCardStatus = "draft"
+    status: Literal["draft"] = "draft"
     notes: str | None = None
 
 
