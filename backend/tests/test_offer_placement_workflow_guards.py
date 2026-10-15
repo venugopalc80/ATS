@@ -10,8 +10,8 @@ from fastapi import HTTPException
 from app import auth
 from app.routers import offers, placements
 
-from app.schemas.offers import OfferCreate, OfferOut
-from app.schemas.placements import PlacementCreate, PlacementOut
+from app.schemas.offers import OfferCreate, OfferOut, OfferUpdate
+from app.schemas.placements import PlacementCreate, PlacementOut, PlacementUpdate
 from app.services.offer_service import create_offer
 from app.services.placement_service import _validate_fee_terms, create_placement
 
@@ -158,6 +158,22 @@ class CommercialWorkflowAuthorizationTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 403)
         guard.assert_called_once_with(USER, ORG)
         create.assert_not_called()
+
+    def test_viewer_cannot_update_offer(self):
+        with patch.object(offers, "assert_org_recruiter", side_effect=HTTPException(403, "Recruiter access required")) as guard, patch.object(offers, "update_offer") as update:
+            with self.assertRaises(HTTPException) as error:
+                offers.patch_offer(APPLICATION, OfferUpdate(status="withdrawn"), ORG, USER)
+        self.assertEqual(error.exception.status_code, 403)
+        guard.assert_called_once_with(USER, ORG)
+        update.assert_not_called()
+
+    def test_viewer_cannot_update_placement(self):
+        with patch.object(placements, "assert_org_recruiter", side_effect=HTTPException(403, "Recruiter access required")) as guard, patch.object(placements, "update_placement") as update:
+            with self.assertRaises(HTTPException) as error:
+                placements.patch_placement(APPLICATION, PlacementUpdate(status="cancelled"), ORG, USER)
+        self.assertEqual(error.exception.status_code, 403)
+        guard.assert_called_once_with(USER, ORG)
+        update.assert_not_called()
 
     def test_viewer_cannot_create_placement(self):
         payload = PlacementCreate(
