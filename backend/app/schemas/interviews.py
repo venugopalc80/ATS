@@ -31,6 +31,8 @@ class InterviewOut(InterviewCreate):
     id: UUID
     feedback: str | None
     outcome: str | None
+    feedback_author_id: UUID | None = None
+    feedback_at: datetime | None = None
     created_by: UUID | None
     created_at: datetime
     updated_at: datetime
