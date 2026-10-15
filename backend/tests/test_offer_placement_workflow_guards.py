@@ -115,6 +115,7 @@ class OfferPlacementWorkflowGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "interview or offer stage"):
                 create_offer(payload, USER)
         self.assertFalse(any(sql.startswith("insert into public.offers") for sql, _ in cursor.queries))
+        self.assertTrue(any("from public.applications" in sql and "for update" in sql for sql, _ in cursor.queries))
 
     def test_placement_candidate_and_job_must_match_hired_application(self):
         cursor = FakeCursor(application={"candidate_id": CANDIDATE, "job_id": JOB, "status": "hired"})
