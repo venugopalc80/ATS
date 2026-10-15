@@ -60,11 +60,22 @@ class ApplicationCreateWorkflowTests(unittest.IsolatedAsyncioTestCase):
                 await ApplicationService().create_application(self.payload)
         self.assertEqual(cursor.execute.call_count, 1)
 
+    async def test_duplicate_candidate_job_application_is_rejected_before_insert(self):
+        connection, cursor = self.make_database([{
+            "job_status": "open",
+            "candidate_ok": True,
+            "duplicate_application": True,
+        }])
+        with patch("app.services.application_service.get_connection", return_value=connection):
+            with self.assertRaisesRegex(ValueError, "already has an application"):
+                await ApplicationService().create_application(self.payload)
+        self.assertEqual(cursor.execute.call_count, 1)
+
     async def test_open_job_creates_application_at_new_stage(self):
         application_id = uuid4()
         created = {"id": application_id, "status": "new"}
         connection, cursor = self.make_database([
-            {"job_status": "open", "candidate_ok": True},
+            {"job_status": "open", "candidate_ok": True, "duplicate_application": False},
             created,
         ])
         with patch("app.services.application_service.get_connection", return_value=connection):
