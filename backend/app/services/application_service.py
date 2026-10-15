@@ -87,7 +87,7 @@ class ApplicationService:
             return await self.get_application(application_id)
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("select status from public.applications where id=%s", [application_id])
+                cursor.execute("select status from public.applications where id=%s for update", [application_id])
                 existing = cursor.fetchone()
                 if existing is None:
                     return None
