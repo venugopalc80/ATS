@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.rate_cards import RateCardCreate, RateCardOut, RateCardUpdate
 from app.services.rate_card_service import RateCardService
@@ -33,7 +33,7 @@ async def list_rate_cards(
 
 @router.post("", response_model=RateCardOut, status_code=201)
 async def create_rate_card(payload: RateCardCreate, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    assert_org_admin(user_id, payload.organization_id)
     try:
         return RateCardOut.model_validate(await service.create_rate_card(payload, user_id))
     except ValueError as exc:
@@ -65,7 +65,7 @@ async def update_rate_card(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_admin(user_id, organization_id)
     try:
         row = await service.update_rate_card(organization_id, rate_card_id, payload, user_id)
     except ValueError as exc:
