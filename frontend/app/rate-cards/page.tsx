@@ -244,7 +244,7 @@ export default function RateCardsPage() {
               <div className="flex flex-wrap gap-2">
                 {card.status === "draft" && <button className="btn" onClick={() => void changeStatus(card, "active")}>Activate</button>}
                 {card.status === "active" && <button className="btn" onClick={() => void changeStatus(card, "expired")}>Mark expired</button>}
-                {card.status !== "archived" && <button className="btn" onClick={() => void changeStatus(card, "archived")}>Archive</button>}
+                {(card.status === "draft" || card.status === "expired") && <button className="btn" onClick={() => void changeStatus(card, "archived")}>Archive</button>}
                 <button className="btn" onClick={() => startNewVersion(card)}>New version</button>
               </div>
             </div>
