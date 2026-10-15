@@ -7,6 +7,17 @@ COLUMNS = """id, organization_id, client_id, job_id, name, employment_type,
 rate_basis, currency, rate_amount, fee_percentage, effective_from, effective_to,
 status, version, notes, created_by, created_at, updated_at"""
 
+COMMERCIAL_FIELDS = {
+    "job_id", "name", "employment_type", "rate_basis", "currency", "rate_amount",
+    "fee_percentage", "effective_from", "effective_to", "notes",
+}
+ALLOWED_STATUS_TRANSITIONS = {
+    "draft": {"active", "archived"},
+    "active": {"expired", "archived"},
+    "expired": {"archived"},
+    "archived": set(),
+}
+
 
 def _validate_terms(data: dict, existing: dict | None = None) -> None:
     merged = dict(existing or {})
@@ -46,6 +57,7 @@ class RateCardService:
 
     async def create_rate_card(self, payload: RateCardCreate, actor_user_id: UUID):
         data = payload.model_dump(mode="python")
+        data["name"] = payload.name.strip()
         _validate_terms(data)
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -67,31 +79,25 @@ class RateCardService:
                         raise ValueError("Rate card client must match the job's client")
 
                 # Serialise version allocation for the same client/job/name.
-                lock_key = f"{payload.organization_id}:{payload.client_id}:{payload.job_id or 'none'}:{payload.name.strip().casefold()}"
+                lock_key = f"{payload.organization_id}:{payload.client_id}:{payload.job_id or 'none'}:{data['name'].casefold()}"
                 cursor.execute("select pg_advisory_xact_lock(hashtextextended(%s, 0))", [lock_key])
                 cursor.execute(
                     """select coalesce(max(version), 0) as max_version
                        from public.rate_cards
                        where organization_id=%s and client_id=%s
                          and job_id is not distinct from %s and lower(name)=lower(%s)""",
-                    [payload.organization_id, payload.client_id, payload.job_id, payload.name.strip()],
+                    [payload.organization_id, payload.client_id, payload.job_id, data["name"]],
                 )
-                version = cursor.fetchone()["max_version"] + 1
-                data["name"] = payload.name.strip()
-                data["version"] = version
+                data["version"] = cursor.fetchone()["max_version"] + 1
                 data["created_by"] = actor_user_id
+                cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
                 columns = list(data)
                 cursor.execute(
                     f"insert into public.rate_cards ({','.join(columns)}) "
                     f"values ({','.join(['%s'] * len(columns))}) returning {COLUMNS}",
                     [data[column] for column in columns],
                 )
-                row = cursor.fetchone()
-                cursor.execute(
-                    "select set_config('app.actor_user_id', %s, true)",
-                    [str(actor_user_id)],
-                )
-                return row
+                return cursor.fetchone()
 
     async def get_rate_card(self, organization_id: UUID, rate_card_id: UUID):
         with get_connection() as connection:
@@ -118,32 +124,51 @@ class RateCardService:
                     return None
                 if not data:
                     return existing
-                _validate_terms(data, dict(existing))
+
+                current_status = existing["status"]
+                next_status = data.get("status", current_status)
+                if next_status != current_status and next_status not in ALLOWED_STATUS_TRANSITIONS[current_status]:
+                    raise ValueError("Invalid rate-card status transition")
+
+                changed_commercial_fields = COMMERCIAL_FIELDS.intersection(data)
+                if current_status != "draft" and changed_commercial_fields:
+                    raise ValueError("Commercial terms on a non-draft rate card are immutable; create a new version instead")
+
+                merged = dict(existing)
+                merged.update(data)
+                _validate_terms(merged)
                 if "name" in data and data["name"] is not None:
                     data["name"] = data["name"].strip()
-                client_id = data.get("client_id", existing["client_id"])
-                job_id = data.get("job_id", existing["job_id"])
-                if client_id != existing["client_id"]:
-                    cursor.execute(
-                        "select 1 from public.clients where id=%s and organization_id=%s",
-                        [client_id, organization_id],
-                    )
-                    if cursor.fetchone() is None:
-                        raise ValueError("Client must belong to the same organisation")
-                if job_id is not None and job_id != existing["job_id"]:
+
+                if "job_id" in data and data["job_id"] is not None:
                     cursor.execute(
                         "select client_id from public.jobs where id=%s and organization_id=%s",
-                        [job_id, organization_id],
+                        [data["job_id"], organization_id],
                     )
                     job = cursor.fetchone()
                     if job is None:
                         raise ValueError("Job must belong to the same organisation")
-                    if job.get("client_id") is not None and job["client_id"] != client_id:
+                    if job.get("client_id") is not None and job["client_id"] != existing["client_id"]:
                         raise ValueError("Rate card client must match the job's client")
-                cursor.execute(
-                    "select set_config('app.actor_user_id', %s, true)",
-                    [str(actor_user_id)],
-                )
+
+                if next_status == "active" and current_status != "active":
+                    effective_from = merged["effective_from"]
+                    effective_to = merged["effective_to"]
+                    cursor.execute(
+                        """select id from public.rate_cards
+                           where organization_id=%s and client_id=%s
+                             and job_id is not distinct from %s and lower(name)=lower(%s)
+                             and status='active' and id<>%s
+                             and (effective_to is null or effective_to >= %s)
+                             and (%s is null or effective_from <= %s)
+                           limit 1""",
+                        [organization_id, existing["client_id"], merged["job_id"], merged["name"],
+                         rate_card_id, effective_from, effective_to, effective_to],
+                    )
+                    if cursor.fetchone() is not None:
+                        raise ValueError("An active rate-card version already overlaps this effective period")
+
+                cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
                 assignments = ",".join(f"{key}=%s" for key in data)
                 cursor.execute(
                     f"update public.rate_cards set {assignments},updated_at=now() "
