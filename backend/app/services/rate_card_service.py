@@ -13,7 +13,7 @@ COMMERCIAL_FIELDS = {
 }
 ALLOWED_STATUS_TRANSITIONS = {
     "draft": {"active", "archived"},
-    "active": {"expired", "archived"},
+    "active": {"expired"},
     "expired": {"archived"},
     "archived": set(),
 }
