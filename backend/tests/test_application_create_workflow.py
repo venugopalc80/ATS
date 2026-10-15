@@ -88,6 +88,18 @@ class ApplicationCreateWorkflowTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("values (%s, %s, %s, %s, 'new')", insert_sql)
         self.assertEqual(insert_params, [self.organization_id, self.job_id, self.candidate_id, "recruiter"])
 
+    async def test_duplicate_insert_race_returns_duplicate_error(self):
+        connection, cursor = self.make_database([
+            {"job_status": "open", "candidate_ok": True},
+            {"duplicate_application": False},
+            None,
+        ])
+        with patch("app.services.application_service.get_connection", return_value=connection):
+            with self.assertRaisesRegex(ValueError, "already has an application"):
+                await ApplicationService().create_application(self.payload)
+        insert_sql = cursor.execute.call_args_list[-1].args[0].lower()
+        self.assertIn("on conflict (job_id, candidate_id) do nothing", insert_sql)
+
 
 if __name__ == "__main__":
     unittest.main()
