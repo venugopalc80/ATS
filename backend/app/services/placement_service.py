@@ -32,12 +32,45 @@ def create_placement(payload: PlacementCreate, user_id: UUID):
     with get_connection() as c:
         with c.cursor() as cur:
             cur.execute(
-                """select 1 from public.applications where id=%(application_id)s and organization_id=%(organization_id)s
-                """,
+                """select candidate_id, job_id, status from public.applications
+                   where id=%(application_id)s and organization_id=%(organization_id)s""",
                 {"application_id": payload.application_id, "organization_id": payload.organization_id},
             )
-            if cur.fetchone() is None:
+            application = cur.fetchone()
+            if application is None:
                 raise ValueError("Application must belong to the same organization")
+            if application["status"] != "hired":
+                raise ValueError("A placement can only be created for a hired application")
+            if application["candidate_id"] != payload.candidate_id or application["job_id"] != payload.job_id:
+                raise ValueError("Placement candidate and job must match the application")
+
+            cur.execute(
+                "select client_id from public.jobs where id=%s and organization_id=%s",
+                [payload.job_id, payload.organization_id],
+            )
+            job = cur.fetchone()
+            if job is None:
+                raise ValueError("Job must belong to the same organization")
+            if payload.client_id is not None:
+                cur.execute(
+                    "select id from public.clients where id=%s and organization_id=%s",
+                    [payload.client_id, payload.organization_id],
+                )
+                if cur.fetchone() is None:
+                    raise ValueError("Client must belong to the same organization")
+                if job.get("client_id") is not None and job["client_id"] != payload.client_id:
+                    raise ValueError("Placement client must match the job's client")
+            elif job.get("client_id") is not None:
+                d["client_id"] = job["client_id"]
+
+            if payload.offer_id is not None:
+                cur.execute(
+                    "select application_id, status from public.offers where id=%s and organization_id=%s",
+                    [payload.offer_id, payload.organization_id],
+                )
+                offer = cur.fetchone()
+                if offer is None or offer["application_id"] != payload.application_id or offer["status"] != "accepted":
+                    raise ValueError("Placement offer must be accepted and belong to the same application")
             cur.execute(
                 """insert into public.placements
                 (organization_id,application_id,offer_id,job_id,candidate_id,client_id,status,start_date,end_date,fee_amount,fee_currency,fee_type,fee_percentage,notes,created_by)
@@ -67,7 +100,7 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
 
     with get_connection() as c:
         with c.cursor() as cur:
-            cur.execute("select status, start_date, end_date from public.placements where id=%s and organization_id=%s", [placement_id, organization_id])
+            cur.execute("select status, start_date, end_date, application_id, job_id from public.placements where id=%s and organization_id=%s for update", [placement_id, organization_id])
             existing = cur.fetchone()
             if not existing:
                 raise HTTPException(404, "Placement not found")
