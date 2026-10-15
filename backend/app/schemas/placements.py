@@ -32,6 +32,7 @@ class PlacementUpdate(BaseModel):
     fee_percentage: Decimal | None = Field(default=None,ge=0,le=100)
     notes: str | None = None
 class PlacementOut(PlacementCreate):
+    status: PlacementStatus
     id: UUID
     created_by: UUID | None
     created_at: datetime
