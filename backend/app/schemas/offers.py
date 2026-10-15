@@ -29,6 +29,7 @@ class OfferUpdate(BaseModel):
     expires_at: datetime | None = None
     notes: str | None = None
 class OfferOut(OfferCreate):
+    status: OfferStatus
     id: UUID
     sent_at: datetime | None
     responded_at: datetime | None
