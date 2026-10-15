@@ -5,6 +5,8 @@ from decimal import Decimal
 from unittest.mock import patch
 from uuid import UUID
 
+from pydantic import ValidationError
+
 from app.schemas.rate_cards import RateCardCreate, RateCardUpdate
 from app.services.rate_card_service import RateCardService, _validate_terms
 
@@ -103,15 +105,8 @@ class FakeConnection:
 
 class RateCardValidationTests(unittest.TestCase):
     def test_create_cannot_bypass_draft_activation_workflow(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(ValidationError):
             payload(status="active")
-
-    def test_create_rejects_whitespace_only_name(self):
-        with self.assertRaisesRegex(ValueError, "two non-space"):
-            data = payload(name="  ").model_dump(mode="python")
-            data["name"] = data["name"].strip()
-            if len(data["name"]) < 2:
-                raise ValueError("Rate-card name must contain at least two non-space characters")
 
     def test_percentage_fee_requires_percentage_and_no_amount(self):
         with self.assertRaises(ValueError):
@@ -132,6 +127,10 @@ class RateCardValidationTests(unittest.TestCase):
 
 
 class RateCardServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_create_rejects_whitespace_only_name_before_database_access(self):
+        with self.assertRaisesRegex(ValueError, "two non-space"):
+            await RateCardService().create_rate_card(payload(name="  "), ACTOR)
+
     async def test_create_allocates_next_version_and_attributes_actor(self):
         cursor = FakeCursor(version=3)
 
