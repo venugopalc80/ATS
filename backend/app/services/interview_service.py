@@ -90,8 +90,17 @@ class InterviewService:
                 if existing is None:
                     return None
 
+                current_status = existing["status"]
+
+                # Scheduling changes are lifecycle changes too; don't let API callers
+                # move a completed/cancelled/no-show interview by patching only its date.
+                if "scheduled_at" in d and d["scheduled_at"] is not None:
+                    if current_status not in {"scheduled", "rescheduled"}:
+                        raise ValueError("Only scheduled interviews can be rescheduled")
+                    if "status" not in d:
+                        d["status"] = "rescheduled"
+
                 if "status" in d:
-                    current_status = existing["status"]
                     next_status = d["status"]
                     if (
                         next_status != current_status
