@@ -131,7 +131,15 @@ class RateCardService:
                     raise ValueError("Invalid rate-card status transition")
 
                 changed_commercial_fields = COMMERCIAL_FIELDS.intersection(data)
-                if current_status != "draft" and changed_commercial_fields:
+                closing_active_version = (
+                    current_status == "active"
+                    and next_status == "expired"
+                    and "effective_to" in data
+                    and changed_commercial_fields.issubset({"effective_to"})
+                )
+                if current_status == "active" and next_status == "expired" and "effective_to" not in data:
+                    raise ValueError("Provide the effective end date when expiring an active rate card")
+                if current_status != "draft" and changed_commercial_fields and not closing_active_version:
                     raise ValueError("Commercial terms on a non-draft rate card are immutable; create a new version instead")
 
                 merged = dict(existing)
