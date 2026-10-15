@@ -9,7 +9,7 @@ from pydantic import ValidationError
 from app.schemas.offers import OfferCreate, OfferOut
 from app.schemas.placements import PlacementCreate, PlacementOut
 from app.services.offer_service import create_offer
-from app.services.placement_service import create_placement
+from app.services.placement_service import _validate_fee_terms, create_placement
 
 
 ORG = UUID("11111111-1111-4111-8111-111111111111")
@@ -78,6 +78,14 @@ class OfferPlacementWorkflowGuardTests(unittest.TestCase):
                     title="Software Engineer",
                     status=status,
                 )
+
+    def test_percentage_placement_fee_cannot_be_stored_as_fixed_amount(self):
+        with self.assertRaisesRegex(ValueError, "either a fixed fee amount"):
+            _validate_fee_terms({"fee_amount": 100, "fee_percentage": 15, "fee_type": "percentage", "fee_currency": "GBP"})
+
+    def test_fixed_placement_fee_requires_currency(self):
+        with self.assertRaisesRegex(ValueError, "requires fixed fee type and a currency"):
+            _validate_fee_terms({"fee_amount": 100, "fee_percentage": None, "fee_type": "fixed", "fee_currency": None})
 
     def test_placement_creation_cannot_set_active_or_completed_status(self):
         for status in ("active", "completed"):
