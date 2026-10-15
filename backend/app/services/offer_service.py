@@ -32,7 +32,7 @@ def create_offer(payload: OfferCreate, user_id: UUID):
     d["created_by"] = user_id
     with get_connection() as c:
         with c.cursor() as cur:
-            cur.execute("select status from public.applications where id=%s and organization_id=%s", [payload.application_id, payload.organization_id])
+            cur.execute("select status from public.applications where id=%s and organization_id=%s for update", [payload.application_id, payload.organization_id])
             application = cur.fetchone()
             if application is None:
                 raise ValueError("Application must belong to the same organization")
