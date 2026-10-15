@@ -70,10 +70,15 @@ class ApplicationService:
                 if cursor.fetchone()["duplicate_application"]:
                     raise ValueError("This candidate already has an application for that job")
                 cursor.execute(
-                    "insert into public.applications (organization_id, job_id, candidate_id, source, status) values (%s, %s, %s, %s, 'new') returning " + APPLICATION_COLUMNS,
+                    "insert into public.applications (organization_id, job_id, candidate_id, source, status) values (%s, %s, %s, %s, 'new') on conflict (job_id, candidate_id) do nothing returning " + APPLICATION_COLUMNS,
                     [payload.organization_id, payload.job_id, payload.candidate_id, payload.source],
                 )
-                return cursor.fetchone()
+                created = cursor.fetchone()
+                if created is None:
+                    # Another creation path may have won the unique-key race without
+                    # using the advisory lock. Convert it into a stable duplicate response.
+                    raise ValueError("This candidate already has an application for that job")
+                return created
 
     async def get_application(self, application_id: UUID) -> dict[str, Any] | None:
         with get_connection() as connection:
