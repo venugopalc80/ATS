@@ -5,6 +5,8 @@ from fastapi import HTTPException
 from app.db import get_connection
 from app.schemas.offers import OfferCreate, OfferUpdate
 
+COMMERCIAL_OFFER_FIELDS = {"title", "employment_type", "start_date", "salary_amount", "salary_currency", "bonus_amount", "benefits", "expires_at"}
+
 ALLOWED_OFFER_TRANSITIONS = {
     "draft": {"sent", "withdrawn"},
     "sent": {"accepted", "rejected", "withdrawn", "expired"},
@@ -70,8 +72,11 @@ def update_offer(organization_id: UUID, offer_id: UUID, payload: OfferUpdate, ac
             if not existing:
                 raise HTTPException(404, "Offer not found")
 
+            current_status = existing["status"]
+            if current_status != "draft" and COMMERCIAL_OFFER_FIELDS.intersection(d):
+                raise HTTPException(409, "Offer terms cannot be edited after the offer is sent; create a new offer instead")
+
             if "status" in d:
-                current_status = existing["status"]
                 next_status = d["status"]
                 if next_status != current_status and next_status not in ALLOWED_OFFER_TRANSITIONS.get(current_status, set()):
                     raise HTTPException(409, "Invalid offer status transition")
