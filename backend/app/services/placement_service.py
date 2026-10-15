@@ -5,6 +5,22 @@ from fastapi import HTTPException
 from app.db import get_connection
 from app.schemas.placements import PlacementCreate, PlacementUpdate
 
+def _validate_fee_terms(data: dict) -> None:
+    amount = data.get("fee_amount")
+    percentage = data.get("fee_percentage")
+    fee_type = data.get("fee_type")
+    if amount is not None and percentage is not None:
+        raise ValueError("Use either a fixed fee amount or a percentage fee, not both")
+    if amount is not None and (fee_type != "fixed" or not data.get("fee_currency")):
+        raise ValueError("A fixed fee amount requires fixed fee type and a currency")
+    if percentage is not None and (fee_type != "percentage" or percentage <= 0 or percentage > 100):
+        raise ValueError("A percentage fee must be greater than 0 and no more than 100")
+    if fee_type == "fixed" and percentage is not None:
+        raise ValueError("Fixed fees cannot include a percentage")
+    if fee_type == "percentage" and amount is not None:
+        raise ValueError("Percentage fees cannot include a fixed amount")
+
+
 ALLOWED_PLACEMENT_TRANSITIONS = {
     "pending": {"active", "cancelled"},
     "active": {"completed", "cancelled"},
@@ -28,16 +44,50 @@ def list_placements(organization_id: UUID, status: str | None = None):
 
 def create_placement(payload: PlacementCreate, user_id: UUID):
     d = payload.model_dump()
+    _validate_fee_terms(d)
     d["created_by"] = user_id
     with get_connection() as c:
         with c.cursor() as cur:
             cur.execute(
-                """select 1 from public.applications where id=%(application_id)s and organization_id=%(organization_id)s
-                """,
+                """select candidate_id, job_id, status from public.applications
+                   where id=%(application_id)s and organization_id=%(organization_id)s""",
                 {"application_id": payload.application_id, "organization_id": payload.organization_id},
             )
-            if cur.fetchone() is None:
+            application = cur.fetchone()
+            if application is None:
                 raise ValueError("Application must belong to the same organization")
+            if application["status"] != "hired":
+                raise ValueError("A placement can only be created for a hired application")
+            if application["candidate_id"] != payload.candidate_id or application["job_id"] != payload.job_id:
+                raise ValueError("Placement candidate and job must match the application")
+
+            cur.execute(
+                "select client_id from public.jobs where id=%s and organization_id=%s",
+                [payload.job_id, payload.organization_id],
+            )
+            job = cur.fetchone()
+            if job is None:
+                raise ValueError("Job must belong to the same organization")
+            if payload.client_id is not None:
+                cur.execute(
+                    "select id from public.clients where id=%s and organization_id=%s",
+                    [payload.client_id, payload.organization_id],
+                )
+                if cur.fetchone() is None:
+                    raise ValueError("Client must belong to the same organization")
+                if job.get("client_id") is not None and job["client_id"] != payload.client_id:
+                    raise ValueError("Placement client must match the job's client")
+            elif job.get("client_id") is not None:
+                d["client_id"] = job["client_id"]
+
+            if payload.offer_id is not None:
+                cur.execute(
+                    "select application_id, status from public.offers where id=%s and organization_id=%s",
+                    [payload.offer_id, payload.organization_id],
+                )
+                offer = cur.fetchone()
+                if offer is None or offer["application_id"] != payload.application_id or offer["status"] != "accepted":
+                    raise ValueError("Placement offer must be accepted and belong to the same application")
             cur.execute(
                 """insert into public.placements
                 (organization_id,application_id,offer_id,job_id,candidate_id,client_id,status,start_date,end_date,fee_amount,fee_currency,fee_type,fee_percentage,notes,created_by)
@@ -67,7 +117,7 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
 
     with get_connection() as c:
         with c.cursor() as cur:
-            cur.execute("select status, start_date, end_date from public.placements where id=%s and organization_id=%s", [placement_id, organization_id])
+            cur.execute("select status, start_date, end_date, application_id, job_id, fee_amount, fee_currency, fee_type, fee_percentage, client_id from public.placements where id=%s and organization_id=%s for update", [placement_id, organization_id])
             existing = cur.fetchone()
             if not existing:
                 raise HTTPException(404, "Placement not found")
@@ -77,6 +127,35 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
                 next_status = d["status"]
                 if next_status != current_status and next_status not in ALLOWED_PLACEMENT_TRANSITIONS.get(current_status, set()):
                     raise HTTPException(409, "Invalid placement status transition")
+
+            if "offer_id" in d and d["offer_id"] is not None:
+                cur.execute(
+                    "select application_id, status from public.offers where id=%s and organization_id=%s",
+                    [d["offer_id"], organization_id],
+                )
+                offer = cur.fetchone()
+                if offer is None or offer["application_id"] != existing["application_id"] or offer["status"] != "accepted":
+                    raise HTTPException(422, "Linked offer must be accepted and belong to this placement's application")
+
+            if "client_id" in d and d["client_id"] is not None:
+                cur.execute(
+                    "select id from public.clients where id=%s and organization_id=%s",
+                    [d["client_id"], organization_id],
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(422, "Client must belong to the same organization")
+                cur.execute(
+                    "select client_id from public.jobs where id=%s and organization_id=%s",
+                    [existing["job_id"], organization_id],
+                )
+                job = cur.fetchone()
+                if job is None or (job.get("client_id") is not None and job["client_id"] != d["client_id"]):
+                    raise HTTPException(422, "Placement client must match the job's client")
+
+            if {"fee_amount", "fee_currency", "fee_type", "fee_percentage"}.intersection(d):
+                merged_fee_terms = dict(existing)
+                merged_fee_terms.update(d)
+                _validate_fee_terms(merged_fee_terms)
 
             start_date = d.get("start_date", existing["start_date"])
             end_date = d.get("end_date", existing["end_date"])

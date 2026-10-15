@@ -64,3 +64,9 @@ def assert_org_admin(user_id: UUID, organization_id: UUID) -> None:
     role = get_org_role(user_id, organization_id)
     if role not in {"owner", "admin"}:
         raise HTTPException(status_code=403, detail="Admin access required")
+
+
+def assert_org_recruiter(user_id: UUID, organization_id: UUID) -> None:
+    role = get_org_role(user_id, organization_id)
+    if role not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Recruiter access required")
