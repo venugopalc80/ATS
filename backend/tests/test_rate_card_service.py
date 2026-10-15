@@ -159,6 +159,26 @@ class RateCardServiceTests(unittest.IsolatedAsyncioTestCase):
                 await RateCardService().create_rate_card(payload(), ACTOR)
         self.assertFalse(any(sql.startswith("insert into public.rate_cards") for sql, _ in cursor.queries))
 
+    async def test_active_rate_card_must_be_expired_before_archiving(self):
+        existing = {
+            "id": CARD, "organization_id": ORG, "client_id": CLIENT, "job_id": None,
+            "name": "Permanent placement", "employment_type": "permanent",
+            "rate_basis": "percentage_fee", "currency": "GBP", "rate_amount": None,
+            "fee_percentage": Decimal("15"), "effective_from": date(2026, 10, 1),
+            "effective_to": None, "status": "active", "version": 1, "notes": None,
+            "created_by": ACTOR, "created_at": NOW, "updated_at": NOW,
+        }
+        cursor = FakeCursor(existing=existing)
+
+        @contextmanager
+        def fake_connection():
+            yield FakeConnection(cursor)
+
+        with patch("app.services.rate_card_service.get_connection", fake_connection):
+            with self.assertRaisesRegex(ValueError, "Invalid rate-card status transition"):
+                await RateCardService().update_rate_card(ORG, CARD, RateCardUpdate(status="archived"), ACTOR)
+        self.assertFalse(any(sql.startswith("update public.rate_cards set") for sql, _ in cursor.queries))
+
     async def test_active_commercial_terms_are_immutable(self):
         existing = {
             "id": CARD, "organization_id": ORG, "client_id": CLIENT, "job_id": None,
