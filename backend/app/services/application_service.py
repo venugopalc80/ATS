@@ -44,15 +44,25 @@ class ApplicationService:
                       exists(
                         select 1 from public.candidates
                         where id = %s and organization_id = %s
-                      ) as candidate_ok
+                      ) as candidate_ok,
+                      exists(
+                        select 1 from public.applications
+                        where organization_id = %s and job_id = %s and candidate_id = %s
+                      ) as duplicate_application
                     """,
-                    [payload.job_id, payload.organization_id, payload.candidate_id, payload.organization_id],
+                    [
+                        payload.job_id, payload.organization_id,
+                        payload.candidate_id, payload.organization_id,
+                        payload.organization_id, payload.job_id, payload.candidate_id,
+                    ],
                 )
                 links = cursor.fetchone()
                 if links["job_status"] != "open":
                     raise ValueError("Applications can only be added to open jobs")
                 if not links["candidate_ok"]:
                     raise ValueError("Job and candidate must belong to the same organization")
+                if links.get("duplicate_application", False):
+                    raise ValueError("This candidate already has an application for that job")
                 cursor.execute(
                     "insert into public.applications (organization_id, job_id, candidate_id, source, status) values (%s, %s, %s, %s, 'new') returning " + APPLICATION_COLUMNS,
                     [payload.organization_id, payload.job_id, payload.candidate_id, payload.source],
