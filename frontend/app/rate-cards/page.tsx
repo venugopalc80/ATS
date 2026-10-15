@@ -118,7 +118,8 @@ export default function RateCardsPage() {
       const suggested = card.effective_to || new Date().toISOString().slice(0, 10);
       const entered = window.prompt("Effective through date (YYYY-MM-DD)", suggested);
       if (!entered) return;
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(entered) || entered < card.effective_from) {
+      const parsedDate = new Date(entered + "T00:00:00Z");
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(entered) || Number.isNaN(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== entered || entered < card.effective_from) {
         setMessage("Enter a valid end date on or after the effective start date.");
         return;
       }
