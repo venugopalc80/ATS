@@ -6,8 +6,8 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from app.schemas.offers import OfferCreate
-from app.schemas.placements import PlacementCreate
+from app.schemas.offers import OfferCreate, OfferOut
+from app.schemas.placements import PlacementCreate, PlacementOut
 from app.services.offer_service import create_offer
 from app.services.placement_service import create_placement
 
@@ -63,6 +63,12 @@ class FakeConnection:
 
 
 class OfferPlacementWorkflowGuardTests(unittest.TestCase):
+    def test_output_schemas_allow_lifecycle_statuses(self):
+        offer = OfferOut.model_validate({"id": UUID("66666666-6666-4666-8666-666666666666"), "organization_id": ORG, "application_id": APPLICATION, "title": "Engineer", "status": "accepted", "sent_at": None, "responded_at": None, "created_by": USER, "created_at": "2026-10-15T00:00:00Z", "updated_at": "2026-10-15T00:00:00Z"})
+        placement = PlacementOut.model_validate({"id": UUID("77777777-7777-4777-8777-777777777777"), "organization_id": ORG, "application_id": APPLICATION, "job_id": JOB, "candidate_id": CANDIDATE, "status": "active", "start_date": date(2026, 10, 15), "created_by": USER, "created_at": "2026-10-15T00:00:00Z", "updated_at": "2026-10-15T00:00:00Z"})
+        self.assertEqual(offer.status, "accepted")
+        self.assertEqual(placement.status, "active")
+
     def test_offer_creation_cannot_set_sent_or_accepted_status(self):
         for status in ("sent", "accepted"):
             with self.subTest(status=status), self.assertRaises(ValidationError):
