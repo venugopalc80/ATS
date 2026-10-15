@@ -111,6 +111,30 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
                 if next_status != current_status and next_status not in ALLOWED_PLACEMENT_TRANSITIONS.get(current_status, set()):
                     raise HTTPException(409, "Invalid placement status transition")
 
+            if "offer_id" in d and d["offer_id"] is not None:
+                cur.execute(
+                    "select application_id, status from public.offers where id=%s and organization_id=%s",
+                    [d["offer_id"], organization_id],
+                )
+                offer = cur.fetchone()
+                if offer is None or offer["application_id"] != existing["application_id"] or offer["status"] != "accepted":
+                    raise HTTPException(422, "Linked offer must be accepted and belong to this placement's application")
+
+            if "client_id" in d and d["client_id"] is not None:
+                cur.execute(
+                    "select id from public.clients where id=%s and organization_id=%s",
+                    [d["client_id"], organization_id],
+                )
+                if cur.fetchone() is None:
+                    raise HTTPException(422, "Client must belong to the same organization")
+                cur.execute(
+                    "select client_id from public.jobs where id=%s and organization_id=%s",
+                    [existing["job_id"], organization_id],
+                )
+                job = cur.fetchone()
+                if job is None or (job.get("client_id") is not None and job["client_id"] != d["client_id"]):
+                    raise HTTPException(422, "Placement client must match the job's client")
+
             start_date = d.get("start_date", existing["start_date"])
             end_date = d.get("end_date", existing["end_date"])
             if end_date is not None and start_date is not None and end_date < start_date:
