@@ -1,0 +1,122 @@
+import unittest
+from contextlib import contextmanager
+from datetime import date
+from unittest.mock import patch
+from uuid import UUID
+
+from pydantic import ValidationError
+
+from app.schemas.offers import OfferCreate
+from app.schemas.placements import PlacementCreate
+from app.services.offer_service import create_offer
+from app.services.placement_service import create_placement
+
+
+ORG = UUID("11111111-1111-4111-8111-111111111111")
+USER = UUID("22222222-2222-4222-8222-222222222222")
+APPLICATION = UUID("33333333-3333-4333-8333-333333333333")
+CANDIDATE = UUID("44444444-4444-4444-8444-444444444444")
+JOB = UUID("55555555-5555-4555-8555-555555555555")
+
+
+class FakeCursor:
+    def __init__(self, application=None):
+        self.application = application
+        self.sql = ""
+        self.queries = []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def execute(self, sql, params=None):
+        self.sql = " ".join(sql.split()).lower()
+        self.queries.append((self.sql, params))
+
+    def fetchone(self):
+        if "from public.applications" in self.sql:
+            return self.application
+        if self.sql.startswith("select client_id from public.jobs"):
+            return {"client_id": None}
+        if self.sql.startswith("insert into public.offers"):
+            return {"id": UUID("66666666-6666-4666-8666-666666666666")}
+        return None
+
+
+class FakeConnection:
+    def __init__(self, cursor):
+        self.fake_cursor = cursor
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
+    def cursor(self):
+        return self.fake_cursor
+
+    def commit(self):
+        return None
+
+
+class OfferPlacementWorkflowGuardTests(unittest.TestCase):
+    def test_offer_creation_cannot_set_sent_or_accepted_status(self):
+        for status in ("sent", "accepted"):
+            with self.subTest(status=status), self.assertRaises(ValidationError):
+                OfferCreate(
+                    organization_id=ORG,
+                    application_id=APPLICATION,
+                    title="Software Engineer",
+                    status=status,
+                )
+
+    def test_placement_creation_cannot_set_active_or_completed_status(self):
+        for status in ("active", "completed"):
+            with self.subTest(status=status), self.assertRaises(ValidationError):
+                PlacementCreate(
+                    organization_id=ORG,
+                    application_id=APPLICATION,
+                    job_id=JOB,
+                    candidate_id=CANDIDATE,
+                    start_date=date(2026, 10, 15),
+                    status=status,
+                )
+
+    def test_offer_requires_application_at_interview_or_offer_stage(self):
+        cursor = FakeCursor(application={"status": "screening"})
+
+        @contextmanager
+        def fake_connection():
+            yield FakeConnection(cursor)
+
+        payload = OfferCreate(organization_id=ORG, application_id=APPLICATION, title="Software Engineer")
+        with patch("app.services.offer_service.get_connection", fake_connection):
+            with self.assertRaisesRegex(ValueError, "interview or offer stage"):
+                create_offer(payload, USER)
+        self.assertFalse(any(sql.startswith("insert into public.offers") for sql, _ in cursor.queries))
+
+    def test_placement_candidate_and_job_must_match_hired_application(self):
+        cursor = FakeCursor(application={"candidate_id": CANDIDATE, "job_id": JOB, "status": "hired"})
+
+        @contextmanager
+        def fake_connection():
+            yield FakeConnection(cursor)
+
+        payload = PlacementCreate(
+            organization_id=ORG,
+            application_id=APPLICATION,
+            job_id=UUID("77777777-7777-4777-8777-777777777777"),
+            candidate_id=CANDIDATE,
+            start_date=date(2026, 10, 15),
+        )
+        with patch("app.services.placement_service.get_connection", fake_connection):
+            with self.assertRaisesRegex(ValueError, "must match the application"):
+                create_placement(payload, USER)
+        self.assertFalse(any(sql.startswith("insert into public.placements") for sql, _ in cursor.queries))
+
+
+if __name__ == "__main__":
+    unittest.main()
