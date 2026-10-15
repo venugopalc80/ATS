@@ -5,6 +5,10 @@ from unittest.mock import patch
 from uuid import UUID
 
 from pydantic import ValidationError
+from fastapi import HTTPException
+
+from app import auth
+from app.routers import offers, placements
 
 from app.schemas.offers import OfferCreate, OfferOut
 from app.schemas.placements import PlacementCreate, PlacementOut
@@ -130,6 +134,42 @@ class OfferPlacementWorkflowGuardTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "must match the application"):
                 create_placement(payload, USER)
         self.assertFalse(any(sql.startswith("insert into public.placements") for sql, _ in cursor.queries))
+
+
+
+class CommercialWorkflowAuthorizationTests(unittest.TestCase):
+    def test_owner_admin_and_recruiter_can_write_commercial_workflows(self):
+        for role in ("owner", "admin", "recruiter"):
+            with self.subTest(role=role), patch.object(auth, "get_org_role", return_value=role):
+                auth.assert_org_recruiter(USER, ORG)
+
+    def test_viewer_and_hiring_manager_cannot_write_commercial_workflows(self):
+        for role in ("viewer", "hiring_manager"):
+            with self.subTest(role=role), patch.object(auth, "get_org_role", return_value=role):
+                with self.assertRaises(HTTPException) as error:
+                    auth.assert_org_recruiter(USER, ORG)
+                self.assertEqual(error.exception.status_code, 403)
+
+    def test_viewer_cannot_create_offer(self):
+        payload = OfferCreate(organization_id=ORG, application_id=APPLICATION, title="Engineer")
+        with patch.object(offers, "assert_org_recruiter", side_effect=HTTPException(403, "Recruiter access required")) as guard, patch.object(offers, "create_offer") as create:
+            with self.assertRaises(HTTPException) as error:
+                offers.post_offer(payload, USER)
+        self.assertEqual(error.exception.status_code, 403)
+        guard.assert_called_once_with(USER, ORG)
+        create.assert_not_called()
+
+    def test_viewer_cannot_create_placement(self):
+        payload = PlacementCreate(
+            organization_id=ORG, application_id=APPLICATION, job_id=JOB,
+            candidate_id=CANDIDATE, start_date=date(2026, 10, 15),
+        )
+        with patch.object(placements, "assert_org_recruiter", side_effect=HTTPException(403, "Recruiter access required")) as guard, patch.object(placements, "create_placement") as create:
+            with self.assertRaises(HTTPException) as error:
+                placements.post_placement(payload, USER)
+        self.assertEqual(error.exception.status_code, 403)
+        guard.assert_called_once_with(USER, ORG)
+        create.assert_not_called()
 
 
 if __name__ == "__main__":
