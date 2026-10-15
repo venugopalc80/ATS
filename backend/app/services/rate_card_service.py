@@ -58,6 +58,10 @@ class RateCardService:
     async def create_rate_card(self, payload: RateCardCreate, actor_user_id: UUID):
         data = payload.model_dump(mode="python")
         data["name"] = payload.name.strip()
+        if len(data["name"]) < 2:
+            raise ValueError("Rate-card name must contain at least two non-space characters")
+        if data.get("status") != "draft":
+            raise ValueError("New rate cards must start as drafts")
         _validate_terms(data)
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -142,11 +146,16 @@ class RateCardService:
                 if current_status != "draft" and changed_commercial_fields and not closing_active_version:
                     raise ValueError("Commercial terms on a non-draft rate card are immutable; create a new version instead")
 
+                for required_field in ("name", "employment_type", "rate_basis", "currency", "effective_from", "status"):
+                    if required_field in data and data[required_field] is None:
+                        raise ValueError(f"{required_field.replace(chr(95), chr(32)).capitalize()} cannot be empty")
+                if "name" in data and data["name"] is not None:
+                    data["name"] = data["name"].strip()
+                    if len(data["name"]) < 2:
+                        raise ValueError("Rate-card name must contain at least two non-space characters")
                 merged = dict(existing)
                 merged.update(data)
                 _validate_terms(merged)
-                if "name" in data and data["name"] is not None:
-                    data["name"] = data["name"].strip()
 
                 if "job_id" in data and data["job_id"] is not None:
                     cursor.execute(
