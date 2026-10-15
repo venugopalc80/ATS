@@ -30,9 +30,12 @@ def create_offer(payload: OfferCreate, user_id: UUID):
     d["created_by"] = user_id
     with get_connection() as c:
         with c.cursor() as cur:
-            cur.execute("select 1 from public.applications where id=%s and organization_id=%s", [payload.application_id, payload.organization_id])
-            if cur.fetchone() is None:
+            cur.execute("select status from public.applications where id=%s and organization_id=%s", [payload.application_id, payload.organization_id])
+            application = cur.fetchone()
+            if application is None:
                 raise ValueError("Application must belong to the same organization")
+            if application["status"] not in {"interview", "offer"}:
+                raise ValueError("An offer can only be drafted for an application at interview or offer stage")
             cur.execute(
                 """insert into public.offers
                 (organization_id,application_id,title,status,employment_type,start_date,salary_amount,salary_currency,bonus_amount,benefits,expires_at,notes,created_by)
@@ -62,7 +65,7 @@ def update_offer(organization_id: UUID, offer_id: UUID, payload: OfferUpdate, ac
 
     with get_connection() as c:
         with c.cursor() as cur:
-            cur.execute("select status from public.offers where id=%s and organization_id=%s", [offer_id, organization_id])
+            cur.execute("select status, application_id from public.offers where id=%s and organization_id=%s for update", [offer_id, organization_id])
             existing = cur.fetchone()
             if not existing:
                 raise HTTPException(404, "Offer not found")
@@ -76,6 +79,33 @@ def update_offer(organization_id: UUID, offer_id: UUID, payload: OfferUpdate, ac
                     d["sent_at"] = "now()"
                 elif next_status in {"accepted", "rejected", "withdrawn", "expired"} and next_status != current_status:
                     d["responded_at"] = "now()"
+
+                if next_status in {"sent", "accepted"} and next_status != current_status:
+                    cur.execute(
+                        "select status from public.applications where id=%s and organization_id=%s for update",
+                        [existing["application_id"], organization_id],
+                    )
+                    application = cur.fetchone()
+                    if application is None:
+                        raise HTTPException(409, "Offer application no longer exists")
+                    application_status = application["status"]
+                    if next_status == "sent":
+                        if application_status not in {"interview", "offer"}:
+                            raise HTTPException(409, "Application must be at interview or offer stage before sending an offer")
+                        if application_status == "interview":
+                            cur.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
+                            cur.execute(
+                                "update public.applications set status='offer',updated_at=now() where id=%s and organization_id=%s",
+                                [existing["application_id"], organization_id],
+                            )
+                    elif application_status != "offer":
+                        raise HTTPException(409, "Application must be at offer stage before accepting an offer")
+                    else:
+                        cur.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
+                        cur.execute(
+                            "update public.applications set status='hired',updated_at=now() where id=%s and organization_id=%s",
+                            [existing["application_id"], organization_id],
+                        )
 
             assignments = []
             values = {}
