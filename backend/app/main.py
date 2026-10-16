@@ -18,12 +18,20 @@ from app.routers.public_jobs import router as public_jobs_router
 from app.routers.documents import router as documents_router
 
 app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
-frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000").rstrip("/")
+configured_frontend_urls = os.getenv("FRONTEND_URLS", "")
 frontend_origins = {
     origin.strip().rstrip("/")
-    for origin in (
-        frontend_url + ",https://aqerith.com,https://www.aqerith.com,https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app,https://aqerith-git-fix-dashboard-update-1-acceptance-the-pixel-muses.vercel.app,https://aqerith-r5t7uzo35-the-pixel-muses.vercel.app"
-    ).split(",")
+    for origin in [
+        frontend_url,
+        "https://aqerith.com",
+        "https://www.aqerith.com",
+        "https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app",
+        "https://aqerith-git-fix-dashboard-update-1-acceptance-the-pixel-muses.vercel.app",
+        "https://aqerith-r5t7uzo35-the-pixel-muses.vercel.app",
+        "https://aqerith-git-feat-candidate-360-profile-the-pixel-muses.vercel.app",
+        *configured_frontend_urls.split(","),
+    ]
     if origin.strip()
 }
 app.add_middleware(
