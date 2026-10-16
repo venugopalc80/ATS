@@ -3,6 +3,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers.jobs import router as jobs_router
 from app.routers.candidates import router as candidates_router
+from app.routers.candidate_profile import router as candidate_profile_router
 from app.routers.applications import router as applications_router
 from app.routers.me import router as me_router
 from app.routers.clients import router as clients_router
@@ -34,6 +35,7 @@ app.add_middleware(
 )
 app.include_router(jobs_router)
 app.include_router(candidates_router)
+app.include_router(candidate_profile_router)
 app.include_router(applications_router)
 app.include_router(me_router)
 app.include_router(clients_router)
