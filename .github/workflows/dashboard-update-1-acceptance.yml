@@ -25,7 +25,7 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: .
-        run: python -m unittest discover -s tests -v
+        run: python -m pytest -q tests
 
   frontend-checks:
     runs-on: ubuntu-latest
