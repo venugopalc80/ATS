@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { type FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { API_BASE, apiFetch } from "@/lib/api";
 
 type Kind = "employment" | "education" | "certifications" | "languages";
@@ -65,7 +65,7 @@ function blankDraft(kind: Kind): Draft {
 function draftFromRecord(kind: Kind, row: RecordRow): Draft {
   return Object.fromEntries(CONFIG[kind].fields.map((field) => {
     const value = row[field.key];
-    return [field.key, field.type === "checkbox" ? Boolean(value) : value == null ? "" : String(value).slice(0, 10)];
+    return [field.key, field.type === "checkbox" ? Boolean(value) : value == null ? "" : field.type === "date" ? String(value).slice(0, 10) : String(value)];
   }));
 }
 
