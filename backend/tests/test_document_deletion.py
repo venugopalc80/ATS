@@ -14,7 +14,7 @@ CANDIDATE = UUID("dddddddd-dddd-dddd-dddd-dddddddddddd")
 PATH = f"{ORG}/{CANDIDATE}/{DOC}.pdf"
 
 
-class DocumentDeletionTests(unittest.TestCase):
+class DocumentDeletionTests(unittest.IsolatedAsyncioTestCase):
     def setup_mocks(self, deleted_at=None, bucket="candidate-documents"):
         cursor = MagicMock()
         cursor.fetchone.return_value = {
@@ -34,12 +34,12 @@ class DocumentDeletionTests(unittest.TestCase):
         storage.storage.from_.return_value.remove.return_value = {}
         return cursor, db_context, storage
 
-    def test_deletion_is_tenant_scoped_and_audited(self):
+    async def test_deletion_is_tenant_scoped_and_audited(self):
         cursor, db_context, storage = self.setup_mocks()
         with patch("app.routers.document_deletion.assert_org_member") as member, \
              patch("app.routers.document_deletion.get_connection", return_value=db_context), \
              patch("app.routers.document_deletion.storage_client", return_value=storage):
-            result = delete_candidate_document(DOC, ORG, USER)
+            result = await await delete_candidate_document(DOC, ORG, USER)
 
         self.assertIsNone(result)
         member.assert_called_once_with(USER, ORG)
@@ -48,7 +48,7 @@ class DocumentDeletionTests(unittest.TestCase):
         storage.storage.from_.assert_called_once_with("candidate-documents")
         storage.storage.from_.return_value.remove.assert_called_once_with([PATH])
 
-    def test_unknown_document_returns_404(self):
+    async def test_unknown_document_returns_404(self):
         cursor, db_context, storage = self.setup_mocks()
         cursor.fetchone.return_value = None
         with patch("app.routers.document_deletion.assert_org_member"), \
@@ -59,7 +59,7 @@ class DocumentDeletionTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 404)
         storage.storage.from_.assert_not_called()
 
-    def test_refuses_unexpected_storage_bucket(self):
+    async def test_refuses_unexpected_storage_bucket(self):
         cursor, db_context, storage = self.setup_mocks(bucket="public")
         with patch("app.routers.document_deletion.assert_org_member"), \
              patch("app.routers.document_deletion.get_connection", return_value=db_context), \
@@ -69,7 +69,7 @@ class DocumentDeletionTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 409)
         storage.storage.from_.assert_not_called()
 
-    def test_retry_for_soft_deleted_document_retries_storage_cleanup_without_audit(self):
+    async def test_retry_for_soft_deleted_document_retries_storage_cleanup_without_audit(self):
         cursor, db_context, storage = self.setup_mocks(deleted_at=datetime.now(timezone.utc))
         with patch("app.routers.document_deletion.assert_org_member"), \
              patch("app.routers.document_deletion.get_connection", return_value=db_context), \
