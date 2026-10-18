@@ -65,7 +65,7 @@ class DocumentDeletionTests(unittest.IsolatedAsyncioTestCase):
              patch("app.routers.document_deletion.get_connection", return_value=db_context), \
              patch("app.routers.document_deletion.storage_client", return_value=storage):
             with self.assertRaises(HTTPException) as error:
-                delete_candidate_document(DOC, ORG, USER)
+                await delete_candidate_document(DOC, ORG, USER)
         self.assertEqual(error.exception.status_code, 409)
         storage.storage.from_.assert_not_called()
 
