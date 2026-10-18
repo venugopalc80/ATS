@@ -39,7 +39,7 @@ class DocumentDeletionTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.routers.document_deletion.assert_org_member") as member, \
              patch("app.routers.document_deletion.get_connection", return_value=db_context), \
              patch("app.routers.document_deletion.storage_client", return_value=storage):
-            result = await await delete_candidate_document(DOC, ORG, USER)
+            result = await delete_candidate_document(DOC, ORG, USER)
 
         self.assertIsNone(result)
         member.assert_called_once_with(USER, ORG)
@@ -55,7 +55,7 @@ class DocumentDeletionTests(unittest.IsolatedAsyncioTestCase):
              patch("app.routers.document_deletion.get_connection", return_value=db_context), \
              patch("app.routers.document_deletion.storage_client", return_value=storage):
             with self.assertRaises(HTTPException) as error:
-                delete_candidate_document(DOC, ORG, USER)
+                await delete_candidate_document(DOC, ORG, USER)
         self.assertEqual(error.exception.status_code, 404)
         storage.storage.from_.assert_not_called()
 
@@ -74,7 +74,7 @@ class DocumentDeletionTests(unittest.IsolatedAsyncioTestCase):
         with patch("app.routers.document_deletion.assert_org_member"), \
              patch("app.routers.document_deletion.get_connection", return_value=db_context), \
              patch("app.routers.document_deletion.storage_client", return_value=storage):
-            result = delete_candidate_document(DOC, ORG, USER)
+            result = await delete_candidate_document(DOC, ORG, USER)
 
         self.assertIsNone(result)
         self.assertFalse(any("candidate_document_deleted" in str(call) for call in cursor.execute.call_args_list))
