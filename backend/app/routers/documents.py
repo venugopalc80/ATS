@@ -234,7 +234,7 @@ async def reextract_candidate_document(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select candidate_id, storage_path, content_type, original_filename
+                    """select candidate_id, storage_bucket, storage_path, content_type, original_filename
                        from public.candidate_documents
                        where id=%s and organization_id=%s and deleted_at is null and document_type='cv'""",
                     [document_id, organization_id],
@@ -242,12 +242,12 @@ async def reextract_candidate_document(
                 row = cursor.fetchone()
         if row is None:
             raise HTTPException(status_code=404, detail="CV document not found")
-        candidate_id, storage_path, content_type, filename = row
+        candidate_id = row["candidate_id"]
         verify_candidate(candidate_id, organization_id)
-        data = storage_client().storage.from_(BUCKET).download(storage_path)
-        text = extract_cv_text(data, content_type)
-        profile = extract_cv_profile(text, filename)
-        return {"filename": filename, "candidate_id": str(candidate_id), "extracted_profile": profile}
+        data = storage_client().storage.from_(row["storage_bucket"]).download(row["storage_path"])
+        text = extract_cv_text(data, row["content_type"])
+        profile = extract_cv_profile(text, row["original_filename"])
+        return {"filename": row["original_filename"], "candidate_id": str(candidate_id), "extracted_profile": profile}
     except HTTPException:
         raise
     except Exception as exc:
