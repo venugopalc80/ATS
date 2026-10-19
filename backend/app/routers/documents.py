@@ -300,8 +300,12 @@ def extract_cv_profile(text: str, filename: str) -> dict:
     fields = cv_candidate_fields(text, filename)
     if not text.strip():
         fields.update({"first_name": "", "last_name": None, "email": None, "phone": None, "skills": []})
-    lines = [re.sub(r"\s+", " ", line).strip(" \\t|•-") for line in text.splitlines()]
-    role_pattern = re.compile(r"(?i)\\b(?:(?:senior|junior|lead|principal)\s+)?(?:(?:software|full[ -]?stack|java|python|data|machine learning)\s+)?(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist)\\b")
+    lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
+    role_pattern = re.compile(
+        r"(?i)\b(?:(?:senior|junior|lead|principal|staff)\s+)?"
+        r"(?:(?:software|full[ -]?stack|java|python|data|machine learning|cloud|devops)\s+)?"
+        r"(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist)\b"
+    )
     title = None
     for line in lines[:80]:
         if len(line) <= 100:
@@ -319,7 +323,10 @@ def extract_cv_profile(text: str, filename: str) -> dict:
     location = None
     for line in lines[:25]:
         if "@" not in line and "http" not in line.lower():
-            match = re.search(r"\b([A-Z][A-Za-z .'-]{1,30}),\s*([A-Z][A-Za-z .'-]{1,30})(?:,\s*(United Kingdom|UK|India|Australia|United States|[A-Z]{2}))?\\b", line)
+            match = re.search(
+                r"\b([A-Z][A-Za-z .'-]{1,30}),\s*([A-Z][A-Za-z .'-]{1,30})(?:,\s*(United Kingdom|UK|India|Australia|United States|[A-Z]{2}))?\b",
+                line,
+            )
             if match:
                 location = {"city": match.group(1).strip(), "region": match.group(2).strip(), "country": match.group(3)}
                 break
