@@ -83,8 +83,8 @@ class DocumentValidationTests(unittest.TestCase):
         Telugu - Native
         """
         result = _cv_sections(text)
-        self.assertTrue(any(row["job_title"] == "Program Coordinator" and row["employer_name"] == "Acunor" for row in result["employment"]))
-        self.assertTrue(any("MSc Computer Science" in row["qualification"] for row in result["education"]))
+        self.assertTrue(any(row["job_title"] == "Program Coordinator" and row["employer_name"] == "Acunor" and row["is_current"] and row["start_date"] == "2023-01-01" for row in result["employment"]))
+        self.assertTrue(any("MSc Computer Science" in row["qualification"] and row["institution_name"] == "Coventry University" for row in result["education"]))
         self.assertTrue(any(row["name"] == "AWS Certified Cloud Practitioner" for row in result["certifications"]))
         self.assertTrue(any(row["language"] == "English" and row["proficiency"] == "fluent" for row in result["languages"]))
 
