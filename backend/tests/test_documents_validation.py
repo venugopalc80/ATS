@@ -24,9 +24,19 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertEqual(result["first_name"], "Priya")
         self.assertEqual(result["last_name"], "Sharma")
         self.assertEqual(result["email"], "priya.sharma@example.com")
-        self.assertTrue(result["current_title"])
+        self.assertEqual(result["current_title"], "Senior Software Engineer")
+        self.assertEqual(result["location"]["city"], "Folkestone")
+        self.assertEqual(result["location"]["region"], "Kent")
         self.assertEqual([item["type"] for item in result["links"]], ["linkedin", "github"])
+        self.assertTrue(all(item["url"].startswith("https://") for item in result["links"]))
         self.assertTrue(result["review_required"])
+
+    def test_empty_text_does_not_guess_candidate_name_from_filename(self):
+        result = extract_cv_profile("", "john_smith_resume.pdf")
+        self.assertEqual(result["first_name"], "")
+        self.assertIsNone(result["last_name"])
+        self.assertIsNone(result["email"])
+        self.assertEqual(result["links"], [])
 
     def test_marks_empty_text_for_ocr_review(self):
         result = extract_cv_profile("", "candidate.pdf")
