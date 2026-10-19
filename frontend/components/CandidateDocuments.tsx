@@ -68,6 +68,12 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       if (suggestion.current_title) payload.current_title = suggestion.current_title;
       if (suggestion.location?.city) payload.city = suggestion.location.city;
       if (suggestion.location?.region) payload.region = suggestion.location.region;
+      const countryCodes: Record<string, string> = {
+        "united kingdom": "GB", "uk": "GB", "great britain": "GB",
+        "india": "IN", "australia": "AU", "united states": "US", "usa": "US",
+      };
+      const country = suggestion.location?.country?.trim().toLowerCase();
+      if (country && countryCodes[country]) payload.country_code = countryCodes[country];
       if (suggestion.skills?.length) payload.skills = suggestion.skills;
       if (suggestion.links?.length) payload.profile_links = suggestion.links;
       if (!Object.keys(payload).length) throw new Error("No profile fields could be extracted. This CV may need manual review or OCR.");
@@ -153,6 +159,7 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
         {([["first_name","First name"],["last_name","Last name"],["email","Email"],["phone","Phone"],["current_title","Current role"]] as const).map(([key,label]) => <label key={key} className="block text-sm">{label}<input className="input mt-1 w-full" value={(profileSuggestion[key] as string) || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, [key]: event.target.value } : current)} /></label>)}
         <label className="block text-sm">City<input className="input mt-1 w-full" value={profileSuggestion.location?.city || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, location: { ...current.location, city: event.target.value } } : current)} /></label>
         <label className="block text-sm">Region<input className="input mt-1 w-full" value={profileSuggestion.location?.region || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, location: { ...current.location, region: event.target.value } } : current)} /></label>
+        <label className="block text-sm">Country<input className="input mt-1 w-full" value={profileSuggestion.location?.country || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, location: { ...current.location, country: event.target.value } } : current)} /></label>
       </div>
       {!!profileSuggestion.skills?.length && <p className="muted-small mt-3">Skills: {profileSuggestion.skills.join(", ")}</p>}
       {!!profileSuggestion.links?.length && <div className="mt-3"><strong>Links found in CV</strong><ul className="list-disc pl-5">{profileSuggestion.links.map((link) => <li key={link.url}><a href={link.url} target="_blank" rel="noopener noreferrer" className="underline">{link.type}: {link.url}</a></li>)}</ul><p className="muted-small">Links are shown for review; persistent profile-link storage is a follow-up implementation step.</p></div>}
