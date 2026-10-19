@@ -53,6 +53,22 @@ class CandidateCreate(CandidateBase):
 
 
 class CandidateUpdate(BaseModel):
+    @field_validator("profile_links")
+    @classmethod
+    def validate_profile_links(cls, value: list[dict[str, str]] | None) -> list[dict[str, str]] | None:
+        if value is None:
+            return None
+        if len(value) > 20:
+            raise ValueError("At most 20 profile links are allowed")
+        cleaned = []
+        for item in value:
+            kind, url = item.get("type", ""), item.get("url", "")
+            parsed = urlparse(url)
+            if kind not in {"linkedin", "github", "portfolio"} or parsed.scheme not in {"http", "https"} or not parsed.netloc or len(url) > 2048:
+                raise ValueError("Profile links must have a supported type and a valid HTTP(S) URL")
+            cleaned.append({"type": kind, "url": url})
+        return cleaned
+
     first_name: str | None = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=320)
