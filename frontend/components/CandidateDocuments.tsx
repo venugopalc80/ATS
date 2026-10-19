@@ -216,6 +216,40 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
         </div>)}
         <p className="muted-small mt-2">Review links carefully. Only valid HTTP or HTTPS links can be saved.</p>
       </div>
+      <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+        <div className="rounded-lg border p-3">
+          <strong>Employment history ({profileSuggestion.employment?.length || 0})</strong>
+          {(profileSuggestion.employment || []).map((row, index) => <div className="mt-3 border-t pt-2" key={index}>
+            <label className="block text-sm">Job title<input className="input mt-1 w-full" value={row.job_title || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).map((item, i) => i === index ? { ...item, job_title: event.target.value } : item) } : current)} /></label>
+            <label className="block text-sm mt-2">Employer<input className="input mt-1 w-full" value={row.employer_name || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).map((item, i) => i === index ? { ...item, employer_name: event.target.value } : item) } : current)} /></label>
+            <button className="text-sm underline mt-2" type="button" onClick={() => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).filter((_, i) => i !== index) } : current)}>Remove entry</button>
+          </div>)}
+        </div>
+        <div className="rounded-lg border p-3">
+          <strong>Education ({profileSuggestion.education?.length || 0})</strong>
+          {(profileSuggestion.education || []).map((row, index) => <div className="mt-3 border-t pt-2" key={index}>
+            <label className="block text-sm">Qualification<input className="input mt-1 w-full" value={row.qualification || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).map((item, i) => i === index ? { ...item, qualification: event.target.value } : item) } : current)} /></label>
+            <label className="block text-sm mt-2">Institution<input className="input mt-1 w-full" value={row.institution_name || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).map((item, i) => i === index ? { ...item, institution_name: event.target.value } : item) } : current)} /></label>
+            <button className="text-sm underline mt-2" type="button" onClick={() => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).filter((_, i) => i !== index) } : current)}>Remove entry</button>
+          </div>)}
+        </div>
+        <div className="rounded-lg border p-3">
+          <strong>Certifications ({profileSuggestion.certifications?.length || 0})</strong>
+          {(profileSuggestion.certifications || []).map((row, index) => <div className="mt-3 border-t pt-2" key={index}>
+            <input className="input mt-1 w-full" aria-label={"Certification " + (index + 1)} value={row.name || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, certifications: (current.certifications || []).map((item, i) => i === index ? { ...item, name: event.target.value } : item) } : current)} />
+            <button className="text-sm underline mt-2" type="button" onClick={() => setProfileSuggestion((current) => current ? { ...current, certifications: (current.certifications || []).filter((_, i) => i !== index) } : current)}>Remove entry</button>
+          </div>)}
+        </div>
+        <div className="rounded-lg border p-3">
+          <strong>Languages ({profileSuggestion.languages?.length || 0})</strong>
+          {(profileSuggestion.languages || []).map((row, index) => <div className="mt-3 border-t pt-2" key={index}>
+            <label className="block text-sm">Language<input className="input mt-1 w-full" value={row.language || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, languages: (current.languages || []).map((item, i) => i === index ? { ...item, language: event.target.value } : item) } : current)} /></label>
+            <label className="block text-sm mt-2">Proficiency<select className="input mt-1 w-full" value={row.proficiency || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, languages: (current.languages || []).map((item, i) => i === index ? { ...item, proficiency: event.target.value || null } : item) } : current)}><option value="">Not specified</option><option value="basic">Basic</option><option value="conversational">Conversational</option><option value="professional">Professional</option><option value="fluent">Fluent</option><option value="native">Native</option></select></label>
+            <button className="text-sm underline mt-2" type="button" onClick={() => setProfileSuggestion((current) => current ? { ...current, languages: (current.languages || []).filter((_, i) => i !== index) } : current)}>Remove entry</button>
+          </div>)}
+        </div>
+      </div>
+      <p className="muted-small mt-3">CV parsing is heuristic. Verify every suggestion before saving; entries missing required fields are skipped.</p>
       <div className="flex gap-2 mt-4"><button className="btn" type="button" disabled={applyingProfile} onClick={() => void applyExtractedProfile()}>{applyingProfile ? "Applying..." : "Apply to candidate profile"}</button><button className="btn" type="button" disabled={applyingProfile} onClick={() => setProfileSuggestion(null)}>Dismiss</button></div>
     </div>}
     {loading ? <p className="muted-small mt-3">Loading documents...</p> : documents.length ? <div className="mt-3 space-y-3">{documents.map((doc) => <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><div><strong>{doc.original_filename}</strong><div className="muted-small">{(doc.file_size_bytes / 1024).toFixed(0)} KB · {doc.created_at ? new Date(doc.created_at).toLocaleString() : "Uploaded"}</div></div><div className="flex items-center gap-2"><button className="btn" type="button" aria-label={"Preview " + doc.original_filename} title="Preview CV" disabled={previewLoading === doc.id} onClick={() => void openPreview(doc)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h3l2 5 2-5h3l2 5v9a2 2 0 0 1-2 2h-2l-3-5-3 5H7a2 2 0 0 1-2-2V9z"/><circle cx="8.5" cy="13" r="2.5"/><circle cx="15.5" cy="13" r="2.5"/></svg> {previewLoading === doc.id ? "Opening..." : "Preview"}</button><button className="btn" type="button" onClick={() => void downloadDocument(doc)}>Download</button><button className="btn" type="button" aria-label={"Delete " + doc.original_filename} disabled={deleting === doc.id} onClick={() => void deleteDocument(doc)}>{deleting === doc.id ? "Deleting..." : "Delete"}</button></div></div>)}</div> : <p className="muted-small mt-3">No CV documents uploaded yet.</p>}
