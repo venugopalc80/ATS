@@ -86,7 +86,9 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       if (suggestion.location?.region) payload.region = suggestion.location.region;
       const countryCodes: Record<string, string> = {
         "united kingdom": "GB", "uk": "GB", "great britain": "GB",
-        "india": "IN", "australia": "AU", "united states": "US", "usa": "US",
+        "england": "GB", "scotland": "GB", "wales": "GB", "northern ireland": "GB",
+        "india": "IN", "australia": "AU", "united states": "US",
+        "united states of america": "US", "usa": "US",
       };
       const country = suggestion.location?.country?.trim().toLowerCase();
       if (country && countryCodes[country]) payload.country_code = countryCodes[country];
