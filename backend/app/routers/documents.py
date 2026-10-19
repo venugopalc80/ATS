@@ -389,21 +389,38 @@ def _cv_sections(text: str) -> dict:
         if not qualification_match:
             continue
         institution = ""
+        qualification_line = line
+        # CVs commonly put the institution on the line before the qualification.
         if " | " in line or " — " in line or " - " in line:
             parts = re.split(r"\s(?:\||—|-)\s", line)
-            institution = parts[1].strip() if len(parts) > 1 else ""
-        elif i + 1 < len(edu):
-            institution = edu[i + 1]
+            if len(parts) > 1:
+                left, right = parts[0].strip(), parts[1].strip()
+                if qualification_pattern.search(left):
+                    qualification_line, institution = left, right
+                elif qualification_pattern.search(right):
+                    qualification_line, institution = right, left
+        if not institution and i > 0:
+            previous = edu[i - 1]
+            if not date_range(previous)[0] and not qualification_pattern.search(previous) and len(previous) <= 200:
+                institution = previous
+        if not institution and i + 1 < len(edu):
+            following = edu[i + 1]
+            if not date_range(following)[0] and not qualification_pattern.search(following):
+                institution = following
         if institution and len(institution) <= 200:
             start_date, end_date, _ = date_range(line)
             if not start_date:
-                for nearby in edu[i + 1:i + 4]:
+                for nearby in edu[max(0, i - 1):i + 3]:
                     nearby_start, nearby_end, _ = date_range(nearby)
                     if nearby_start:
                         start_date, end_date = nearby_start, nearby_end
                         break
+            qualification = re.sub(
+                r"\s*((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\s*$",
+                "", qualification_line, flags=re.I,
+            ).strip(" ,|–—-")
             education.append({
-                "institution_name": institution[:200], "qualification": line[:200],
+                "institution_name": institution[:200], "qualification": (qualification or qualification_line)[:200],
                 "field_of_study": None, "start_date": start_date, "end_date": end_date,
                 "grade": None, "description": None,
             })
