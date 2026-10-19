@@ -347,17 +347,17 @@ def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool
     }
     # A role heading is common near the top of a CV and must never be mistaken for a person's name.
     role_heading = re.compile(
-        r"(?i)\\b(?:(?:senior|junior|lead|principal|staff|assistant|associate|head of|chief)\\s+)?"
+        r"(?i)\b(?:(?:senior|junior|lead|principal|staff|assistant|associate|head of|chief)\s+)?"
         r"(?:(?:software|full[ -]?stack|java|python|data|machine learning|cloud|devops|program|project|"
-        r"operations|marketing|recruitment|hr|human resources|business|product|customer success|finance|sales)\\s+)?"
+        r"operations|marketing|recruitment|hr|human resources|business|product|customer success|finance|sales)\s+)?"
         r"(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|"
         r"coordinator|administrator|specialist|director|officer|executive|technician|accountant|teacher|"
-        r"nurse|doctor|researcher|intern|assistant|student)\\b"
+        r"nurse|doctor|researcher|intern|assistant|student)\b"
     )
     name = ""
     for raw_line in text.splitlines()[:15]:
-        line = re.sub(r"\\s+", " ", raw_line).strip(" \\t|•-")
-        if not line or len(line) > 80 or "@" in line or "http" in line.lower() or re.search(r"\\d{3}", line):
+        line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
+        if not line or len(line) > 80 or "@" in line or "http" in line.lower() or re.search(r"\d{3}", line):
             continue
         if line.casefold() in excluded or len(line.split()) > 5 or role_heading.search(line):
             continue
