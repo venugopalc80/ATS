@@ -306,7 +306,8 @@ def extract_cv_profile(text: str, filename: str) -> dict:
     role_pattern = re.compile(
         r"(?i)\b(?:(?:senior|junior|lead|principal|staff)\s+)?"
         r"(?:(?:software|full[ -]?stack|java|python|data|machine learning|cloud|devops)\s+)?"
-        r"(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist)\b"
+        r"(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|"
+        r"coordinator|administrator|specialist|director|officer|executive|technician|accountant|teacher|nurse|doctor|researcher|intern|assistant)\b"
     )
     title = None
     for line in lines[:80]:
@@ -326,7 +327,7 @@ def extract_cv_profile(text: str, filename: str) -> dict:
     for line in lines[:25]:
         if "@" not in line and "http" not in line.lower():
             match = re.search(
-                r"\b([A-Z][A-Za-z .'-]{1,30}),\s*([A-Z][A-Za-z .'-]{1,30})(?:,\s*(United Kingdom|UK|India|Australia|United States|[A-Z]{2}))?\b",
+                r"\b([A-Z][A-Za-z .'-]{1,30}),\s*([A-Z][A-Za-z .'-]{1,30})(?:,\s*(United Kingdom|United States of America|United States|Great Britain|England|Scotland|Wales|Northern Ireland|UK|USA|India|Australia|[A-Z]{2}))?\b",
                 line,
             )
             if match:
