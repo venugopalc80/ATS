@@ -347,6 +347,12 @@ def _cv_sections(text: str) -> dict:
         if len(employment) >= 15:
             break
         start_date, end_date, current_role = date_range(line)
+        if not start_date:
+            for nearby in exp[i + 1:i + 4]:
+                nearby_start, nearby_end, nearby_current = date_range(nearby)
+                if nearby_start:
+                    start_date, end_date, current_role = nearby_start, nearby_end, nearby_current
+                    break
         cleaned = re.sub(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b", "", line, flags=re.I).strip(" ,|–—-")
         title_match = re.search(r"(?i)\b(?:senior|junior|lead|principal|staff|assistant|associate|head of\s+)?(?:software|full[ -]?stack|data|python|java|project|program|operations|marketing|recruitment|business|product|customer success|finance|sales|HR|human resources)?\s*(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|coordinator|administrator|specialist|director|officer|executive|technician|accountant|intern)\b", cleaned)
         title = title_match.group(0).strip() if title_match else ""
@@ -390,6 +396,12 @@ def _cv_sections(text: str) -> dict:
             institution = edu[i + 1]
         if institution and len(institution) <= 200:
             start_date, end_date, _ = date_range(line)
+            if not start_date:
+                for nearby in edu[i + 1:i + 4]:
+                    nearby_start, nearby_end, _ = date_range(nearby)
+                    if nearby_start:
+                        start_date, end_date = nearby_start, nearby_end
+                        break
             education.append({
                 "institution_name": institution[:200], "qualification": line[:200],
                 "field_of_study": None, "start_date": start_date, "end_date": end_date,
