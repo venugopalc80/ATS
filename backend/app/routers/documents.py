@@ -305,7 +305,8 @@ def extract_cv_profile(text: str, filename: str) -> dict:
     lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
     role_pattern = re.compile(
         r"(?i)\b(?:(?:senior|junior|lead|principal|staff)\s+)?"
-        r"(?:(?:software|full[ -]?stack|java|python|data|machine learning|cloud|devops)\s+)?"
+        r"(?:(?:software|full[ -]?stack|java|python|data|machine learning|cloud|devops|program|project|"
+        r"operations|marketing|recruitment|hr|human resources|business|product|customer success|finance|sales)\s+)?"
         r"(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|"
         r"coordinator|administrator|specialist|director|officer|executive|technician|accountant|teacher|nurse|doctor|researcher|intern|assistant)\b"
     )
