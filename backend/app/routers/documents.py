@@ -490,7 +490,7 @@ def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool
         stem = re.sub(r"[_-]+", " ", stem)
         name = re.sub(r"\s+", " ", stem).strip(" .-_")
     parts = name.split()
-    first_name = (parts[0] if parts else "CV candidate")[:100]
+    first_name = (parts[0] if parts else ("CV candidate" if use_filename_fallback else ""))[:100]
     last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
     skills = [skill for skill in CV_SKILL_KEYWORDS if re.search(r"(?<![a-z0-9])" + re.escape(skill) + r"(?![a-z0-9])", text, re.I)]
     return {
