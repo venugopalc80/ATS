@@ -106,13 +106,13 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
         if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not update candidate profile.");
       }
       const profilePath = API_BASE + "/api/candidates/" + encodeURIComponent(candidateId) + "/profile/";
-      const saveRows = async (kind: string, rows: Array<Record<string, unknown>>, required: string[]) => {
+      const saveRows = async (kind: string, rows: Array<Record<string, unknown>>, required: string[], identityKeys: string[] = required) => {
         const existingResponse = await apiFetch(profilePath + kind);
         if (!existingResponse.ok) throw new Error("Could not check existing " + kind + " records before saving extracted CV details.");
         const existingRows = await existingResponse.json() as Array<Record<string, unknown>>;
         for (const row of rows) {
           if (required.some((key) => !String(row[key] ?? "").trim())) continue;
-          const duplicate = existingRows.some((existing) => required.every((key) =>
+          const duplicate = existingRows.some((existing) => identityKeys.every((key) =>
             String(existing[key] ?? "").trim().toLowerCase() === String(row[key] ?? "").trim().toLowerCase()
           ));
           if (duplicate) continue;
@@ -124,8 +124,8 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
           existingRows.push(row);
         }
       };
-      await saveRows("employment", (suggestion.employment || []) as unknown as Array<Record<string, unknown>>, ["employer_name", "job_title"]);
-      await saveRows("education", (suggestion.education || []) as unknown as Array<Record<string, unknown>>, ["institution_name"]);
+      await saveRows("employment", (suggestion.employment || []) as unknown as Array<Record<string, unknown>>, ["employer_name", "job_title"], ["employer_name", "job_title", "start_date", "end_date"]);
+      await saveRows("education", (suggestion.education || []) as unknown as Array<Record<string, unknown>>, ["institution_name", "qualification"], ["institution_name", "qualification", "start_date", "end_date"]);
       await saveRows("certifications", (suggestion.certifications || []) as unknown as Array<Record<string, unknown>>, ["name"]);
       await saveRows("languages", (suggestion.languages || []) as unknown as Array<Record<string, unknown>>, ["language"]);
       setMessage("Reviewed CV details applied. Candidate profile and supported profile sections have been updated.");
