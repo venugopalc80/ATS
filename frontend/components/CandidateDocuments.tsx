@@ -97,12 +97,30 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       };
       const country = suggestion.location?.country?.trim().toLowerCase();
       if (country && countryCodes[country]) payload.country_code = countryCodes[country];
-      if (suggestion.skills?.length) payload.skills = suggestion.skills;
-      if (suggestion.links?.length) payload.profile_links = suggestion.links;
-      if (!Object.keys(payload).length) throw new Error("No profile fields could be extracted. This CV may need manual review or OCR.");
-      const response = await apiFetch(API_BASE + "/api/candidates/" + encodeURIComponent(candidateId), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-      if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not update candidate profile.");
-      setMessage("Extracted profile fields applied. Candidate profile updated.");
+      if (suggestion.skills) payload.skills = suggestion.skills;
+      if (suggestion.links) payload.profile_links = suggestion.links;
+      const structuredCount = (suggestion.employment?.length || 0) + (suggestion.education?.length || 0) + (suggestion.certifications?.length || 0) + (suggestion.languages?.length || 0);
+      if (!Object.keys(payload).length && !structuredCount) throw new Error("No profile fields could be extracted. This CV may need manual review or OCR.");
+      if (Object.keys(payload).length) {
+        const response = await apiFetch(API_BASE + "/api/candidates/" + encodeURIComponent(candidateId), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+        if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not update candidate profile.");
+      }
+      const profilePath = API_BASE + "/api/candidates/" + encodeURIComponent(candidateId) + "/profile/";
+      const saveRows = async (kind: string, rows: Array<Record<string, unknown>>, required: string[]) => {
+        for (const row of rows) {
+          if (required.some((key) => !String(row[key] ?? "").trim())) continue;
+          const response = await apiFetch(profilePath + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
+          if (!response.ok) {
+            const body = await response.json().catch(() => null) as { detail?: string } | null;
+            throw new Error(body?.detail || "Some profile details could not be saved. Refresh the profile and check for partial results.");
+          }
+        }
+      };
+      await saveRows("employment", (suggestion.employment || []) as unknown as Array<Record<string, unknown>>, ["employer_name", "job_title"]);
+      await saveRows("education", (suggestion.education || []) as unknown as Array<Record<string, unknown>>, ["institution_name"]);
+      await saveRows("certifications", (suggestion.certifications || []) as unknown as Array<Record<string, unknown>>, ["name"]);
+      await saveRows("languages", (suggestion.languages || []) as unknown as Array<Record<string, unknown>>, ["language"]);
+      setMessage("Reviewed CV details applied. Candidate profile and supported profile sections have been updated.");
       window.location.reload();
       setProfileSuggestion(null);
     } catch (error) {
