@@ -2,7 +2,7 @@ import unittest
 
 from fastapi import HTTPException
 
-from app.routers.documents import MAX_BYTES, extract_cv_profile, validate_document_bytes
+from app.routers.documents import MAX_BYTES, _cv_sections, extract_cv_profile, validate_document_bytes
 
 
 PDF = "application/pdf"
@@ -67,6 +67,26 @@ class DocumentValidationTests(unittest.TestCase):
         result = extract_cv_profile("", "candidate.pdf")
         self.assertTrue(result["ocr_required"])
         self.assertTrue(result["review_required"])
+
+    def test_extracts_structured_cv_sections_for_review(self):
+        text = """WORK EXPERIENCE
+        Program Coordinator | Acunor
+        Jan 2023 - Present
+        Coordinated programme delivery and reporting.
+        EDUCATION
+        MSc Computer Science | Coventry University
+        2024 - 2025
+        CERTIFICATIONS
+        AWS Certified Cloud Practitioner
+        LANGUAGES
+        English - Fluent
+        Telugu - Native
+        """
+        result = _cv_sections(text)
+        self.assertTrue(any(row["job_title"] == "Program Coordinator" and row["employer_name"] == "Acunor" for row in result["employment"]))
+        self.assertTrue(any("MSc Computer Science" in row["qualification"] for row in result["education"]))
+        self.assertTrue(any(row["name"] == "AWS Certified Cloud Practitioner" for row in result["certifications"]))
+        self.assertTrue(any(row["language"] == "English" and row["proficiency"] == "fluent" for row in result["languages"]))
 
     def test_accepts_pdf_signature(self):
         self.assertEqual(validate_document_bytes(b"%PDF-1.7\nbody", PDF), ".pdf")
