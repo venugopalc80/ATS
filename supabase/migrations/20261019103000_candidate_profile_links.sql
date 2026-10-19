@@ -7,4 +7,4 @@ alter table public.candidates
   drop constraint if exists candidates_profile_links_array_check;
 alter table public.candidates
   add constraint candidates_profile_links_array_check
-  check (jsonb_typeof(profile_links) = 'array' and jsonb_array_length(profile_links) <= 20);
+  check (jsonb_typeof(profile_links) = 'array');
