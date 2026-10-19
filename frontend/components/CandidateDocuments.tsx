@@ -230,6 +230,11 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
           {(profileSuggestion.employment || []).map((row, index) => <div className="mt-3 border-t pt-2" key={index}>
             <label className="block text-sm">Job title<input className="input mt-1 w-full" value={row.job_title || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).map((item, i) => i === index ? { ...item, job_title: event.target.value } : item) } : current)} /></label>
             <label className="block text-sm mt-2">Employer<input className="input mt-1 w-full" value={row.employer_name || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).map((item, i) => i === index ? { ...item, employer_name: event.target.value } : item) } : current)} /></label>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <label className="block text-sm">Start date<input className="input mt-1 w-full" type="date" value={row.start_date || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).map((item, i) => i === index ? { ...item, start_date: event.target.value || null } : item) } : current)} /></label>
+              <label className="block text-sm">End date<input className="input mt-1 w-full" type="date" value={row.end_date || ""} disabled={Boolean(row.is_current)} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).map((item, i) => i === index ? { ...item, end_date: event.target.value || null } : item) } : current)} /></label>
+            </div>
+            <label className="flex items-center gap-2 text-sm mt-2"><input type="checkbox" checked={Boolean(row.is_current)} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).map((item, i) => i === index ? { ...item, is_current: event.target.checked, end_date: event.target.checked ? null : item.end_date } : item) } : current)} />Currently employed here</label>
             <button className="text-sm underline mt-2" type="button" onClick={() => setProfileSuggestion((current) => current ? { ...current, employment: (current.employment || []).filter((_, i) => i !== index) } : current)}>Remove entry</button>
           </div>)}
         </div>
@@ -238,6 +243,10 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
           {(profileSuggestion.education || []).map((row, index) => <div className="mt-3 border-t pt-2" key={index}>
             <label className="block text-sm">Qualification<input className="input mt-1 w-full" value={row.qualification || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).map((item, i) => i === index ? { ...item, qualification: event.target.value } : item) } : current)} /></label>
             <label className="block text-sm mt-2">Institution<input className="input mt-1 w-full" value={row.institution_name || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).map((item, i) => i === index ? { ...item, institution_name: event.target.value } : item) } : current)} /></label>
+            <div className="grid grid-cols-2 gap-2 mt-2">
+              <label className="block text-sm">Start date<input className="input mt-1 w-full" type="date" value={row.start_date || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).map((item, i) => i === index ? { ...item, start_date: event.target.value || null } : item) } : current)} /></label>
+              <label className="block text-sm">End date<input className="input mt-1 w-full" type="date" value={row.end_date || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).map((item, i) => i === index ? { ...item, end_date: event.target.value || null } : item) } : current)} /></label>
+            </div>
             <button className="text-sm underline mt-2" type="button" onClick={() => setProfileSuggestion((current) => current ? { ...current, education: (current.education || []).filter((_, i) => i !== index) } : current)}>Remove entry</button>
           </div>)}
         </div>
