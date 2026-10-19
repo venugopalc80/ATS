@@ -38,6 +38,13 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertIsNone(result["email"])
         self.assertEqual(result["links"], [])
 
+    def test_nonempty_cv_without_a_detected_name_does_not_use_filename_as_name(self):
+        text = "Professional Summary\\nExperienced professional with broad business skills.\\ncontact@example.com"
+        result = extract_cv_profile(text, "program-cordinater.docx")
+        self.assertEqual(result["first_name"], "")
+        self.assertIsNone(result["last_name"])
+        self.assertEqual(result["email"], "contact@example.com")
+
     def test_marks_empty_text_for_ocr_review(self):
         result = extract_cv_profile("", "candidate.pdf")
         self.assertTrue(result["ocr_required"])
