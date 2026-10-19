@@ -37,6 +37,7 @@ class DocumentOut(BaseModel):
     file_size_bytes: int
     sha256: str
     created_at: datetime | None = None
+    extracted_profile: dict | None = None
 
 
 def validate_document_bytes(data: bytes, mime: str) -> str:
@@ -112,6 +113,8 @@ async def upload_candidate_document(
     path = f"{organization_id}/{candidate_id}/{document_id}{extension}"
     filename = safe_filename(file.filename, extension)
     digest = hashlib.sha256(data).hexdigest()
+    extracted_text = extract_cv_text(data, mime)
+    extracted_profile = extract_cv_profile(extracted_text, filename)
 
     try:
         storage_client().storage.from_(BUCKET).upload(
@@ -144,7 +147,7 @@ async def upload_candidate_document(
                     [organization_id, user_id, document_id,
                      '{"candidate_id":"' + str(candidate_id) + '","document_type":"cv"}'],
                 )
-                return row
+                return {**row, "extracted_profile": extracted_profile}
     except HTTPException:
         try:
             storage_client().storage.from_(BUCKET).remove([path])
@@ -291,6 +294,34 @@ def extract_cv_text(data: bytes, mime: str) -> str:
         return ""
     return ""
 
+
+def extract_cv_profile(text: str, filename: str) -> dict:
+    """Extract reviewable profile suggestions from selectable CV text."""
+    fields = cv_candidate_fields(text, filename)
+    lines = [re.sub(r"\\s+", " ", line).strip(" \\t|•-") for line in text.splitlines()]
+    role_pattern = re.compile(r"(?i)\\b(?:(?:senior|junior|lead|principal)\\s+)?(?:(?:software|full[ -]?stack|java|python|data|machine learning)\\s+)?(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist)\\b")
+    title = None
+    for line in lines[:80]:
+        if len(line) <= 100:
+            match = role_pattern.search(line)
+            if match:
+                title = match.group(0)[:200]
+                break
+    links = []
+    for raw_url in re.findall(r"https?://[^\\s<>]+", text, re.I):
+        url = raw_url.rstrip(".,;:)")
+        host = re.sub(r"^www\\.", "", re.sub(r"^https?://", "", url, flags=re.I).split("/")[0], flags=re.I).lower()
+        kind = "linkedin" if "linkedin.com" in host else "github" if "github.com" in host else "portfolio"
+        if not any(item["url"] == url for item in links):
+            links.append({"type": kind, "url": url})
+    location = None
+    for line in lines[:25]:
+        if "@" not in line and "http" not in line.lower():
+            match = re.search(r"\\b([A-Z][A-Za-z .'-]{1,30}),\\s*([A-Z][A-Za-z .'-]{1,30})(?:,\\s*(United Kingdom|UK|India|Australia|United States|[A-Z]{2}))?\\b", line)
+            if match:
+                location = {"city": match.group(1).strip(), "region": match.group(2).strip(), "country": match.group(3)}
+                break
+    return {**fields, "current_title": title, "location": location, "links": links[:20], "review_required": True, "ocr_required": not bool(text.strip())}
 
 def cv_candidate_fields(text: str, filename: str) -> dict:
     email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
