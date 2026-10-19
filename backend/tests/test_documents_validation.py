@@ -38,6 +38,11 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertIsNone(result["email"])
         self.assertEqual(result["links"], [])
 
+    def test_extracts_program_coordinator_role(self):
+        text = "Venu Gopal Chowdary Ravi\\nProgram Coordinator\\nvenu@example.com\\nFolkestone, Kent, UK"
+        result = extract_cv_profile(text, "program-cordinater.docx")
+        self.assertEqual(result["current_title"], "Program Coordinator")
+
     def test_nonempty_cv_without_a_detected_name_does_not_use_filename_as_name(self):
         text = "Professional Summary\\nExperienced professional with broad business skills.\\ncontact@example.com"
         result = extract_cv_profile(text, "program-cordinater.docx")
