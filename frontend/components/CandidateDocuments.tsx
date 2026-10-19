@@ -43,11 +43,27 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       const body = new FormData(); body.append("file", file);
       const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(org) + "&candidate_id=" + encodeURIComponent(candidateId), { method: "POST", body });
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "CV upload failed.");
-      const uploaded = await response.json() as { extracted_profile?: ProfileSuggestion };
-      if (uploaded.extracted_profile) setProfileSuggestion(uploaded.extracted_profile);
-      setMessage(uploaded.extracted_profile?.ocr_required
-        ? "CV uploaded securely, but no selectable text was found. Review the CV manually or use OCR."
-        : "CV uploaded securely. Review the extracted details before applying them.");
+      const uploaded = await response.json() as { extracted_profile?: ProfileSuggestion | null };
+      // Always open the review panel after a successful upload. Older API deployments or
+      // unexpected response shapes must not make the extraction workflow silently disappear.
+      const suggestion = uploaded.extracted_profile ?? {
+        first_name: "",
+        last_name: "",
+        email: "",
+        phone: "",
+        current_title: "",
+        location: { city: "", region: "", country: "" },
+        links: [],
+        skills: [],
+        review_required: true,
+        ocr_required: true,
+      };
+      setProfileSuggestion(suggestion);
+      setMessage(!uploaded.extracted_profile
+        ? "CV uploaded, but the API did not return extracted profile details. You can enter the details manually below; check the staging API deployment."
+        : uploaded.extracted_profile.ocr_required
+          ? "CV uploaded securely, but no selectable text was found. Review the CV manually or use OCR."
+          : "CV uploaded securely. Review the extracted details below before applying them.");
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "CV upload failed."); }
     finally { setUploading(false); }
@@ -162,7 +178,7 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
         <label className="block text-sm">Country<input className="input mt-1 w-full" value={profileSuggestion.location?.country || ""} onChange={(event) => setProfileSuggestion((current) => current ? { ...current, location: { ...current.location, country: event.target.value } } : current)} /></label>
       </div>
       {!!profileSuggestion.skills?.length && <p className="muted-small mt-3">Skills: {profileSuggestion.skills.join(", ")}</p>}
-      {!!profileSuggestion.links?.length && <div className="mt-3"><strong>Links found in CV</strong><ul className="list-disc pl-5">{profileSuggestion.links.map((link) => <li key={link.url}><a href={link.url} target="_blank" rel="noopener noreferrer" className="underline">{link.type}: {link.url}</a></li>)}</ul><p className="muted-small">Links are shown for review; persistent profile-link storage is a follow-up implementation step.</p></div>}
+      {!!profileSuggestion.links?.length && <div className="mt-3"><strong>Links found in CV</strong><ul className="list-disc pl-5">{profileSuggestion.links.map((link) => <li key={link.url}><a href={link.url} target="_blank" rel="noopener noreferrer" className="underline">{link.type}: {link.url}</a></li>)}</ul><p className="muted-small">Check each link before applying it to the candidate profile.</p></div>}
       <div className="flex gap-2 mt-4"><button className="btn" type="button" disabled={applyingProfile} onClick={() => void applyExtractedProfile()}>{applyingProfile ? "Applying..." : "Apply to candidate profile"}</button><button className="btn" type="button" disabled={applyingProfile} onClick={() => setProfileSuggestion(null)}>Dismiss</button></div>
     </div>}
     {loading ? <p className="muted-small mt-3">Loading documents...</p> : documents.length ? <div className="mt-3 space-y-3">{documents.map((doc) => <div key={doc.id} className="flex flex-wrap items-center justify-between gap-3 border-b pb-3"><div><strong>{doc.original_filename}</strong><div className="muted-small">{(doc.file_size_bytes / 1024).toFixed(0)} KB · {doc.created_at ? new Date(doc.created_at).toLocaleString() : "Uploaded"}</div></div><div className="flex items-center gap-2"><button className="btn" type="button" aria-label={"Preview " + doc.original_filename} title="Preview CV" disabled={previewLoading === doc.id} onClick={() => void openPreview(doc)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h3l2 5 2-5h3l2 5v9a2 2 0 0 1-2 2h-2l-3-5-3 5H7a2 2 0 0 1-2-2V9z"/><circle cx="8.5" cy="13" r="2.5"/><circle cx="15.5" cy="13" r="2.5"/></svg> {previewLoading === doc.id ? "Opening..." : "Preview"}</button><button className="btn" type="button" onClick={() => void downloadDocument(doc)}>Download</button><button className="btn" type="button" aria-label={"Delete " + doc.original_filename} disabled={deleting === doc.id} onClick={() => void deleteDocument(doc)}>{deleting === doc.id ? "Deleting..." : "Delete"}</button></div></div>)}</div> : <p className="muted-small mt-3">No CV documents uploaded yet.</p>}
