@@ -147,6 +147,19 @@ class DocumentValidationTests(unittest.TestCase):
                 ("Artmac", "2021-11-01", "2023-02-01"),
             ],
         )
+        self.assertTrue(all(row["description"] is None for row in roles))
+
+    def test_extracts_description_for_single_employment_record(self):
+        text = """WORK EXPERIENCE
+        Software Engineer | Example Ltd
+        Jan 2022 – Mar 2024
+        Built Python APIs and maintained automated tests.
+        Collaborated with product and QA teams.
+        """
+        result = _cv_sections(text)
+        role = next(row for row in result["employment"] if row["employer_name"] == "Example Ltd")
+        self.assertIn("Built Python APIs", role["description"])
+        self.assertIn("Collaborated with product and QA teams", role["description"])
 
 
 if __name__ == "__main__":
