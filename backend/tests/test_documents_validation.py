@@ -50,6 +50,19 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertIsNone(result["last_name"])
         self.assertEqual(result["email"], "contact@example.com")
 
+    def test_role_heading_is_not_mistaken_for_candidate_name(self):
+        text = "Program Coordinator\\nvenu@example.com\\nFolkestone, Kent, UK"
+        result = extract_cv_profile(text, "program-cordinater.docx")
+        self.assertEqual(result["first_name"], "")
+        self.assertIsNone(result["last_name"])
+        self.assertEqual(result["current_title"], "Program Coordinator")
+
+    def test_candidate_name_is_still_found_after_role_heading(self):
+        text = "Program Coordinator\\nVenu Gopal Chowdary\\nvenu@example.com"
+        result = extract_cv_profile(text, "resume.docx")
+        self.assertEqual(result["first_name"], "Venu")
+        self.assertEqual(result["last_name"], "Gopal Chowdary")
+
     def test_marks_empty_text_for_ocr_review(self):
         result = extract_cv_profile("", "candidate.pdf")
         self.assertTrue(result["ocr_required"])
