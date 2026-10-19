@@ -295,6 +295,126 @@ def extract_cv_text(data: bytes, mime: str) -> str:
     return ""
 
 
+def _cv_sections(text: str) -> dict:
+    """Conservative, review-first section extraction for common CV layouts."""
+    raw_lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
+    raw_lines = [line for line in raw_lines if line]
+    headings = {
+        "employment": re.compile(r"^(work experience|professional experience|employment history|experience|career history)$", re.I),
+        "education": re.compile(r"^(education|academic background|qualifications|academic qualifications)$", re.I),
+        "certifications": re.compile(r"^(certifications|certificates|licenses|licences|professional certifications)$", re.I),
+        "languages": re.compile(r"^(languages|language skills)$", re.I),
+        "skills": re.compile(r"^(skills|technical skills|core competencies|key skills|technologies)$", re.I),
+    }
+    sections: dict[str, list[str]] = {key: [] for key in headings}
+    current = None
+    for line in raw_lines:
+        matched = next((key for key, pattern in headings.items() if pattern.fullmatch(line.rstrip(":"))), None)
+        if matched:
+            current = matched
+            continue
+        if current and re.fullmatch(r"(projects|references|interests|hobbies|personal statement|summary|profile|contact details|achievements|publications|volunteering)", line, re.I):
+            current = None
+        elif current:
+            sections[current].append(line)
+
+    def date_range(line: str):
+        match = re.search(
+            r"\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(19\d{2}|20\d{2})\s*(?:-|–|—|to)\s*(Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19\d{2}|20\d{2}))\b",
+            line, re.I
+        )
+        if not match:
+            return None, None, False
+        def iso(value):
+            if not value:
+                return None
+            years = re.search(r"(19\d{2}|20\d{2})", value)
+            if not years:
+                return None
+            month_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*", value, re.I)
+            months = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,"jul":7,"aug":8,"sep":9,"sept":9,"oct":10,"nov":11,"dec":12}
+            month = months.get(month_match.group(1).lower()) if month_match else 1
+            return f"{years.group(1)}-{month:02d}-01"
+        start = (match.group(1) or "") + match.group(2)
+        end = match.group(3)
+        is_current = end.lower() in {"present", "current", "now"}
+        return iso(start), None if is_current else iso(end), is_current
+
+    employment = []
+    # Recognise common "Title at Company", "Title | Company", and stacked title/company lines.
+    exp = sections["employment"]
+    for i, line in enumerate(exp):
+        if len(employment) >= 15:
+            break
+        start_date, end_date, current_role = date_range(line)
+        cleaned = re.sub(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b", "", line, flags=re.I).strip(" ,|–—-")
+        title_match = re.search(r"(?i)\b(?:senior|junior|lead|principal|staff|assistant|associate|head of\s+)?(?:software|full[ -]?stack|data|python|java|project|program|operations|marketing|recruitment|business|product|customer success|finance|sales|HR|human resources)?\s*(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|coordinator|administrator|specialist|director|officer|executive|technician|accountant|intern)\b", cleaned)
+        title = title_match.group(0).strip() if title_match else ""
+        company = ""
+        if title and re.search(r"\s(?:at|@)\s", cleaned, re.I):
+            company = re.split(r"\s(?:at|@)\s", cleaned, maxsplit=1, flags=re.I)[-1].strip(" ,|")
+        elif title and any(sep in cleaned for sep in (" | ", " — ", " – ", " - ")):
+            parts = re.split(r"\s(?:\||—|–|-)\s", cleaned)
+            if len(parts) >= 2:
+                title = parts[0].strip() if title_match.start() < len(parts[0]) else title
+                company = parts[1].strip()
+        elif title and i + 1 < len(exp):
+            next_line = exp[i + 1]
+            if len(next_line) <= 100 and not date_range(next_line)[0] and not re.search(r"(?i)\b(?:developer|engineer|analyst|manager|coordinator|consultant|intern)\b", next_line):
+                company = next_line
+        if title and company and len(company) <= 200:
+            description_lines = []
+            for following in exp[i + 1:i + 5]:
+                if following != company and following != line and not date_range(following)[0]:
+                    description_lines.append(following)
+            employment.append({
+                "job_title": title[:200], "employer_name": company[:200],
+                "location": None, "employment_type": None, "start_date": start_date,
+                "end_date": end_date, "is_current": current_role,
+                "description": " ".join(description_lines)[:1500] or None,
+            })
+    education = []
+    edu = sections["education"]
+    qualification_pattern = re.compile(r"(?i)\b(Bachelor(?:'s)?|Master(?:'s)?|Ph\.?D\.?|Doctorate|B\.?Sc\.?|M\.?Sc\.?|B\.?Eng\.?|M\.?Eng\.?|B\.?Tech|M\.?Tech|MBA|Diploma|GCSE|A-level|degree)\b")
+    for i, line in enumerate(edu):
+        if len(education) >= 10:
+            break
+        qualification_match = qualification_pattern.search(line)
+        if not qualification_match:
+            continue
+        institution = ""
+        if " | " in line or " — " in line or " - " in line:
+            parts = re.split(r"\s(?:\||—|-)\s", line)
+            institution = parts[1].strip() if len(parts) > 1 else ""
+        elif i + 1 < len(edu):
+            institution = edu[i + 1]
+        if institution and len(institution) <= 200:
+            start_date, end_date, _ = date_range(line)
+            education.append({
+                "institution_name": institution[:200], "qualification": line[:200],
+                "field_of_study": None, "start_date": start_date, "end_date": end_date,
+                "grade": None, "description": None,
+            })
+    certifications = []
+    for line in sections["certifications"][:20]:
+        name = re.sub(r"^[•*\-]\s*", "", line).strip()
+        if len(name) >= 3 and not re.fullmatch(r"\d{4}", name):
+            certifications.append({"name": name[:200], "issuing_organisation": None, "credential_id": None, "credential_url": None, "issued_on": None, "expires_on": None})
+    languages = []
+    language_names = ("English", "Hindi", "Telugu", "Tamil", "Kannada", "Malayalam", "Bengali", "Punjabi", "Gujarati", "Marathi", "Urdu", "Spanish", "French", "German", "Arabic", "Mandarin", "Chinese", "Japanese", "Portuguese", "Italian", "Dutch")
+    for line in sections["languages"]:
+        for language in language_names:
+            if re.search(r"(?<![A-Za-z])" + re.escape(language) + r"(?![A-Za-z])", line, re.I):
+                proficiency = None
+                for label, value in (("native", "native"), ("fluent", "fluent"), ("professional", "professional"), ("conversational", "conversational"), ("basic", "basic")):
+                    if re.search(r"\b" + label + r"\b", line, re.I):
+                        proficiency = value
+                        break
+                if not any(item["language"].lower() == language.lower() for item in languages):
+                    languages.append({"language": language, "proficiency": proficiency})
+    return {"employment": employment, "education": education, "certifications": certifications, "languages": languages}
+
+
 def extract_cv_profile(text: str, filename: str) -> dict:
     """Extract reviewable profile suggestions from selectable CV text."""
     # For profile suggestions, never infer a person's name from the uploaded filename.
@@ -334,7 +454,7 @@ def extract_cv_profile(text: str, filename: str) -> dict:
             if match:
                 location = {"city": match.group(1).strip(), "region": match.group(2).strip(), "country": match.group(3)}
                 break
-    return {**fields, "current_title": title, "location": location, "links": links[:20], "review_required": True, "ocr_required": not bool(text.strip())}
+    return {**fields, "current_title": title, "location": location, "links": links[:20], **_cv_sections(text), "review_required": True, "ocr_required": not bool(text.strip())}
 
 def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool = True) -> dict:
     email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
