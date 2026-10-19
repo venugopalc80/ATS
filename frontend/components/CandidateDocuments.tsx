@@ -107,13 +107,21 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       }
       const profilePath = API_BASE + "/api/candidates/" + encodeURIComponent(candidateId) + "/profile/";
       const saveRows = async (kind: string, rows: Array<Record<string, unknown>>, required: string[]) => {
+        const existingResponse = await apiFetch(profilePath + kind);
+        if (!existingResponse.ok) throw new Error("Could not check existing " + kind + " records before saving extracted CV details.");
+        const existingRows = await existingResponse.json() as Array<Record<string, unknown>>;
         for (const row of rows) {
           if (required.some((key) => !String(row[key] ?? "").trim())) continue;
+          const duplicate = existingRows.some((existing) => required.every((key) =>
+            String(existing[key] ?? "").trim().toLowerCase() === String(row[key] ?? "").trim().toLowerCase()
+          ));
+          if (duplicate) continue;
           const response = await apiFetch(profilePath + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
           if (!response.ok) {
             const body = await response.json().catch(() => null) as { detail?: string } | null;
             throw new Error(body?.detail || "Some profile details could not be saved. Refresh the profile and check for partial results.");
           }
+          existingRows.push(row);
         }
       };
       await saveRows("employment", (suggestion.employment || []) as unknown as Array<Record<string, unknown>>, ["employer_name", "job_title"]);
