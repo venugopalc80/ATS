@@ -22,6 +22,7 @@ class CandidateBase(BaseModel):
     current_title: str | None = Field(default=None, max_length=200)
     years_experience: Decimal | None = Field(default=None, ge=0, le=80)
     skills: list[str] = Field(default_factory=list)
+    profile_links: list[dict[str, str]] = Field(default_factory=list, max_length=20)
     resume_path: str | None = None
     resume_text: str | None = None
     ai_summary: str | None = None
@@ -45,7 +46,8 @@ class CandidateUpdate(BaseModel):
     status: CandidateStatus | None = None
     current_title: str | None = Field(default=None, max_length=200)
     years_experience: Decimal | None = Field(default=None, ge=0, le=80)
-    skills: list[str] | None = None
+    skills: list[str] | None = Field(default=None, max_length=100)
+    profile_links: list[dict[str, str]] | None = Field(default=None, max_length=20)
     resume_path: str | None = None
     resume_text: str | None = None
     ai_summary: str | None = None
