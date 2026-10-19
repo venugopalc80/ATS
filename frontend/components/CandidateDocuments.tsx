@@ -43,7 +43,11 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       const body = new FormData(); body.append("file", file);
       const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(org) + "&candidate_id=" + encodeURIComponent(candidateId), { method: "POST", body });
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "CV upload failed.");
-      setMessage("CV uploaded securely.");
+      const uploaded = await response.json() as { extracted_profile?: ProfileSuggestion };
+      if (uploaded.extracted_profile) setProfileSuggestion(uploaded.extracted_profile);
+      setMessage(uploaded.extracted_profile?.ocr_required
+        ? "CV uploaded securely, but no selectable text was found. Review the CV manually or use OCR."
+        : "CV uploaded securely. Review the extracted details before applying them.");
       await load();
     } catch (error) { setMessage(error instanceof Error ? error.message : "CV upload failed."); }
     finally { setUploading(false); }
