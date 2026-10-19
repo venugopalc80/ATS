@@ -8,7 +8,11 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 type Document = { id: string; original_filename: string; content_type: string; file_size_bytes: number; created_at?: string | null };
 type Preview = { filename: string; kind: "pdf" | "text"; url?: string; text?: string };
-type ProfileSuggestion = { first_name?: string | null; last_name?: string | null; email?: string | null; phone?: string | null; skills?: string[]; current_title?: string | null; location?: { city?: string | null; region?: string | null; country?: string | null } | null; links?: { type: string; url: string }[]; review_required?: boolean; ocr_required?: boolean };
+type EmploymentSuggestion = { employer_name: string; job_title: string; location?: string | null; employment_type?: string | null; start_date?: string | null; end_date?: string | null; is_current?: boolean; description?: string | null };
+type EducationSuggestion = { institution_name: string; qualification?: string | null; field_of_study?: string | null; start_date?: string | null; end_date?: string | null; grade?: string | null; description?: string | null };
+type CertificationSuggestion = { name: string; issuing_organisation?: string | null; credential_id?: string | null; credential_url?: string | null; issued_on?: string | null; expires_on?: string | null };
+type LanguageSuggestion = { language: string; proficiency?: string | null };
+type ProfileSuggestion = { first_name?: string | null; last_name?: string | null; email?: string | null; phone?: string | null; skills?: string[]; current_title?: string | null; location?: { city?: string | null; region?: string | null; country?: string | null } | null; links?: { type: string; url: string }[]; employment?: EmploymentSuggestion[]; education?: EducationSuggestion[]; certifications?: CertificationSuggestion[]; languages?: LanguageSuggestion[]; review_required?: boolean; ocr_required?: boolean };
 
 export default function CandidateDocuments({ candidateId }: { candidateId: string }) {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -55,6 +59,7 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
         location: { city: "", region: "", country: "" },
         links: [],
         skills: [],
+        employment: [], education: [], certifications: [], languages: [],
         review_required: true,
         ocr_required: true,
       };
