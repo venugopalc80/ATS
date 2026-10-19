@@ -115,5 +115,39 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertEqual(error.exception.status_code, 415)
 
 
+    def test_extracts_education_when_institution_precedes_qualification(self):
+        text = """EDUCATION
+        Coventry University, UK
+        MSc Computer Science Sep 2024– Sep 2025
+        """
+        result = _cv_sections(text)
+        self.assertEqual(len(result["education"]), 1)
+        row = result["education"][0]
+        self.assertEqual(row["institution_name"], "Coventry University, UK")
+        self.assertEqual(row["qualification"], "MSc Computer Science")
+        self.assertEqual(row["start_date"], "2024-09-01")
+        self.assertEqual(row["end_date"], "2025-09-01")
+
+    def test_keeps_multiple_program_coordinator_employers_separate(self):
+        text = """WORK EXPERIENCE
+        Program Coordinator | Acunor
+        Oct 2023 – Sep 2024
+        Program Coordinator | TekWissen
+        Feb 2023 – Oct 2023
+        Program Coordinator | Artmac
+        Nov 2021 – Feb 2023
+        """
+        result = _cv_sections(text)
+        roles = [row for row in result["employment"] if row["job_title"] == "Program Coordinator"]
+        self.assertEqual(
+            [(row["employer_name"], row["start_date"], row["end_date"]) for row in roles],
+            [
+                ("Acunor", "2023-10-01", "2024-09-01"),
+                ("TekWissen", "2023-02-01", "2023-10-01"),
+                ("Artmac", "2021-11-01", "2023-02-01"),
+            ],
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
