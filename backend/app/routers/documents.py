@@ -298,8 +298,10 @@ def extract_cv_text(data: bytes, mime: str) -> str:
 def extract_cv_profile(text: str, filename: str) -> dict:
     """Extract reviewable profile suggestions from selectable CV text."""
     fields = cv_candidate_fields(text, filename)
-    lines = [re.sub(r"\\s+", " ", line).strip(" \\t|•-") for line in text.splitlines()]
-    role_pattern = re.compile(r"(?i)\\b(?:(?:senior|junior|lead|principal)\\s+)?(?:(?:software|full[ -]?stack|java|python|data|machine learning)\\s+)?(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist)\\b")
+    if not text.strip():
+        fields.update({"first_name": "", "last_name": None, "email": None, "phone": None, "skills": []})
+    lines = [re.sub(r"\s+", " ", line).strip(" \\t|•-") for line in text.splitlines()]
+    role_pattern = re.compile(r"(?i)\\b(?:(?:senior|junior|lead|principal)\s+)?(?:(?:software|full[ -]?stack|java|python|data|machine learning)\s+)?(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist)\\b")
     title = None
     for line in lines[:80]:
         if len(line) <= 100:
@@ -308,16 +310,16 @@ def extract_cv_profile(text: str, filename: str) -> dict:
                 title = match.group(0)[:200]
                 break
     links = []
-    for raw_url in re.findall(r"https?://[^\\s<>]+", text, re.I):
+    for raw_url in re.findall(r"https?://[^\s<>]+", text, re.I):
         url = raw_url.rstrip(".,;:)")
-        host = re.sub(r"^www\\.", "", re.sub(r"^https?://", "", url, flags=re.I).split("/")[0], flags=re.I).lower()
+        host = re.sub(r"^www\.", "", re.sub(r"^https?://", "", url, flags=re.I).split("/")[0], flags=re.I).lower()
         kind = "linkedin" if "linkedin.com" in host else "github" if "github.com" in host else "portfolio"
         if not any(item["url"] == url for item in links):
             links.append({"type": kind, "url": url})
     location = None
     for line in lines[:25]:
         if "@" not in line and "http" not in line.lower():
-            match = re.search(r"\\b([A-Z][A-Za-z .'-]{1,30}),\\s*([A-Z][A-Za-z .'-]{1,30})(?:,\\s*(United Kingdom|UK|India|Australia|United States|[A-Z]{2}))?\\b", line)
+            match = re.search(r"\b([A-Z][A-Za-z .'-]{1,30}),\s*([A-Z][A-Za-z .'-]{1,30})(?:,\s*(United Kingdom|UK|India|Australia|United States|[A-Z]{2}))?\\b", line)
             if match:
                 location = {"city": match.group(1).strip(), "region": match.group(2).strip(), "country": match.group(3)}
                 break
