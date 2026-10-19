@@ -16,7 +16,9 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState<string | null>(null);
   const [message, setMessage] = useState("");
-  const [preview, setPreview] = useState<Preview | null>(null);\n  const [profileSuggestion, setProfileSuggestion] = useState<ProfileSuggestion | null>(null);\n  const [applyingProfile, setApplyingProfile] = useState(false);
+  const [preview, setPreview] = useState<Preview | null>(null);
+  const [profileSuggestion, setProfileSuggestion] = useState<ProfileSuggestion | null>(null);
+  const [applyingProfile, setApplyingProfile] = useState(false);
   const [previewLoading, setPreviewLoading] = useState<string | null>(null);
   const org = getActiveOrganizationId(DEFAULT_ORG);
 
@@ -63,10 +65,12 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       if (suggestion.location?.city) payload.city = suggestion.location.city;
       if (suggestion.location?.region) payload.region = suggestion.location.region;
       if (suggestion.skills?.length) payload.skills = suggestion.skills;
+      if (suggestion.links?.length) payload.profile_links = suggestion.links;
       if (!Object.keys(payload).length) throw new Error("No profile fields could be extracted. This CV may need manual review or OCR.");
       const response = await apiFetch(API_BASE + "/api/candidates/" + encodeURIComponent(candidateId), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not update candidate profile.");
-      setMessage("Extracted profile fields applied. Refresh the candidate profile to see updated details.");
+      setMessage("Extracted profile fields applied. Candidate profile updated.");
+      window.location.reload();
       setProfileSuggestion(null);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not apply extracted details.");
