@@ -343,6 +343,12 @@ def _cv_sections(text: str) -> dict:
     employment = []
     # Recognise common "Title at Company", "Title | Company", and stacked title/company lines.
     exp = sections["employment"]
+    title_pattern = re.compile(r"(?i)\b(?:senior|junior|lead|principal|staff|assistant|associate|head of\s+)?(?:software|full[ -]?stack|data|python|java|project|program|operations|marketing|recruitment|business|product|customer success|finance|sales|HR|human resources)?\s*(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|coordinator|administrator|specialist|director|officer|executive|technician|accountant|intern)\b")
+    role_header_indices = []
+    for index, candidate_line in enumerate(exp):
+        candidate_clean = re.sub(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b", "", candidate_line, flags=re.I).strip(" ,|–—-")
+        if title_pattern.search(candidate_clean) and any(sep in candidate_clean for sep in (" | ", " — ", " – ", " - ")) and len(candidate_clean.split()) <= 12:
+            role_header_indices.append(index)
     for i, line in enumerate(exp):
         if len(employment) >= 15:
             break
@@ -354,7 +360,7 @@ def _cv_sections(text: str) -> dict:
                     start_date, end_date, current_role = nearby_start, nearby_end, nearby_current
                     break
         cleaned = re.sub(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b", "", line, flags=re.I).strip(" ,|–—-")
-        title_match = re.search(r"(?i)\b(?:senior|junior|lead|principal|staff|assistant|associate|head of\s+)?(?:software|full[ -]?stack|data|python|java|project|program|operations|marketing|recruitment|business|product|customer success|finance|sales|HR|human resources)?\s*(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|coordinator|administrator|specialist|director|officer|executive|technician|accountant|intern)\b", cleaned)
+        title_match = title_pattern.search(cleaned)
         title = title_match.group(0).strip() if title_match else ""
         company = ""
         if title and re.search(r"\s(?:at|@)\s", cleaned, re.I):
@@ -370,9 +376,16 @@ def _cv_sections(text: str) -> dict:
                 company = next_line
         if title and company and len(company) <= 200:
             description_lines = []
-            for following in exp[i + 1:i + 5]:
-                if following != company and following != line and not date_range(following)[0]:
-                    description_lines.append(following)
+            next_role_index = next((idx for idx in role_header_indices if idx > i), None)
+            description_end = min(i + 5, next_role_index) if next_role_index is not None else min(i + 5, len(exp))
+            # When multiple roles are listed as a cluster, bullets after the final role are
+            # ambiguous shared responsibilities. Do not attribute them to the final employer.
+            has_previous_role = any(idx < i for idx in role_header_indices)
+            final_role_in_cluster = has_previous_role and next_role_index is None
+            if not final_role_in_cluster:
+                for following in exp[i + 1:description_end]:
+                    if following != company and following != line and not date_range(following)[0]:
+                        description_lines.append(following)
             employment.append({
                 "job_title": title[:200], "employer_name": company[:200],
                 "location": None, "employment_type": None, "start_date": start_date,
