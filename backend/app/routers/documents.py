@@ -297,7 +297,9 @@ def extract_cv_text(data: bytes, mime: str) -> str:
 
 def extract_cv_profile(text: str, filename: str) -> dict:
     """Extract reviewable profile suggestions from selectable CV text."""
-    fields = cv_candidate_fields(text, filename)
+    # For profile suggestions, never infer a person's name from the uploaded filename.
+    # Keep filename-based naming only for the separate bulk-import workflow.
+    fields = cv_candidate_fields(text, filename, use_filename_fallback=False)
     if not text.strip():
         fields.update({"first_name": "", "last_name": None, "email": None, "phone": None, "skills": []})
     lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
@@ -332,7 +334,7 @@ def extract_cv_profile(text: str, filename: str) -> dict:
                 break
     return {**fields, "current_title": title, "location": location, "links": links[:20], "review_required": True, "ocr_required": not bool(text.strip())}
 
-def cv_candidate_fields(text: str, filename: str) -> dict:
+def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool = True) -> dict:
     email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
     phone_match = re.search(r"(?<!\w)(?:\+?\d[\d ()\-.]{7,}\d)(?!\w)", text)
     excluded = {
@@ -350,7 +352,7 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
             name = line
             break
-    if not name:
+    if not name and use_filename_fallback:
         stem = Path(filename).stem
         stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
         stem = re.sub(r"[_-]+", " ", stem)
