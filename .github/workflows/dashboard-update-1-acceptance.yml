@@ -46,7 +46,9 @@ jobs:
           PYTHONPATH: .
           ATS_INTEGRATION_TESTS: "1"
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ats_test
-        run: python -m unittest tests.test_postgres_dashboard_integration tests.test_postgres_recruitment_integration -v
+        run: |
+          python -m unittest discover -s tests -p 'test_postgres_dashboard_integration.py' -v
+          python -m unittest discover -s tests -p 'test_postgres_recruitment_integration.py' -v
 
   frontend-checks:
     runs-on: ubuntu-latest
