@@ -55,6 +55,8 @@ class FakeCursor:
                 {"status": "interview", "total": 1},
                 {"status": "rejected", "total": 1},
             ]
+        if "from public.organization_members om" in self.sql:
+            return [{"user_id": USER, "name": "Recruiter", "open_vacancies": 2, "active_applications": 5, "overdue_decisions": 1}]
         if "left join public.applications" in self.sql:
             return [{
                 "id": JOB, "title": "Backend Engineer", "client": "Example Ltd",
@@ -77,8 +79,6 @@ class FakeCursor:
                 "id": OFFER, "application_id": "app-2", "title": "Offer for Analyst",
                 "expires_at": datetime(2026, 10, 14, 12, tzinfo=timezone.utc), "status": "sent",
             }]
-        if "from public.organization_members om" in self.sql:
-            return [{"user_id": USER, "name": "Recruiter", "open_vacancies": 2, "active_applications": 5, "overdue_decisions": 1}]
         if "with demand as" in self.sql:
             return [{"skill": "python", "label": "Python", "open_roles": 3, "active_candidates": 1}]
         if "from public.audit_events ae" in self.sql:
