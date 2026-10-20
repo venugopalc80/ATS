@@ -77,6 +77,10 @@ class FakeCursor:
                 "id": OFFER, "application_id": "app-2", "title": "Offer for Analyst",
                 "expires_at": datetime(2026, 10, 14, 12, tzinfo=timezone.utc), "status": "sent",
             }]
+        if "from public.organization_members om" in self.sql:
+            return [{"user_id": USER, "name": "Recruiter", "open_vacancies": 2, "active_applications": 5, "overdue_decisions": 1}]
+        if "with demand as" in self.sql:
+            return [{"skill": "python", "label": "Python", "open_roles": 3, "active_candidates": 1}]
         if "from public.audit_events ae" in self.sql:
             return [{
                 "id": "activity-1", "action": "candidate_created", "entity_type": "candidate",
@@ -129,6 +133,8 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers/{OFFER}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "vacancy_health" and item["href"] == f"/jobs?job_id={JOB}" for item in result["priorities"]))
         self.assertEqual(result["activity"][0]["actor_name"], "Recruiter")
+        self.assertEqual(result["team_workload"][0]["open_vacancies"], 2)
+        self.assertEqual(result["talent_intelligence"][0]["gap"], 2)
         # Every data query must include the requested organisation scope.
         self.assertTrue(cursor.queries)
         for sql, params in cursor.queries:
