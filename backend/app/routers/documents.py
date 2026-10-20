@@ -544,6 +544,8 @@ def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool
         "summary", "profile", "contact", "contact details", "work experience",
         "professional experience", "education", "skills", "experience", "objective",
         "personal statement", "references", "key achievements", "technical skills",
+        "core skills", "key skills", "areas of expertise", "technical competencies",
+        "competencies", "professional profile", "personal details", "career summary",
     }
     # A role heading is common near the top of a CV and must never be mistaken for a person's name.
     role_heading = re.compile(
@@ -568,7 +570,9 @@ def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool
                 break
             # Some CVs use a single-word name; accept it only at the very top when contact details follow.
             nearby = " ".join(candidate_lines[line_index + 1:line_index + 4])
-            if line_index <= 2 and (email_match or phone_match) and len(line) >= 2:
+            nearby_has_email = bool(re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", nearby, re.I))
+            nearby_has_phone = bool(re.search(r"(?<!\\w)(?:\\+?\\d[\\d ()\\-.]{7,}\\d)(?!\\w)", nearby))
+            if line_index <= 2 and (nearby_has_email or nearby_has_phone) and len(line) >= 2:
                 name = line
                 break
     if not name and use_filename_fallback:
