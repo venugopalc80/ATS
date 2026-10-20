@@ -525,14 +525,27 @@ def extract_cv_profile(text: str, filename: str) -> dict:
         if not any(item["url"] == url for item in links):
             links.append({"type": kind, "url": url})
     location = None
-    for line in lines[:25]:
-        if "@" not in line and "http" not in line.lower():
-            match = re.search(
-                r"\b([A-Z][A-Za-z .'-]{1,30}),\s*([A-Z][A-Za-z .'-]{1,30})(?:,\s*(United Kingdom|United States of America|United States|Great Britain|England|Scotland|Wales|Northern Ireland|UK|USA|India|Australia|[A-Z]{2}))?\b",
-                line,
-            )
-            if match:
-                location = {"city": match.group(1).strip(), "region": match.group(2).strip(), "country": match.group(3)}
+    # Location inference is intentionally conservative: employer/technology lines such
+    # as "Snowflake, AWS" must not be presented as a candidate's city and region.
+    known_countries = r"(United Kingdom|United States of America|United States|Great Britain|England|Scotland|Wales|Northern Ireland|UK|USA|India|Australia)"
+    for line in lines[:15]:
+        if "@" in line or "http" in line.lower():
+            continue
+        labelled = re.match(r"(?i)^(?:location|based in|address)\s*[:\-]\s*(.+)$", line)
+        candidate_line = labelled.group(1).strip() if labelled else line
+        match = re.search(
+            rf"^([A-Z][A-Za-z .'-]{{1,30}}),\s*([A-Z][A-Za-z .'-]{{1,30}}),?\s*{known_countries}\s*$",
+            candidate_line,
+        )
+        if match:
+            location = {"city": match.group(1).strip(), "region": match.group(2).strip(), "country": match.group(3)}
+            break
+        # Accept explicitly labelled locations without a country, but do not infer
+        # a location from arbitrary capitalised pairs elsewhere in the CV.
+        if labelled and len(candidate_line) <= 100 and not re.search(r"\b(?:AWS|Azure|Snowflake|LinkedIn|Pinterest|Pandora)\b", candidate_line, re.I):
+            pieces = [part.strip() for part in re.split(r"[,|]", candidate_line) if part.strip()]
+            if 1 <= len(pieces) <= 3:
+                location = {"city": pieces[0], "region": pieces[1] if len(pieces) > 1 else None, "country": pieces[2] if len(pieces) > 2 else None}
                 break
     return {**fields, "current_title": title, "location": location, "links": links[:20], **_cv_sections(text), "review_required": True, "ocr_required": not bool(text.strip())}
 
