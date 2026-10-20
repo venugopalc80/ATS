@@ -98,3 +98,74 @@ def test_profile_route_denies_non_member_before_profile_database_access():
 
     assert raised.value.status_code == 403
     get_connection.assert_not_called()
+
+
+
+from unittest.mock import MagicMock
+
+
+def _profile_db_context():
+    cursor = MagicMock()
+    cursor.fetchone.return_value = None
+    cursor_context = MagicMock()
+    cursor_context.__enter__.return_value = cursor
+    cursor_context.__exit__.return_value = False
+    connection = MagicMock()
+    connection.cursor.return_value = cursor_context
+    connection_context = MagicMock()
+    connection_context.__enter__.return_value = connection
+    connection_context.__exit__.return_value = False
+    return cursor, connection_context
+
+
+def test_profile_update_scopes_record_lookup_to_candidate_and_organization():
+    cursor, db_context = _profile_db_context()
+    payload = EmploymentBase(employer_name="Example Ltd", job_title="Engineer")
+
+    with patch.object(candidate_profile, "_candidate_org", return_value=ORG_ID), \
+         patch.object(candidate_profile, "assert_org_member"), \
+         patch.object(candidate_profile, "get_connection", return_value=db_context):
+        with pytest.raises(HTTPException) as raised:
+            candidate_profile._execute(
+                CANDIDATE_ID,
+                {
+                    "kind": "employment",
+                    "action": "update",
+                    "user_id": USER_ID,
+                    "record_id": UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"),
+                    "payload": payload,
+                },
+            )
+
+    assert raised.value.status_code == 404
+    query, params = cursor.execute.call_args.args
+    assert "where id = %s and candidate_id = %s and organization_id = %s returning *" in query
+    assert params[-2:] == [
+        UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee"),
+        CANDIDATE_ID,
+        ORG_ID,
+    ][-2:]
+
+
+def test_profile_delete_scopes_record_lookup_to_candidate_and_organization():
+    cursor, db_context = _profile_db_context()
+    record_id = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+
+    with patch.object(candidate_profile, "_candidate_org", return_value=ORG_ID), \
+         patch.object(candidate_profile, "assert_org_member"), \
+         patch.object(candidate_profile, "get_connection", return_value=db_context):
+        with pytest.raises(HTTPException) as raised:
+            candidate_profile._execute(
+                CANDIDATE_ID,
+                {
+                    "kind": "employment",
+                    "action": "delete",
+                    "user_id": USER_ID,
+                    "record_id": record_id,
+                },
+            )
+
+    assert raised.value.status_code == 404
+    query, params = cursor.execute.call_args.args
+    assert "where id = %s and candidate_id = %s and organization_id = %s returning id" in query
+    assert params == [record_id, CANDIDATE_ID, ORG_ID]
