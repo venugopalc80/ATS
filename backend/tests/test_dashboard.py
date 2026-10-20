@@ -21,6 +21,7 @@ class FakeCursor:
         self.sql = ""
         self.params = []
         self.queries = []
+        self.job_status = "open"
 
     def __enter__(self):
         return self
@@ -58,7 +59,7 @@ class FakeCursor:
         if "left join public.applications" in self.sql:
             return [{
                 "id": JOB, "title": "Backend Engineer", "client": "Example Ltd",
-                "status": "open", "applicants": 1, "days_open": 42,
+                "status": self.job_status, "applicants": 1, "days_open": 42,
             }]
         if "from public.interviews i" in self.sql and "scheduled_at" in self.sql and "limit 10" in self.sql:
             if "feedback is null" in self.sql:
@@ -134,6 +135,26 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         for sql, params in cursor.queries:
             self.assertIn("organization_id", sql, f"Missing tenant scope in query: {sql}")
             self.assertIn(ORG, params, f"Missing requested organisation parameter: {sql}")
+
+
+    async def test_on_hold_vacancy_is_flagged_for_attention(self):
+        cursor = FakeCursor()
+        cursor.job_status = "on_hold"
+
+        @contextmanager
+        def fake_connection():
+            with FakeConnection(cursor) as connection:
+                yield connection
+
+        with patch.object(dashboard_router, "assert_org_member"), patch.object(
+            dashboard_router, "get_connection", fake_connection
+        ):
+            result = await dashboard_router.dashboard(
+                organization_id=ORG, date_from=None, date_to=None, user_id=USER,
+            )
+
+        self.assertEqual(result["jobs"][0]["health"], "needs_attention")
+        self.assertIn("Role is on hold", result["jobs"][0]["health_reasons"])
 
     async def test_rejects_non_member_before_database_access(self):
         with patch.object(
