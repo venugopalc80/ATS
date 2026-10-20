@@ -572,8 +572,8 @@ def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool
                 break
             # Some CVs use a single-word name; accept it only at the very top when contact details follow.
             nearby = " ".join(candidate_lines[line_index + 1:line_index + 4])
-            nearby_has_email = bool(re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}", nearby, re.I))
-            nearby_has_phone = bool(re.search(r"(?<!\\w)(?:\\+?\\d[\\d ().-]{7,}\\d)(?!\\w)", nearby))
+            nearby_has_email = bool(re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", nearby, re.I))
+            nearby_has_phone = bool(re.search(r"(?<!\w)(?:\+?\d[\d ().-]{7,}\d)(?!\w)", nearby))
             known_skill_lines = {skill.casefold() for skill in CV_SKILL_KEYWORDS}
             is_skill_heading = line.casefold() in known_skill_lines
             if line_index <= 2 and (nearby_has_email or nearby_has_phone) and len(line) >= 2 and not is_skill_heading:
