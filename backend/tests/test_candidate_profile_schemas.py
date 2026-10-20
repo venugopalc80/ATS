@@ -169,3 +169,11 @@ def test_profile_delete_scopes_record_lookup_to_candidate_and_organization():
     query, params = cursor.execute.call_args.args
     assert "where id = %s and candidate_id = %s and organization_id = %s returning id" in query
     assert params == [record_id, CANDIDATE_ID, ORG_ID]
+
+
+
+def test_missing_bearer_credentials_are_rejected():
+    with pytest.raises(HTTPException) as raised:
+        candidate_profile.get_current_user_id(None)
+    assert raised.value.status_code == 401
+    assert raised.value.detail == "Authentication required"
