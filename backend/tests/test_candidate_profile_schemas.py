@@ -71,3 +71,30 @@ def test_valid_profile_records_accept_normal_values():
     assert education.qualification == "MSc"
     assert certification.name == "Cloud Fundamentals"
     assert language.proficiency == "fluent"
+
+
+from unittest.mock import patch
+from uuid import UUID
+
+from fastapi import HTTPException
+
+from app.routers import candidate_profile
+
+
+ORG_ID = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
+USER_ID = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+CANDIDATE_ID = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
+
+
+def test_profile_route_denies_non_member_before_profile_database_access():
+    with patch.object(candidate_profile, "_candidate_org", return_value=ORG_ID), \
+         patch.object(candidate_profile, "assert_org_member", side_effect=HTTPException(status_code=403)), \
+         patch.object(candidate_profile, "get_connection") as get_connection:
+        with pytest.raises(HTTPException) as raised:
+            candidate_profile._execute(
+                CANDIDATE_ID,
+                {"kind": "employment", "action": "list", "user_id": USER_ID},
+            )
+
+    assert raised.value.status_code == 403
+    get_connection.assert_not_called()
