@@ -148,6 +148,9 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       );
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not extract CV details.");
       const result = await response.json() as { filename?: string; candidate_id?: string; extracted_profile?: ProfileSuggestion | null };
+      if (result.candidate_id && result.candidate_id.toLowerCase() !== candidateId.toLowerCase()) {
+        throw new Error("Safety check: this CV belongs to a different candidate. No profile details were applied.");
+      }
       if (!result.extracted_profile) throw new Error("The API did not return extracted profile details.");
       setProfileSuggestion(result.extracted_profile);
       setMessage("Re-extracted " + (result.filename || document.original_filename) + ". Review every field before applying it to this candidate.");
