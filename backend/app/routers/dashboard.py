@@ -199,14 +199,14 @@ async def dashboard(
                                 min(btrim(skill)) as label,
                                 count(distinct j.id)::int as open_roles
                          from public.jobs j
-                         cross join lateral unnest(j.required_skills) as skill
+                         cross join lateral unnest(j.required_skills) as required_skill(skill)
                          where j.organization_id=%s and j.status='open' and btrim(skill)<>''
                          group by lower(btrim(skill))
                        ), supply as (
                          select lower(btrim(skill)) as skill,
                                 count(distinct c.id)::int as active_candidates
                          from public.candidates c
-                         cross join lateral unnest(c.skills) as skill
+                         cross join lateral unnest(c.skills) as candidate_skill(skill)
                          where c.organization_id=%s and c.status='active' and btrim(skill)<>''
                          group by lower(btrim(skill))
                        )
