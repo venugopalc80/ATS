@@ -567,7 +567,11 @@ def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool
         if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line):
             tokens = [token.casefold() for token in line.split()]
             known_skill_tokens = {skill.casefold() for skill in CV_SKILL_KEYWORDS}
-            if len(tokens) >= 2 and not all(token in known_skill_tokens for token in tokens):
+            if len(tokens) >= 2:
+                if all(token in known_skill_tokens for token in tokens):
+                    # A skills row such as "Python SQL AWS" is not a candidate name,
+                    # even when an email address appears on a following line.
+                    continue
                 name = line
                 break
             # Some CVs use a single-word name; accept it only at the very top when contact details follow.
