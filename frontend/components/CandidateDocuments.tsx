@@ -91,6 +91,21 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
   async function applyExtractedProfile() {
     if (!profileSuggestion || !API_BASE || !org) return;
     const suggestion = profileSuggestion;
+    // Validate links before making any profile API calls so one malformed URL
+    // cannot cause an otherwise valid profile update to fail midway.
+    for (const [index, link] of (suggestion.links || []).entries()) {
+      let parsed: URL;
+      try {
+        parsed = new URL(link.url.trim());
+      } catch {
+        setMessage("Professional link " + (index + 1) + " is not a valid URL. Correct or remove it before applying the CV.");
+        return;
+      }
+      if ((parsed.protocol !== "https:" && parsed.protocol !== "http:") || !parsed.hostname) {
+        setMessage("Professional link " + (index + 1) + " must use a valid HTTP or HTTPS URL.");
+        return;
+      }
+    }
     const confirmed = window.confirm("Apply the extracted values to this candidate? Existing values may be updated, so review the fields before continuing.");
     if (!confirmed) return;
     setApplyingProfile(true);
