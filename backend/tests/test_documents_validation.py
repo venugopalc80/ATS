@@ -162,5 +162,23 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertIn("Collaborated with product and QA teams", role["description"])
 
 
+    def test_extracts_single_word_name_and_data_engineering_skills(self):
+        text = """Abhaya
+        Email: abhaya@example.com
+        Phone: +1 408-789-7830
+        PROFESSIONAL SUMMARY
+        AWS Cloud and Hadoop Developer with Snowflake, dbt, Oracle E-Business Suite,
+        ETL, data warehousing, data engineering and data governance experience.
+        CORE SKILLS
+        AWS Hadoop Snowflake dbt Oracle SQL
+        """
+        result = extract_cv_profile(text, "Abhaya AWS-BigData-Snowflake.docx")
+        self.assertEqual(result["first_name"], "Abhaya")
+        self.assertIsNone(result["last_name"])
+        self.assertEqual(result["email"], "abhaya@example.com")
+        for skill in ("aws", "hadoop", "snowflake", "dbt", "oracle e-business suite", "etl", "data warehousing", "data engineering", "data governance"):
+            self.assertIn(skill, result["skills"])
+
+
 if __name__ == "__main__":
     unittest.main()
