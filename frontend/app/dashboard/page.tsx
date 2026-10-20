@@ -224,7 +224,7 @@ export default function Dashboard() {
               { title: "Open jobs", value: data?.metrics.open_jobs, icon: "▣", href: "/jobs?status=open", detail: "Currently open vacancies" },
               { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates", detail: "Accessible candidate records" },
               { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews", detail: "Scheduled for today" },
-              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements", detail: (data?.metrics.placements_this_month ?? 0) + " created this month" },
+              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements", detail: data ? data.metrics.placements_this_month + " created this month" : "Monthly count unavailable" },
             ].map((metric) => (
               <Link key={metric.title} href={metric.href} className="card dashboard-metric-card" aria-label={metric.title + ", view records"}>
                 <div className="dashboard-metric-top"><span className="dashboard-metric-icon" aria-hidden="true">{metric.icon}</span><span className="metric-title">{metric.title}</span></div>
@@ -265,22 +265,28 @@ export default function Dashboard() {
           </div>
 
           <section className="card dashboard-pipeline-section">
-            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">Application counts for the selected date range · {totalPipeline} total</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
-            <div className="pipeline dashboard-pipeline">
-              {stages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
-                  <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong><span>{stage.label}</span>
-                </Link>
-              ))}
-            </div>
-            <div className="dashboard-terminal-stages">
-              <span className="muted-small">Terminal outcomes</span>
-              {terminalStages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
-                  {stage.label} <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong>
-                </Link>
-              ))}
-            </div>
+            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">{error ? "Pipeline data unavailable" : "Application counts for the selected date range · " + totalPipeline + " total"}</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
+            {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+              <div className="dashboard-empty" role="status"><strong>Hiring pipeline unavailable</strong><p>Application counts could not be loaded. Retry before interpreting hiring progress.</p></div>
+            ) : Object.keys(data?.pipeline ?? {}).length === 0 ? (
+              <div className="dashboard-empty"><strong>No pipeline activity in this date range</strong><p>Try a wider date range or review submissions.</p></div>
+            ) : <>
+              <div className="pipeline dashboard-pipeline">
+                {stages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
+                    <strong>{data?.pipeline[stage.key] ?? 0}</strong><span>{stage.label}</span>
+                  </Link>
+                ))}
+              </div>
+              <div className="dashboard-terminal-stages">
+                <span className="muted-small">Terminal outcomes</span>
+                {terminalStages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
+                    {stage.label} <strong>{data?.pipeline[stage.key] ?? 0}</strong>
+                  </Link>
+                ))}
+              </div>
+            </>
           </section>
 
           <div className="dashboard-section-grid dashboard-lower-grid">
