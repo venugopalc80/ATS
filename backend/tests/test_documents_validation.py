@@ -190,5 +190,27 @@ class DocumentValidationTests(unittest.TestCase):
             self.assertIn(skill, result["skills"])
 
 
+    def test_does_not_infer_location_from_employer_or_technology_pairs(self):
+        text = """Abhaya
+        abhaya@example.com
+        Phone: +1 408-789-7830
+        Current role: Architect
+        Neiman Marcus/Saks Global, AWS
+        CORE SKILLS
+        python, sql, aws, tableau, hadoop, snowflake, dbt
+        """
+        result = extract_cv_profile(text, "Abhaya AWS-BigData-Snowflake.docx")
+        self.assertIsNone(result["location"])
+
+    def test_accepts_explicitly_labelled_location_without_country(self):
+        text = """Abhaya
+        abhaya@example.com
+        Location: Sunnyvale, California
+        """
+        result = extract_cv_profile(text, "resume.docx")
+        self.assertEqual(result["location"]["city"], "Sunnyvale")
+        self.assertEqual(result["location"]["region"], "California")
+
+
 if __name__ == "__main__":
     unittest.main()
