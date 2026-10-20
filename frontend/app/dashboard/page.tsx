@@ -236,8 +236,10 @@ export default function Dashboard() {
 
           <div className="dashboard-section-grid">
             <section className="card dashboard-priorities" id="priorities">
-              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{data?.priorities.length ?? 0} items</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.priorities.length ? (
+              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{error ? "Unavailable" : (data?.priorities.length ?? 0) + " items"}</span></div>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Priorities unavailable</strong><p>We could not confirm whether any items need attention. Retry to load the latest data.</p></div>
+              ) : !data?.priorities.length ? (
                 <div className="dashboard-empty"><strong>You're all caught up</strong><p>No outstanding priority items were found for the current data.</p></div>
               ) : (
                 <div className="dashboard-priority-list">
@@ -285,7 +287,9 @@ export default function Dashboard() {
             <section className="card">
               <div className="card-head"><span className="card-title">Vacancy health</span><Link href="/jobs" className="link">All vacancies →</Link></div>
               <p className="muted-small">Rules: flag open roles older than {data?.rules.vacancy_target_days ?? 30} days or with fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.jobs.length ? (
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Vacancy health unavailable</strong><p>We could not load vacancy records. Retry before making staffing decisions.</p></div>
+              ) : !data?.jobs.length ? (
                 <div className="dashboard-empty"><strong>No vacancies to display</strong><p>Create a requisition to start tracking vacancy health.</p><Link href="/jobs" className="btn">View jobs</Link></div>
               ) : (
                 <div className="dashboard-vacancy-list">
@@ -302,7 +306,9 @@ export default function Dashboard() {
 
             <section className="card">
               <div className="card-head"><span className="card-title">Recent activity</span><span className="muted-small">Latest recorded events</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.activity.length ? (
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Recent activity unavailable</strong><p>Activity could not be loaded, so this view may not reflect the latest changes.</p></div>
+              ) : !data?.activity.length ? (
                 <div className="dashboard-empty"><strong>No activity yet</strong><p>Recruitment events will appear here when recorded.</p></div>
               ) : (
                 <div className="activity dashboard-activity">
