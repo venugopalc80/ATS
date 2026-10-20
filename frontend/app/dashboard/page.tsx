@@ -286,7 +286,7 @@ export default function Dashboard() {
                   </Link>
                 ))}
               </div>
-            </>
+            </>}
           </section>
 
           <div className="dashboard-section-grid dashboard-lower-grid">
