@@ -85,6 +85,8 @@ async def dashboard(
                 for job in job_rows:
                     job = dict(job)
                     reasons = []
+                    if job["status"] == "on_hold":
+                        reasons.append("Role is on hold")
                     if job["status"] == "open" and job["days_open"] > VACANCY_TARGET_DAYS:
                         reasons.append(f"Open for more than {VACANCY_TARGET_DAYS} days")
                     if job["status"] == "open" and job["applicants"] < VACANCY_MIN_APPLICATIONS:
