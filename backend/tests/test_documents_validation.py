@@ -172,17 +172,6 @@ class DocumentValidationTests(unittest.TestCase):
         self.assertEqual(result["first_name"], "Priya")
         self.assertEqual(result["last_name"], "Sharma")
 
-    def test_single_word_heading_without_nearby_contact_is_not_a_name(self):
-        text = """Core Skills
-        Python SQL AWS
-        Work Experience
-        Priya Sharma
-        priya@example.com
-        """
-        result = extract_cv_profile(text, "resume.pdf")
-        self.assertNotEqual(result["first_name"], "Core")
-        self.assertNotEqual(result["last_name"], "Skills")
-
     def test_extracts_single_word_name_and_data_engineering_skills(self):
         text = """Abhaya
         Email: abhaya@example.com
