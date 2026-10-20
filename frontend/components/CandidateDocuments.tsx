@@ -35,7 +35,14 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
     } catch (error) { setMessage(error instanceof Error ? error.message : "Could not load documents."); }
     finally { setLoading(false); }
   }
-  useEffect(() => { void load(); }, [candidateId]);
+  useEffect(() => {
+    const savedMessage = window.sessionStorage.getItem("aqerith-cv-apply-message");
+    if (savedMessage) {
+      setMessage(savedMessage);
+      window.sessionStorage.removeItem("aqerith-cv-apply-message");
+    }
+    void load();
+  }, [candidateId]);
 
   async function upload(file?: File) {
     if (!file || !org) return;
@@ -136,9 +143,11 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       await saveRows("education", (suggestion.education || []) as unknown as Array<Record<string, unknown>>, ["institution_name", "qualification"], ["institution_name", "qualification", "start_date", "end_date"]);
       await saveRows("certifications", (suggestion.certifications || []) as unknown as Array<Record<string, unknown>>, ["name"]);
       await saveRows("languages", (suggestion.languages || []) as unknown as Array<Record<string, unknown>>, ["language"]);
-      setMessage("Reviewed CV details applied. Candidate profile and supported profile sections have been updated.");
-      window.location.reload();
+      const successMessage = "Reviewed CV details saved. The page is refreshing to show the updated candidate profile and supported profile sections.";
+      // Preserve feedback across the refresh so success is not lost immediately.
+      window.sessionStorage.setItem("aqerith-cv-apply-message", successMessage);
       setProfileSuggestion(null);
+      window.location.reload();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not apply extracted details.");
     } finally {
