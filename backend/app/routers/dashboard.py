@@ -167,6 +167,57 @@ async def dashboard(
                 )
                 awaiting_decision = cursor.fetchone()["total"]
 
+                # Team workload is based only on explicitly assigned open vacancies.
+                # Keep every join organisation-scoped to avoid cross-tenant aggregation.
+                cursor.execute(
+                    """select om.user_id,
+                              coalesce(nullif(btrim(p.full_name), ''), nullif(btrim(p.email), ''), 'Team member') as name,
+                              count(distinct j.id) filter (where j.status='open')::int as open_vacancies,
+                              count(distinct a.id) filter (where a.status in ('new','screening','submitted','interview','offer'))::int as active_applications,
+                              count(distinct a.id) filter (where a.status in ('submitted','interview','offer')
+                                and a.updated_at < now() - interval '3 days')::int as overdue_decisions
+                       from public.organization_members om
+                       left join public.profiles p on p.id=om.user_id
+                       left join public.jobs j on j.organization_id=om.organization_id
+                         and j.recruiter_id=om.user_id and j.status in ('open','on_hold')
+                       left join public.applications a on a.organization_id=om.organization_id and a.job_id=j.id
+                       where om.organization_id=%s
+                       group by om.user_id,p.full_name,p.email
+                       order by count(distinct j.id) filter (where j.status='open') desc,
+                                count(distinct a.id) filter (where a.status in ('new','screening','submitted','interview','offer')) desc
+                       limit 10""",
+                    [organization_id],
+                )
+                team_workload = list(cursor.fetchall())
+
+                # Compare explicitly recorded required skills on open jobs with
+                # skills recorded on active candidates. This is descriptive supply
+                # and demand, not an automated hiring decision.
+                cursor.execute(
+                    """with demand as (
+                         select lower(btrim(skill)) as skill,
+                                min(btrim(skill)) as label,
+                                count(distinct j.id)::int as open_roles
+                         from public.jobs j
+                         cross join lateral unnest(j.required_skills) as skill
+                         where j.organization_id=%s and j.status='open' and btrim(skill)<>''
+                         group by lower(btrim(skill))
+                       ), supply as (
+                         select lower(btrim(skill)) as skill,
+                                count(distinct c.id)::int as active_candidates
+                         from public.candidates c
+                         cross join lateral unnest(c.skills) as skill
+                         where c.organization_id=%s and c.status='active' and btrim(skill)<>''
+                         group by lower(btrim(skill))
+                       )
+                       select d.skill,d.label,d.open_roles,coalesce(s.active_candidates,0)::int as active_candidates
+                       from demand d left join supply s on s.skill=d.skill
+                       order by d.open_roles desc, coalesce(s.active_candidates,0) asc, d.label asc
+                       limit 8""",
+                    [organization_id, organization_id],
+                )
+                talent_intelligence = list(cursor.fetchall())
+
         priorities = []
         for row in todays_interviews:
             priorities.append({
@@ -227,6 +278,25 @@ async def dashboard(
             "vacancy_health": vacancy_health,
             "priorities": priorities[:20],
             "activity": activity,
+            "team_workload": [
+                {
+                    "user_id": str(row["user_id"]),
+                    "name": row["name"],
+                    "open_vacancies": row["open_vacancies"],
+                    "active_applications": row["active_applications"],
+                    "overdue_decisions": row["overdue_decisions"],
+                }
+                for row in team_workload
+            ],
+            "talent_intelligence": [
+                {
+                    "skill": row["label"],
+                    "open_roles": row["open_roles"],
+                    "active_candidates": row["active_candidates"],
+                    "gap": max(row["open_roles"] - row["active_candidates"], 0),
+                }
+                for row in talent_intelligence
+            ],
             "rules": {
                 "vacancy_target_days": VACANCY_TARGET_DAYS,
                 "vacancy_min_applications": VACANCY_MIN_APPLICATIONS,
