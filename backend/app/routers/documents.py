@@ -555,15 +555,22 @@ def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool
         r"nurse|doctor|researcher|intern|assistant|student)\b"
     )
     name = ""
-    for raw_line in text.splitlines()[:15]:
+    candidate_lines = text.splitlines()[:15]
+    for line_index, raw_line in enumerate(candidate_lines):
         line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
         if not line or len(line) > 80 or "@" in line or "http" in line.lower() or re.search(r"\d{3}", line):
             continue
         if line.casefold() in excluded or len(line.split()) > 5 or role_heading.search(line):
             continue
-        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
-            name = line
-            break
+        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line):
+            if len(line.split()) >= 2:
+                name = line
+                break
+            # Some CVs use a single-word name; accept it only at the very top when contact details follow.
+            nearby = " ".join(candidate_lines[line_index + 1:line_index + 4])
+            if line_index <= 2 and (email_match or phone_match) and len(line) >= 2:
+                name = line
+                break
     if not name and use_filename_fallback:
         stem = Path(filename).stem
         stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
