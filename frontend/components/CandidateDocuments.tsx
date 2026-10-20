@@ -47,7 +47,15 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       const body = new FormData(); body.append("file", file);
       const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(org) + "&candidate_id=" + encodeURIComponent(candidateId), { method: "POST", body });
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "CV upload failed.");
-      const uploaded = await response.json() as { extracted_profile?: ProfileSuggestion | null };
+      const uploaded = await response.json() as { candidate_id?: string; extracted_profile?: ProfileSuggestion | null };
+      // Fail closed: never display extracted personal data unless the API confirms it
+      // belongs to the candidate whose profile is currently open.
+      if (!uploaded.candidate_id || uploaded.candidate_id.toLowerCase() !== candidateId.toLowerCase()) {
+        setProfileSuggestion(null);
+        setMessage("Safety check: the upload response did not confirm this document belongs to the open candidate. The file may have been uploaded; refresh the document list and verify its association before reviewing extracted details.");
+        await load();
+        return;
+      }
       // Always open the review panel after a successful upload. Older API deployments or
       // unexpected response shapes must not make the extraction workflow silently disappear.
       const suggestion = uploaded.extracted_profile ?? {
