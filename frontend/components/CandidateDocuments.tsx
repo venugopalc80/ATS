@@ -110,6 +110,10 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
     if (!confirmed) return;
     setApplyingProfile(true);
     setMessage("");
+    // The API currently saves the main candidate and structured sections in
+    // separate requests, not one transaction. Track committed writes so errors
+    // never imply that the whole operation rolled back.
+    let anyChangesCommitted = false;
     try {
       const payload: Record<string, unknown> = {};
       if (suggestion.first_name) payload.first_name = suggestion.first_name;
@@ -134,6 +138,7 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       if (Object.keys(payload).length) {
         const response = await apiFetch(API_BASE + "/api/candidates/" + encodeURIComponent(candidateId), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
         if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not update candidate profile.");
+        anyChangesCommitted = true;
       }
       const profilePath = API_BASE + "/api/candidates/" + encodeURIComponent(candidateId) + "/profile/";
       const saveRows = async (kind: string, rows: Array<Record<string, unknown>>, required: string[], identityKeys: string[] = required) => {
@@ -149,8 +154,9 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
           const response = await apiFetch(profilePath + kind, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(row) });
           if (!response.ok) {
             const body = await response.json().catch(() => null) as { detail?: string } | null;
-            throw new Error(body?.detail || "Some profile details could not be saved. Refresh the profile and check for partial results.");
+            throw new Error(body?.detail || "Some profile details could not be saved.");
           }
+          anyChangesCommitted = true;
           existingRows.push(row);
         }
       };
@@ -164,7 +170,10 @@ export default function CandidateDocuments({ candidateId }: { candidateId: strin
       setProfileSuggestion(null);
       window.location.reload();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : "Could not apply extracted details.");
+      const detail = error instanceof Error ? error.message : "Could not apply extracted details.";
+      setMessage(anyChangesCommitted
+        ? "Some CV details may already have been saved before the error: " + detail + " Refresh the candidate profile and review each section before retrying to avoid duplicate entries."
+        : detail);
     } finally {
       setApplyingProfile(false);
     }
