@@ -307,6 +307,11 @@ CV_SKILL_KEYWORDS = (
     "kubernetes", "machine learning", "deep learning", "tensorflow", "pytorch",
     "data analysis", "power bi", "tableau", "excel", "django", "fastapi",
     "project management", "salesforce", "account management", "recruitment",
+    "hadoop", "snowflake", "dbt", "oracle", "oracle e-business suite", "etl",
+    "data warehousing", "data engineering", "data modeling", "data modelling",
+    "apache spark", "spark", "airflow", "databricks", "redshift", "bigquery",
+    "financial applications", "business intelligence", "data governance",
+    "data quality", "aws cloud", "oracle ebs", "pl/sql", "linux", "git",
 )
 
 
