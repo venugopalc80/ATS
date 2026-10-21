@@ -73,6 +73,8 @@ class FakeCursor:
                 "scheduled_at": datetime(2026, 10, 13, 10, tzinfo=timezone.utc),
                 "status": "scheduled",
             }]
+        if "from public.recruiter_tasks" in self.sql:
+            return []
         if "from public.offers o" in self.sql:
             return [{
                 "id": OFFER, "application_id": "app-2", "title": "Offer for Analyst",
