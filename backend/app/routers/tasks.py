@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from psycopg import IntegrityError
 
 from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
@@ -25,6 +26,8 @@ def _ensure_links(organization_id: UUID, candidate_id: UUID | None, job_id: UUID
                         raise HTTPException(status_code=404, detail="Vacancy not found in this organization")
     except HTTPException:
         raise
+    except IntegrityError as exc:
+        raise HTTPException(status_code=422, detail="Task references or status are invalid") from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Database operation failed") from exc
 
@@ -94,6 +97,8 @@ async def create_task(payload: TaskCreate, user_id: UUID = Depends(get_current_u
                     [payload.organization_id,payload.title,payload.description,payload.task_type,payload.priority,payload.due_at,payload.candidate_id,payload.job_id,payload.assigned_to,user_id],
                 )
                 return TaskOut.model_validate(cursor.fetchone())
+    except IntegrityError as exc:
+        raise HTTPException(status_code=422, detail="Task references or status are invalid") from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Database operation failed") from exc
 
