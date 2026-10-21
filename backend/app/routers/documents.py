@@ -318,13 +318,14 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
     parts = name.split()
     first_name = (parts[0] if parts else "CV candidate")[:100]
     last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
-    # Extract a likely current/recent role only when the CV gives a recognisable signal.
+    # Prefer explicitly labelled roles; fallback only to recognisable role titles near the top.
     title = None
     title_patterns = (
         r"^(?:current\s+(?:job\s+)?title|professional title|role|position|designation)\s*[:：-]\s*(.+)$",
         r"^((?:(?:senior|junior|lead|principal|staff|associate|assistant|head of|director of|chief)\s+)?[A-Za-z][A-Za-z /&(),.+-]{2,55}\b(?:engineer|developer|analyst|scientist|manager|consultant|architect|administrator|designer|specialist|recruiter|accountant|coordinator|technician|director|officer|nurse|teacher|researcher|intern)\b.*)$",
     )
-    for line in [re.sub(r"\s+", " ", item).strip(" \t|•-") for item in text.splitlines()[:35]]:
+    opening_lines = [re.sub(r"\s+", " ", item).strip(" \t|•-") for item in text.splitlines()[:35]]
+    for line in opening_lines:
         if not line or len(line) > 90 or "@" in line or line.casefold() in excluded:
             continue
         for pattern in title_patterns:
@@ -336,6 +337,7 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
                     break
         if title:
             break
+
     experience = None
     for pattern in (
         r"(?:total\s+)?(?:work\s+)?experience\s*[:：-]?\s*(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?",
@@ -347,6 +349,23 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
             if 0 <= value <= 80:
                 experience = value
                 break
+
+    education = None
+    education_heading = re.compile(r"^\s*(education|academic background|qualifications|educational qualifications)\s*[:：]?\s*$", re.I)
+    section_heading = re.compile(r"^\s*(work experience|professional experience|employment history|skills|certifications|projects|references|awards|publications)\s*[:：]?\s*$", re.I)
+    for index, line in enumerate(text.splitlines()):
+        if education_heading.match(line.strip()):
+            collected = []
+            for candidate_line in text.splitlines()[index + 1:index + 9]:
+                clean = re.sub(r"\s+", " ", candidate_line).strip(" \t|•-")
+                if section_heading.match(clean):
+                    break
+                if clean and len(clean) <= 180:
+                    collected.append(clean)
+            if collected:
+                education = " | ".join(collected)[:500]
+                break
+
     skills = [skill for skill in CV_SKILL_KEYWORDS if re.search(r"(?<![a-z0-9])" + re.escape(skill) + r"(?![a-z0-9])", text, re.I)]
     return {
         "first_name": first_name,
@@ -355,6 +374,7 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         "phone": re.sub(r"\s+", " ", phone_match.group(0)).strip()[:50] if phone_match else None,
         "current_title": title,
         "years_experience": experience,
+        "education": education,
         "skills": skills[:30],
     }
 
