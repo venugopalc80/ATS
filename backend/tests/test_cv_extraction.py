@@ -58,3 +58,40 @@ def test_cv_candidate_fields_extracts_education_section():
 def test_section_heading_is_not_mistaken_for_candidate_name():
     fields = cv_candidate_fields("CORE SKILLS\npython, sql, aws\nAbhaya\nexample@example.com", "resume.pdf")
     assert fields["first_name"] == "Abhaya"
+
+
+
+def test_fullstack_architect_header_layout():
+    text = (
+        "Siva Rama Krishna Prasad Padamata\n"
+        "Sr. Fullstack Architect\n"
+        "West Chester, PA 19382\n"
+        "candidate@example.com\n"
+        "+1 628-262-0002\n"
+        "A results-driven Fullstack Architect with over a decade of experience.\n"
+        "PROFESSIONAL EXPERIENCE\n"
+        "Fullstack Architect"
+    )
+    fields = cv_candidate_fields(text, "Siva_Padamata___Fullstack_Architect.docx")
+    assert fields["first_name"] == "Siva"
+    assert fields["last_name"] == "Rama Krishna Prasad Padamata"
+    assert fields["current_title"] == "Sr. Fullstack Architect"
+    assert fields["email"] == "candidate@example.com"
+
+
+def test_java_lead_pdf_header_layout():
+    text = (
+        "Jeevan Reddy Bandi\n"
+        "Email ID: jeevan@example.com\n"
+        "Contact Number: 972-363-9478\n"
+        "Professional Summary:\n"
+        "I have 16+ years of experience in all phases of software development life cycle.\n"
+        "Lead role provided technical guidance to a team of Java developers.\n"
+        "Professional Experience\n"
+        "Java Lead Developer"
+    )
+    fields = cv_candidate_fields(text, "Jeevan-Java Lead Developer.pdf")
+    assert fields["first_name"] == "Jeevan"
+    assert fields["last_name"] == "Reddy Bandi"
+    assert fields["years_experience"] == 16.0
+    assert fields["email"] == "jeevan@example.com"
