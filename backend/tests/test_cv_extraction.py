@@ -166,3 +166,14 @@ def test_explicit_role_after_long_summary_is_found_in_employment_history():
     fields = cv_candidate_fields(text, "taylor-morgan.pdf")
     assert fields["first_name"] == "Taylor"
     assert fields["current_title"] == "Senior Platform Engineer"
+
+
+
+def test_filename_is_not_used_as_candidate_name_when_text_has_no_name():
+    fields = cv_candidate_fields(
+        "Professional Summary\\nSenior Software Engineer\\n"
+        "alex@example.com\\n10 years of experience in software development.",
+        "Senior-Software-Engineer-Agency-Resume.pdf",
+    )
+    assert fields["first_name"] == "CV candidate"
+    assert fields["last_name"] is None
