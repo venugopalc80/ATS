@@ -33,6 +33,7 @@ type Priority = {
   href: string;
   due_at: string | null;
 };
+type CandidateOption = { id: string; first_name: string; last_name?: string | null; email?: string | null };
 type RecruiterTask = {
   id: string;
   title: string;
@@ -107,6 +108,7 @@ export default function Dashboard() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
   const [tasks, setTasks] = useState<RecruiterTask[]>([]);
+  const [taskCandidates, setTaskCandidates] = useState<CandidateOption[]>([]);
   const [tasksLoading, setTasksLoading] = useState(true);
   const [tasksError, setTasksError] = useState("");
   const [taskTitle, setTaskTitle] = useState("");
@@ -130,6 +132,12 @@ export default function Dashboard() {
       const response = await apiFetch(API_BASE + "/api/tasks?organization_id=" + encodeURIComponent(org) + "&status=open&limit=50");
       if (!response.ok) throw new Error(response.status === 403 ? "You don't have access to tasks in this organisation." : "Tasks are temporarily unavailable (HTTP " + response.status + ").");
       setTasks(await response.json());
+      try {
+        const candidatesResponse = await apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(org));
+        if (candidatesResponse.ok) setTaskCandidates(await candidatesResponse.json());
+      } catch {
+        // Candidate selection is optional for ordinary tasks; don't hide task results.
+      }
     } catch (cause) {
       setTasksError(cause instanceof Error ? cause.message : "Unable to load tasks.");
     } finally {
@@ -404,7 +412,7 @@ export default function Dashboard() {
             <form className="dashboard-task-form" onSubmit={createTask}>
               <label>Task title<input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} required maxLength={240} placeholder="e.g. Follow up after screening" /></label>
               <label>Type<select value={taskType} onChange={(event) => setTaskType(event.target.value as "task" | "candidate_follow_up")}><option value="task">Recruiter task</option><option value="candidate_follow_up">Candidate follow-up</option></select></label>
-              {taskType === "candidate_follow_up" && <label>Candidate ID<input value={taskCandidateId} onChange={(event) => setTaskCandidateId(event.target.value)} required placeholder="Candidate record UUID" /></label>}
+              {taskType === "candidate_follow_up" && <label>Candidate<select value={taskCandidateId} onChange={(event) => setTaskCandidateId(event.target.value)} required><option value="">Choose a candidate</option>{taskCandidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{[candidate.first_name, candidate.last_name].filter(Boolean).join(" ")}{candidate.email ? " · " + candidate.email : ""}</option>)}</select></label>}
               <label>Due date<input type="datetime-local" value={taskDueAt} onChange={(event) => setTaskDueAt(event.target.value)} /></label>
               <label>Priority<select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value as "low" | "normal" | "high" | "urgent")}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
               <button className="btn primary" type="submit" disabled={taskSaving || !taskTitle.trim()}>{taskSaving ? "Saving…" : "Add task"}</button>
