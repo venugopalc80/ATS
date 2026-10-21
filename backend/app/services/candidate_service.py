@@ -108,8 +108,9 @@ class CandidateService:
                     data["organization_id"] = organization_id
                     columns = list(data.keys())
                     placeholders = ", ".join(["%s"] * len(columns))
+                    column_list = ", ".join(columns)
                     cursor.execute(
-                        f"insert into public.candidates ({", ".join(columns)}) "
+                        f"insert into public.candidates ({column_list}) "
                         f"values ({placeholders}) returning {CANDIDATE_COLUMNS}",
                         [data[column] for column in columns],
                     )
