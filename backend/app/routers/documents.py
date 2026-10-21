@@ -318,12 +318,43 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
     parts = name.split()
     first_name = (parts[0] if parts else "CV candidate")[:100]
     last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
+    # Extract a likely current/recent role only when the CV gives a recognisable signal.
+    title = None
+    title_patterns = (
+        r"^(?:current\s+(?:job\s+)?title|professional title|role|position|designation)\s*[:：-]\s*(.+)$",
+        r"^((?:(?:senior|junior|lead|principal|staff|associate|assistant|head of|director of|chief)\s+)?[A-Za-z][A-Za-z /&(),.+-]{2,55}\b(?:engineer|developer|analyst|scientist|manager|consultant|architect|administrator|designer|specialist|recruiter|accountant|coordinator|technician|director|officer|nurse|teacher|researcher|intern)\b.*)$",
+    )
+    for line in [re.sub(r"\s+", " ", item).strip(" \t|•-") for item in text.splitlines()[:35]]:
+        if not line or len(line) > 90 or "@" in line or line.casefold() in excluded:
+            continue
+        for pattern in title_patterns:
+            match = re.match(pattern, line, re.I)
+            if match:
+                candidate_title = match.group(1).strip(" .|:-")
+                if 3 <= len(candidate_title) <= 100 and candidate_title.casefold() not in excluded:
+                    title = candidate_title[:100]
+                    break
+        if title:
+            break
+    experience = None
+    for pattern in (
+        r"(?:total\s+)?(?:work\s+)?experience\s*[:：-]?\s*(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?",
+        r"(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?experience",
+    ):
+        match = re.search(pattern, text[:12000], re.I)
+        if match:
+            value = float(match.group(1))
+            if 0 <= value <= 80:
+                experience = value
+                break
     skills = [skill for skill in CV_SKILL_KEYWORDS if re.search(r"(?<![a-z0-9])" + re.escape(skill) + r"(?![a-z0-9])", text, re.I)]
     return {
         "first_name": first_name,
         "last_name": last_name[:100] if last_name else None,
         "email": email_match.group(0).lower() if email_match else None,
         "phone": re.sub(r"\s+", " ", phone_match.group(0)).strip()[:50] if phone_match else None,
+        "current_title": title,
+        "years_experience": experience,
         "skills": skills[:30],
     }
 
