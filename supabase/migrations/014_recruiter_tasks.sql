@@ -1,4 +1,6 @@
 -- Organisation-scoped recruiter tasks and candidate follow-ups for dashboard priorities.
+create unique index if not exists candidates_id_org_unique_idx on public.candidates (id, organization_id);
+create unique index if not exists jobs_id_org_unique_idx on public.jobs (id, organization_id);
 create table if not exists public.recruiter_tasks (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
