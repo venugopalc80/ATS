@@ -95,3 +95,16 @@ def test_java_lead_pdf_header_layout():
     assert fields["last_name"] == "Reddy Bandi"
     assert fields["years_experience"] == 16.0
     assert fields["email"] == "jeevan@example.com"
+
+
+def test_header_title_is_preferred_over_older_role_label():
+    text = (
+        "Alex Morgan\nSenior Data Engineer\nalex@example.com\n"
+        "PROFESSIONAL SUMMARY\nExperienced engineer with 12 years of experience.\n"
+        "PROFESSIONAL EXPERIENCE\n"
+        "Role: Junior Software Developer\n"
+        "Previous employer, 2014–2017"
+    )
+    fields = cv_candidate_fields(text, "alex-morgan.pdf")
+    assert fields["current_title"] == "Senior Data Engineer"
+    assert fields["years_experience"] == 12.0
