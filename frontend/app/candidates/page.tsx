@@ -380,7 +380,7 @@ export default function CandidatesPage() {
         const countryCode = (countryCodes[rawCountry.toLowerCase()] || rawCountry).toUpperCase();
         const experience = get("years_experience");
         const statusRaw = get("status").toLowerCase().replace(/[ -]+/g, "_");
-        const statusAliases: Record<string, Candidate["status"]> = { "new lead": "active", "new": "active", "available": "active", "do_not_contact": "do_not_contact", "do not contact": "do_not_contact", "placed": "placed", "inactive": "inactive", "active": "active" };
+        const statusAliases: Record<string, Candidate["status"]> = { "new_lead": "active", "new": "active", "available": "active", "do_not_contact": "do_not_contact", "placed": "placed", "inactive": "inactive", "active": "active" };
         const statusValue = statusAliases[statusRaw] || statusRaw;
         const errors: string[] = [];
         if (!firstName) errors.push("Candidate name is required");
