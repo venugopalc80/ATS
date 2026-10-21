@@ -53,5 +53,5 @@ create policy recruiter_tasks_member_delete on public.recruiter_tasks
   using (public.is_org_member(organization_id));
 
 -- Prevent anonymous table-level operations (RLS does not restrict TRUNCATE).
-revoke all on table public.recruiter_tasks from anon;
+revoke all on table public.recruiter_tasks from anon, authenticated;
 grant select, insert, update, delete on table public.recruiter_tasks to authenticated;
