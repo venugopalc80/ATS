@@ -293,6 +293,13 @@ def extract_cv_text(data: bytes, mime: str) -> str:
 
 
 def cv_candidate_fields(text: str, filename: str) -> dict:
+    """Extract conservative candidate fields from selectable CV text.
+
+    Keep this deterministic and explainable: section headings and explicit labels
+    take priority over broad guesses. Image-only PDFs require OCR before this runs.
+    """
+    lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
+    lines = [line for line in lines if line]
     email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
     phone_match = re.search(r"(?<!\w)(?:\+?\d[\d ()\-.]{7,}\d)(?!\w)", text)
     excluded = {
@@ -300,22 +307,31 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         "summary", "profile", "contact", "contact details", "work experience",
         "professional experience", "education", "skills", "experience",
         "core skills", "key skills", "technical skills", "soft skills",
-        "career summary", "professional summary", "objective", "career objective",
-        "personal details", "personal information", "about me", "highlights",
-        "certifications", "projects", "languages", "references", "achievements",
+        "career summary", "objective", "career objective", "personal details",
+        "personal information", "about me", "highlights", "certifications",
+        "projects", "languages", "references", "achievements", "areas of expertise",
     }
+    # Name: prefer early standalone text that looks like a person's name; never
+    # use a section heading or a role/title line. Single-word names are supported.
     name = ""
-    for raw_line in text.splitlines()[:15]:
-        line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
-        if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+    role_words = re.compile(
+        r"\b(engineer|developer|analyst|scientist|manager|consultant|architect|"
+        r"administrator|designer|specialist|recruiter|accountant|coordinator|"
+        r"technician|director|officer|nurse|teacher|researcher|intern|scrum master)\b", re.I
+    )
+    for line in lines[:18]:
+        if len(line) > 70 or "@" in line or re.search(r"\d{3}", line):
             continue
-        if line.casefold().rstrip(":") in excluded or len(line.split()) > 5:
+        if line.casefold().rstrip(":") in excluded or role_words.search(line):
             continue
-        # CVs often show a single given name (e.g. "Abhaya") on its own.
-        # Accept one-word names only when they look like a name, not a section label.
+        if re.match(r"^(name|email|phone|mobile|tel)\s*:", line, re.I):
+            if line.lower().startswith("name:"):
+                line = line.split(":", 1)[1].strip()
+            else:
+                continue
         if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'’. -]*", line):
             words = line.split()
-            if len(words) >= 2 or (len(words) == 1 and line[0].isupper() and len(line) >= 3 and line.casefold() not in excluded):
+            if 1 <= len(words) <= 5 and len(line) >= 3:
                 name = line
                 break
     if not name:
@@ -326,35 +342,57 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
     parts = name.split()
     first_name = (parts[0] if parts else "CV candidate")[:100]
     last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
-    # Prefer explicitly labelled roles; fallback only to recognisable role titles near the top.
+
     title = None
-    title_patterns = (
-        r"^(?:current\s+(?:job\s+)?title|professional title|role|position|designation)\s*[:：-]\s*(.+)$",
-        r"^((?:(?:sr\.?|jr\.?|senior|junior|lead|principal|staff|associate|assistant|head of|director of|chief)\s+)?[A-Za-z][A-Za-z /&(),.+-]{2,65}\b(?:engineer|developer|analyst|scientist|manager|consultant|architect|administrator|designer|specialist|recruiter|accountant|coordinator|technician|director|officer|nurse|teacher|researcher|intern)\b.*)$",
+    title_prefix = re.compile(r"^(?:role|current\s+(?:job\s+)?title|professional title|position|designation)\s*[:：-]\s*(.+)$", re.I)
+    title_terms = re.compile(
+        r"\b(engineer|developer|analyst|scientist|manager|consultant|architect|"
+        r"administrator|designer|specialist|recruiter|accountant|coordinator|"
+        r"technician|director|officer|nurse|teacher|researcher|intern|scrum master)\b", re.I
     )
-    opening_lines = [re.sub(r"\s+", " ", item).strip(" \t|•-") for item in text.splitlines()[:35]]
-    for line in opening_lines:
-        if not line or len(line) > 90 or "@" in line or line.casefold() in excluded:
-            continue
-        for pattern in title_patterns:
-            match = re.match(pattern, line, re.I)
-            if match:
-                candidate_title = match.group(1).strip(" .|:-")
-                # A CV experience line often combines title, employer, location and dates.
-                candidate_title = re.split(r"\s+(?:at|@)\s+|\s{2,}|\s+[|•]\s+", candidate_title, maxsplit=1, flags=re.I)[0]
-                candidate_title = re.sub(r"\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}.*$", "", candidate_title, flags=re.I)
-                if 3 <= len(candidate_title) <= 100 and candidate_title.casefold() not in excluded:
-                    title = candidate_title[:100]
-                    break
-        if title:
+    def clean_title(raw: str) -> str | None:
+        value = raw.strip(" .|:-")
+        value = re.split(r"\s+(?:at|@)\s+", value, maxsplit=1, flags=re.I)[0]
+        value = re.sub(r"\s{2,}.*$", "", value)
+        value = re.sub(r"\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*[’']?\s*\d{2,4}.*$", "", value, flags=re.I)
+        value = re.sub(r"\s+\(?\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*[’']?\s*\d{2,4}\b.*$", "", value, flags=re.I)
+        return value[:100].strip() if 3 <= len(value.strip()) <= 100 and title_terms.search(value) else None
+
+    # Explicit Role: lines in professional history are the strongest signal.
+    for idx, line in enumerate(lines):
+        if idx > 180:
             break
+        match = title_prefix.match(line)
+        if match:
+            candidate = clean_title(match.group(1))
+            if candidate:
+                title = candidate
+                break
+    # Header titles commonly follow the name/contact lines.
+    if not title:
+        for line in lines[:24]:
+            if len(line) <= 100 and "@" not in line and not re.search(r"\d{3}", line):
+                candidate = clean_title(line)
+                if candidate:
+                    title = candidate
+                    break
+    # Otherwise use the first explicit role-like line in professional history.
+    if not title:
+        experience_idx = next((i for i, line in enumerate(lines) if re.search(r"^(professional experience|work experience|employment history)\b", line, re.I)), None)
+        search_lines = lines[experience_idx:experience_idx + 100] if experience_idx is not None else []
+        for line in search_lines:
+            candidate = clean_title(line)
+            if candidate:
+                title = candidate
+                break
 
     experience = None
     for pattern in (
-        r"(?:total\s+)?(?:work\s+)?experience\s*[:：-]?\s*(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?",
-        r"(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?experience",
+        r"(?:total\s+)?(?:professional\s+|work\s+)?experience\s*[:：-]?\s*(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?",
+        r"(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?(?:professional\s+)?experience",
+        r"around\s+(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+of\s+experience",
     ):
-        match = re.search(pattern, text[:12000], re.I)
+        match = re.search(pattern, text[:16000], re.I)
         if match:
             value = float(match.group(1))
             if 0 <= value <= 80:
@@ -363,16 +401,15 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
 
     education = None
     education_heading = re.compile(r"^\s*(education|academic background|qualifications|educational qualifications)\s*[:：]?\s*$", re.I)
-    section_heading = re.compile(r"^\s*(work experience|professional experience|employment history|skills|certifications|projects|references|awards|publications)\s*[:：]?\s*$", re.I)
-    for index, line in enumerate(text.splitlines()):
-        if education_heading.match(line.strip()):
+    section_heading = re.compile(r"^\s*(professional experience|work experience|employment history|technical skills|skills|areas of expertise|certifications|projects|references|awards|publications)\s*[:：]?\s*$", re.I)
+    for index, line in enumerate(lines):
+        if education_heading.match(line):
             collected = []
-            for candidate_line in text.splitlines()[index + 1:index + 9]:
-                clean = re.sub(r"\s+", " ", candidate_line).strip(" \t|•-")
-                if section_heading.match(clean):
+            for candidate_line in lines[index + 1:index + 12]:
+                if section_heading.match(candidate_line):
                     break
-                if clean and len(clean) <= 180:
-                    collected.append(clean)
+                if len(candidate_line) <= 220 and not candidate_line.lower().startswith(("•", "-")):
+                    collected.append(candidate_line)
             if collected:
                 education = " | ".join(collected)[:500]
                 break
@@ -388,7 +425,6 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         "education": education,
         "skills": skills[:30],
     }
-
 
 @router.post("/bulk-cv", status_code=200)
 async def bulk_upload_cvs(
