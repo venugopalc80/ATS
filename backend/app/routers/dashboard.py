@@ -229,7 +229,7 @@ async def dashboard(
             task_href = (
                 f"/candidates/{task['candidate_id']}" if task["candidate_id"]
                 else f"/jobs?job_id={task['job_id']}" if task["job_id"]
-                else "#priorities"
+                else "/dashboard#tasks"
             )
             overdue = task["due_at"] < datetime.now(timezone.utc)
             priorities.append({
