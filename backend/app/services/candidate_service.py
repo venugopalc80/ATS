@@ -73,6 +73,51 @@ class CandidateService:
                     raise RuntimeError("Candidate was not created")
                 return row
 
+    async def bulk_create_candidates(self, organization_id: UUID, candidates: list[dict[str, Any]]) -> dict[str, Any]:
+        """Insert a bounded batch in one transaction, skipping existing/in-batch email duplicates."""
+        emails = {
+            str(candidate.get("email") or "").strip().lower()
+            for candidate in candidates
+            if str(candidate.get("email") or "").strip()
+        }
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                existing_emails: set[str] = set()
+                if emails:
+                    cursor.execute(
+                        "select lower(trim(email)) as email from public.candidates "
+                        "where organization_id = %s and email is not null",
+                        [organization_id],
+                    )
+                    existing_emails = {
+                        str(row["email"]).strip().lower()
+                        for row in cursor.fetchall()
+                        if row.get("email")
+                    }
+                seen_emails = set(existing_emails)
+                inserted: list[dict[str, Any]] = []
+                duplicate_rows: list[int] = []
+                for row_number, candidate in enumerate(candidates, start=1):
+                    data = dict(candidate)
+                    email = str(data.get("email") or "").strip().lower()
+                    if email and email in seen_emails:
+                        duplicate_rows.append(row_number)
+                        continue
+                    if email:
+                        seen_emails.add(email)
+                    data["organization_id"] = organization_id
+                    columns = list(data.keys())
+                    placeholders = ", ".join(["%s"] * len(columns))
+                    cursor.execute(
+                        f"insert into public.candidates ({", ".join(columns)}) "
+                        f"values ({placeholders}) returning {CANDIDATE_COLUMNS}",
+                        [data[column] for column in columns],
+                    )
+                    saved = cursor.fetchone()
+                    if saved is not None:
+                        inserted.append(saved)
+                return {"candidates": inserted, "duplicate_rows": duplicate_rows}
+
     async def get_candidate(self, candidate_id: UUID) -> dict[str, Any] | None:
         with get_connection() as connection:
             with connection.cursor() as cursor:
