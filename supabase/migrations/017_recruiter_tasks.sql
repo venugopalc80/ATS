@@ -7,7 +7,7 @@ create table if not exists public.recruiter_tasks (
   status text not null default 'open' check (status in ('open','completed','cancelled')),
   priority text not null default 'normal' check (priority in ('low','normal','high','urgent')),
   due_at timestamptz,
-  candidate_id uuid references public.candidates(id) on delete set null,
+  candidate_id uuid references public.candidates(id) on delete cascade,
   job_id uuid references public.jobs(id) on delete set null,
   assigned_to uuid references public.profiles(id) on delete set null,
   created_by uuid not null references public.profiles(id) on delete restrict,
