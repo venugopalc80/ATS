@@ -353,6 +353,7 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
     def clean_title(raw: str) -> str | None:
         value = raw.strip(" .|:-")
         value = re.split(r"\s+(?:at|@)\s+", value, maxsplit=1, flags=re.I)[0]
+        value = re.split(r"\s+(?:and|with)\s+(?=(?:certified|\d|over|more than|nearly|around)\b)", value, maxsplit=1, flags=re.I)[0]
         value = re.sub(r"\s{2,}.*$", "", value)
         value = re.sub(r"\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*[’']?\s*\d{2,4}.*$", "", value, flags=re.I)
         value = re.sub(r"\s+\(?\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*[’']?\s*\d{2,4}\b.*$", "", value, flags=re.I)
