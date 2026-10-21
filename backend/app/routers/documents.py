@@ -361,13 +361,13 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
 
     # Prefer a role in the CV header: role labels deeper in a CV may refer to older jobs.
     for line in lines[:24]:
-        if len(line) <= 100 and "@" not in line and not re.search(r"\\d{3}", line):
+        if len(line) <= 100 and "@" not in line and not re.search(r"\d{3}", line):
             candidate = clean_title(line)
             if candidate:
                 title = candidate
                 break
     # If the header has no usable title, prefer explicit role labels in employment history.
-    experience_idx = next((i for i, line in enumerate(lines) if re.search(r"^(professional experience|work experience|employment history)\\b", line, re.I)), None)
+    experience_idx = next((i for i, line in enumerate(lines) if re.search(r"^(professional experience|work experience|employment history)\b", line, re.I)), None)
     if not title:
         search_lines = lines[experience_idx:experience_idx + 120] if experience_idx is not None else lines[:180]
         for line in search_lines:
