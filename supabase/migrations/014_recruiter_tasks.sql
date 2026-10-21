@@ -34,10 +34,10 @@ create policy recruiter_tasks_member_insert on public.recruiter_tasks
   for insert to authenticated
   with check (
     public.is_org_member(organization_id)
-    and exists (select 1 from public.profiles p where p.id = created_by)
-    and (candidate_id is null or exists (select 1 from public.candidates c where c.id = candidate_id and c.organization_id = organization_id))
-    and (job_id is null or exists (select 1 from public.jobs j where j.id = job_id and j.organization_id = organization_id))
-    and (assigned_to is null or exists (select 1 from public.organization_members m where m.organization_id = organization_id and m.user_id = assigned_to))
+    and created_by = auth.uid()
+    and (candidate_id is null or exists (select 1 from public.candidates c where c.id = candidate_id and c.organization_id = recruiter_tasks.organization_id))
+    and (job_id is null or exists (select 1 from public.jobs j where j.id = job_id and j.organization_id = recruiter_tasks.organization_id))
+    and (assigned_to is null or exists (select 1 from public.organization_members m where m.organization_id = recruiter_tasks.organization_id and m.user_id = assigned_to))
   );
 create policy recruiter_tasks_member_update on public.recruiter_tasks
   for update to authenticated
