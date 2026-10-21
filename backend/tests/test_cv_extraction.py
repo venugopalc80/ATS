@@ -108,3 +108,27 @@ def test_header_title_is_preferred_over_older_role_label():
     fields = cv_candidate_fields(text, "alex-morgan.pdf")
     assert fields["current_title"] == "Senior Data Engineer"
     assert fields["years_experience"] == 12.0
+
+
+def test_experience_is_not_guessed_from_vague_decade_phrase():
+    text = (
+        "Siva Rama Krishna Prasad Padamata\\nSr. Fullstack Architect\\n"
+        "bindu@talentclustr.com\\n"
+        "A results-driven Fullstack Architect with over a decade of experience "
+        "in architecting and deploying scalable web applications."
+    )
+    fields = cv_candidate_fields(text, "Siva_Padamata___Fullstack_Architect.docx")
+    assert fields["first_name"] == "Siva"
+    assert fields["last_name"] == "Rama Krishna Prasad Padamata"
+    assert fields["current_title"] == "Sr. Fullstack Architect"
+    assert fields["years_experience"] is None
+
+
+def test_experience_extracts_explicit_sixteen_plus_years():
+    text = (
+        "Jeevan Reddy Bandi\\nJava Lead Developer\\n"
+        "jeevanreddi.b@gmail.com\\n"
+        "Professional Summary\\nI have 16+ years of experience in software development."
+    )
+    fields = cv_candidate_fields(text, "Jeevan-Java Lead Developer.pdf")
+    assert fields["years_experience"] == 16.0
