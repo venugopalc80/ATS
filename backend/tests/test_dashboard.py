@@ -50,6 +50,8 @@ class FakeCursor:
         raise AssertionError(f"Unexpected fetchone query: {self.sql}")
 
     def fetchall(self):
+        if "from public.recruiter_tasks" in self.sql:
+            return []
         if "group by status" in self.sql:
             return [
                 {"status": "new", "total": 2},
