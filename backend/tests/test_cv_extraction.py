@@ -1,0 +1,60 @@
+import pytest
+
+from app.routers.documents import cv_candidate_fields
+
+
+@pytest.mark.parametrize(
+    ("text", "filename", "first_name", "last_name", "title", "years"),
+    [
+        (
+            "Harpreet Kaur\nSr. Java/ J2EE Developer\n(586) 806-9840\nharprt2830@gmail.com\n"
+            "PROFESSIONAL SUMMARY\nHaving 9+ years of experience in Java development.\n"
+            "TECHNICAL SKILLS\nJava, SQL\nPROFESSIONAL EXPERIENCE\nWalmart\nSr. Java/J2EE Developer\nFeb22 - Present",
+            "harpreet.pdf", "Harpreet", "Kaur", "Sr. Java/ J2EE Developer", 9.0,
+        ),
+        (
+            "Name: Eshasree\nEmail: arjun@aspirantspro.com\nPhone: +1 904-640-3010\n"
+            "Sr. Full Stack Java Developer\nPROFESSIONAL SUMMARY\nAround 9+ years of experience.\n"
+            "PROFESSIONAL EXPERIENCE\nClient: JPMC, Plano-Texas. Jan 2021 to Till Date\nRole: Sr. Full Stack Java Developer",
+            "candidate.docx", "Eshasree", None, "Sr. Full Stack Java Developer", 9.0,
+        ),
+        (
+            "Girish Changlere\ngchanglere346@gmail.com\n+1-224-427-9218\nSummary\n"
+            "Sr. Business System Analyst and Certified Scrum Master with 10 years of experience.\n"
+            "Education\nMaster of Science of Information Studies, Trine University, 2017\n"
+            "Master of Business Administration, University of Pune, 2010\nAREAS OF EXPERTISE\nSDLC",
+            "girish.pdf", "Girish", "Changlere", "Sr. Business System Analyst", 10.0,
+        ),
+        (
+            "Abhaya\nEmail: example@example.com\nPhone: +1 408-789-7830\n"
+            "CORE SKILLS\npython, sql, aws\nPROFESSIONAL EXPERIENCE\n"
+            "Sr. (Lead/Architect) Software Engineer at Neiman Marcus/Saks Global, Dallas, TX  Apr 2021 – Present",
+            "abhaya.pdf", "Abhaya", None, "Sr. (Lead/Architect) Software Engineer", None,
+        ),
+    ],
+)
+def test_cv_candidate_fields_extracts_name_title_and_experience(text, filename, first_name, last_name, title, years):
+    fields = cv_candidate_fields(text, filename)
+    assert fields["first_name"] == first_name
+    assert fields["last_name"] == last_name
+    assert fields["current_title"] == title
+    assert fields["years_experience"] == years
+
+
+def test_cv_candidate_fields_extracts_education_section():
+    text = (
+        "Girish Changlere\nSummary\nSr. Business System Analyst\n"
+        "Education\nMaster of Science of Information Studies, Trine University, 2017\n"
+        "Master of Business Administration, University of Pune, 2010\n"
+        "B. Com, SRTMU of Nanded, 2007\nAREAS OF EXPERTISE\nSDLC Methodologies"
+    )
+    fields = cv_candidate_fields(text, "girish.pdf")
+    assert fields["education"] is not None
+    assert "Trine University" in fields["education"]
+    assert "University of Pune" in fields["education"]
+    assert "AREAS OF EXPERTISE" not in fields["education"]
+
+
+def test_section_heading_is_not_mistaken_for_candidate_name():
+    fields = cv_candidate_fields("CORE SKILLS\npython, sql, aws\nAbhaya\nexample@example.com", "resume.pdf")
+    assert fields["first_name"] == "Abhaya"
