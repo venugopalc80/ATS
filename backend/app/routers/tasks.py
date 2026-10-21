@@ -106,7 +106,7 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("select organization_id,candidate_id,job_id from public.recruiter_tasks where id=%s", [task_id])
+                cursor.execute("select organization_id,candidate_id,job_id,task_type from public.recruiter_tasks where id=%s", [task_id])
                 current = cursor.fetchone()
                 if current is None:
                     raise HTTPException(status_code=404, detail="Task not found")
@@ -114,6 +114,8 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
                 assert_org_member(user_id, organization_id)
                 candidate_id = fields.get("candidate_id", current["candidate_id"])
                 job_id = fields.get("job_id", current["job_id"])
+                if current["task_type"] == "candidate_follow_up" and candidate_id is None:
+                    raise HTTPException(status_code=422, detail="A candidate follow-up must remain linked to a candidate")
                 _ensure_links(organization_id, candidate_id, job_id)
                 if "assigned_to" in fields:
                     _ensure_assignee(organization_id, fields["assigned_to"])
