@@ -299,17 +299,25 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         "curriculum vitae", "resume", "résumé", "cv", "professional summary",
         "summary", "profile", "contact", "contact details", "work experience",
         "professional experience", "education", "skills", "experience",
+        "core skills", "key skills", "technical skills", "soft skills",
+        "career summary", "professional summary", "objective", "career objective",
+        "personal details", "personal information", "about me", "highlights",
+        "certifications", "projects", "languages", "references", "achievements",
     }
     name = ""
     for raw_line in text.splitlines()[:15]:
         line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
         if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
             continue
-        if line.casefold() in excluded or len(line.split()) > 5:
+        if line.casefold().rstrip(":") in excluded or len(line.split()) > 5:
             continue
-        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
-            name = line
-            break
+        # CVs often show a single given name (e.g. "Abhaya") on its own.
+        # Accept one-word names only when they look like a name, not a section label.
+        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'’. -]*", line):
+            words = line.split()
+            if len(words) >= 2 or (len(words) == 1 and line[0].isupper() and len(line) >= 3 and line.casefold() not in excluded):
+                name = line
+                break
     if not name:
         stem = Path(filename).stem
         stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
@@ -322,7 +330,7 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
     title = None
     title_patterns = (
         r"^(?:current\s+(?:job\s+)?title|professional title|role|position|designation)\s*[:：-]\s*(.+)$",
-        r"^((?:(?:senior|junior|lead|principal|staff|associate|assistant|head of|director of|chief)\s+)?[A-Za-z][A-Za-z /&(),.+-]{2,55}\b(?:engineer|developer|analyst|scientist|manager|consultant|architect|administrator|designer|specialist|recruiter|accountant|coordinator|technician|director|officer|nurse|teacher|researcher|intern)\b.*)$",
+        r"^((?:(?:sr\.?|jr\.?|senior|junior|lead|principal|staff|associate|assistant|head of|director of|chief)\s+)?[A-Za-z][A-Za-z /&(),.+-]{2,65}\b(?:engineer|developer|analyst|scientist|manager|consultant|architect|administrator|designer|specialist|recruiter|accountant|coordinator|technician|director|officer|nurse|teacher|researcher|intern)\b.*)$",
     )
     opening_lines = [re.sub(r"\s+", " ", item).strip(" \t|•-") for item in text.splitlines()[:35]]
     for line in opening_lines:
@@ -332,6 +340,9 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
             match = re.match(pattern, line, re.I)
             if match:
                 candidate_title = match.group(1).strip(" .|:-")
+                # A CV experience line often combines title, employer, location and dates.
+                candidate_title = re.split(r"\s+(?:at|@)\s+|\s{2,}|\s+[|•]\s+", candidate_title, maxsplit=1, flags=re.I)[0]
+                candidate_title = re.sub(r"\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{4}.*$", "", candidate_title, flags=re.I)
                 if 3 <= len(candidate_title) <= 100 and candidate_title.casefold() not in excluded:
                     title = candidate_title[:100]
                     break
