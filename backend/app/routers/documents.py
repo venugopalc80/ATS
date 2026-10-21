@@ -454,9 +454,23 @@ async def bulk_upload_cvs(
             filename = safe_filename(file.filename, extension)
             digest = hashlib.sha256(data).hexdigest()
             text = extract_cv_text(data, mime)
+            if not text.strip():
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": "No readable text was found. This may be a scanned/image-only PDF; use a text-based PDF or DOCX until OCR support is available.",
+                    "text_extracted": False,
+                })
+                continue
             fields = cv_candidate_fields(text, filename)
-            if not fields["first_name"].strip():
-                fields["first_name"] = "CV candidate"
+            if not fields["first_name"].strip() or fields["first_name"] == "CV candidate":
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": "Could not confidently detect a candidate name. This CV was not imported to avoid creating a misleading candidate record.",
+                    "text_extracted": True,
+                })
+                continue
 
             with get_connection() as connection:
                 with connection.cursor() as cursor:
