@@ -417,7 +417,7 @@ export default function Dashboard() {
               <label>Priority<select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value as "low" | "normal" | "high" | "urgent")}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
               <button className="btn primary" type="submit" disabled={taskSaving || !taskTitle.trim()}>{taskSaving ? "Saving…" : "Add task"}</button>
             </form>
-            {tasksLoading ? <div className="dashboard-loading-lines"><span /><span /></div> : tasks.length === 0 ? <div className="dashboard-empty"><strong>No open tasks</strong><p>Add a recruiter task or candidate follow-up to track the next action.</p></div> : (
+            {tasksLoading ? <div className="dashboard-loading-lines"><span /><span /></div> : tasksError ? <div className="dashboard-empty"><strong>Tasks unavailable</strong><p>We could not verify open tasks. Retry before assuming there is nothing to do.</p><button className="btn" type="button" onClick={() => void loadTasks()}>Retry tasks</button></div> : tasks.length === 0 ? <div className="dashboard-empty"><strong>No open tasks</strong><p>Add a recruiter task or candidate follow-up to track the next action.</p></div> : (
               <div className="dashboard-task-list">
                 {tasks.map((task) => <div key={task.id} className="dashboard-task-row">
                   <div className="dashboard-task-copy"><strong>{task.title}</strong><span>{task.task_type === "candidate_follow_up" ? "Candidate follow-up" : "Recruiter task"} · {task.priority} priority · {formatDate(task.due_at)}</span></div>
