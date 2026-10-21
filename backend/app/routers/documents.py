@@ -467,7 +467,8 @@ async def bulk_upload_cvs(
                     "filename": filename, "status": "imported", "candidate_id": str(candidate_id),
                     "name": " ".join(part for part in [fields["first_name"], fields["last_name"]] if part),
                     "email": fields["email"], "current_title": fields["current_title"],
-                    "years_experience": fields["years_experience"], "skills_found": fields["skills"],
+                    "years_experience": fields["years_experience"], "education": fields["education"],
+                    "skills_found": fields["skills"],
                     "text_extracted": bool(text.strip()),
                 })
             except Exception:
