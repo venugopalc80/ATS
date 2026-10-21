@@ -150,3 +150,19 @@ def test_experience_patterns_are_explicit_and_conservative(summary, expected):
         "jordan-taylor.pdf",
     )
     assert fields["years_experience"] == expected
+
+
+
+def test_explicit_role_after_long_summary_is_found_in_employment_history():
+    summary_lines = "\\n".join(f"Summary detail {index} about platform delivery" for index in range(30))
+    text = (
+        "Taylor Morgan\\n"
+        "taylor@example.com\\n"
+        "Professional Summary\\n"
+        + summary_lines
+        + "\\nEmployment History\\nRole: Senior Platform Engineer\\n"
+        "Example Systems\\n2021 - Present"
+    )
+    fields = cv_candidate_fields(text, "taylor-morgan.pdf")
+    assert fields["first_name"] == "Taylor"
+    assert fields["current_title"] == "Senior Platform Engineer"
