@@ -455,7 +455,6 @@ export default function CandidatesPage() {
         setImportMessage("Importing… " + completed + " of " + eligible.length + " valid rows processed; " + created + " created, " + duplicates + " duplicates skipped.");
       }
       if (importedCandidates.length) {
-        const byId = new Map(importedCandidates.map((candidate) => [candidate.id, candidate]));
         setCandidates((current) => [...importedCandidates.filter((candidate) => !current.some((item) => item.id === candidate.id)), ...current]);
       }
       const skipped = importRows.length - eligible.length;
