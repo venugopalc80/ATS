@@ -66,6 +66,8 @@ async def create_candidate(
     try:
         row = await service.create_candidate(payload)
         return CandidateOut.model_validate(row)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
