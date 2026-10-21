@@ -1,14 +1,41 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
-from app.schemas.candidates import CandidateCreate, CandidateOut, CandidateUpdate
+from app.schemas.candidates import CandidateBase, CandidateCreate, CandidateOut, CandidateUpdate
 from app.services.candidate_service import CandidateService
 
 router = APIRouter(prefix="/api/candidates", tags=["candidates"])
 service = CandidateService()
+
+
+class BulkCandidateImportRequest(BaseModel):
+    organization_id: UUID
+    candidates: list[CandidateBase] = Field(min_length=1, max_length=500)
+
+
+@router.post("/bulk-import")
+async def bulk_import_candidates(
+    payload: BulkCandidateImportRequest,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, payload.organization_id)
+    try:
+        result = await service.bulk_create_candidates(
+            payload.organization_id,
+            [candidate.model_dump(mode="python", exclude_unset=False) for candidate in payload.candidates],
+        )
+        return {
+            "imported": len(result["candidates"]),
+            "duplicates": len(result["duplicate_rows"]),
+            "duplicate_rows": result["duplicate_rows"],
+            "candidates": [CandidateOut.model_validate(row).model_dump(mode="json") for row in result["candidates"]],
+        }
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
 
 
 def db_unavailable(exc: Exception) -> HTTPException:
