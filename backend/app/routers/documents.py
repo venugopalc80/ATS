@@ -420,11 +420,12 @@ async def bulk_upload_cvs(
                     with connection.cursor() as cursor:
                         cursor.execute(
                             """insert into public.candidates
-                               (id, organization_id, first_name, last_name, email, phone, status,
+                               (id, organization_id, first_name, last_name, email, phone, current_title, years_experience, status,
                                 skills, resume_path, resume_text, created_at, updated_at)
-                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
+                               values (%s,%s,%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
                             [candidate_id, organization_id, fields["first_name"], fields["last_name"],
-                             fields["email"], fields["phone"], fields["skills"], path, text or None],
+                             fields["email"], fields["phone"], fields["current_title"], fields["years_experience"],
+                             fields["skills"], path, text or None],
                         )
                         cursor.execute(
                             """insert into public.candidate_documents
@@ -445,7 +446,8 @@ async def bulk_upload_cvs(
                 results.append({
                     "filename": filename, "status": "imported", "candidate_id": str(candidate_id),
                     "name": " ".join(part for part in [fields["first_name"], fields["last_name"]] if part),
-                    "email": fields["email"], "skills_found": fields["skills"],
+                    "email": fields["email"], "current_title": fields["current_title"],
+                    "years_experience": fields["years_experience"], "skills_found": fields["skills"],
                     "text_extracted": bool(text.strip()),
                 })
             except Exception:
