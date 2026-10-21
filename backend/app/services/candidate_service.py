@@ -60,6 +60,20 @@ class CandidateService:
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                organization_id = data["organization_id"]
+                cursor.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    [str(organization_id)],
+                )
+                email = str(data.get("email") or "").strip().lower()
+                if email:
+                    cursor.execute(
+                        "select 1 from public.candidates where organization_id=%s "
+                        "and lower(trim(email))=%s limit 1",
+                        [organization_id, email],
+                    )
+                    if cursor.fetchone() is not None:
+                        raise ValueError("A candidate with this email already exists in this organisation")
                 cursor.execute(
                     f"""
                     insert into public.candidates ({", ".join(columns)})
@@ -82,6 +96,12 @@ class CandidateService:
         }
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                # Serialise candidate writes within one organisation so imports and
+                # single-record creation cannot race through the duplicate check.
+                cursor.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    [str(organization_id)],
+                )
                 existing_emails: set[str] = set()
                 if emails:
                     cursor.execute(
