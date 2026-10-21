@@ -359,29 +359,27 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         value = re.sub(r"\s+\(?\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*[’']?\s*\d{2,4}\b.*$", "", value, flags=re.I)
         return value[:100].strip() if 3 <= len(value.strip()) <= 100 and title_terms.search(value) else None
 
-    # Explicit Role: lines in professional history are the strongest signal.
-    for idx, line in enumerate(lines):
-        if idx > 180:
-            break
-        match = title_prefix.match(line)
-        if match:
-            candidate = clean_title(match.group(1))
+    # Prefer a role in the CV header: role labels deeper in a CV may refer to older jobs.
+    for line in lines[:24]:
+        if len(line) <= 100 and "@" not in line and not re.search(r"\\d{3}", line):
+            candidate = clean_title(line)
             if candidate:
                 title = candidate
                 break
-    # Header titles commonly follow the name/contact lines.
+    # If the header has no usable title, prefer explicit role labels in employment history.
+    experience_idx = next((i for i, line in enumerate(lines) if re.search(r"^(professional experience|work experience|employment history)\\b", line, re.I)), None)
     if not title:
-        for line in lines[:24]:
-            if len(line) <= 100 and "@" not in line and not re.search(r"\d{3}", line):
-                candidate = clean_title(line)
+        search_lines = lines[experience_idx:experience_idx + 120] if experience_idx is not None else lines[:180]
+        for line in search_lines:
+            match = title_prefix.match(line)
+            if match:
+                candidate = clean_title(match.group(1))
                 if candidate:
                     title = candidate
                     break
-    # Otherwise use the first explicit role-like line in professional history.
-    if not title:
-        experience_idx = next((i for i, line in enumerate(lines) if re.search(r"^(professional experience|work experience|employment history)\b", line, re.I)), None)
-        search_lines = lines[experience_idx:experience_idx + 100] if experience_idx is not None else []
-        for line in search_lines:
+    # Last fallback: use the first role-like line in employment history.
+    if not title and experience_idx is not None:
+        for line in lines[experience_idx:experience_idx + 100]:
             candidate = clean_title(line)
             if candidate:
                 title = candidate
