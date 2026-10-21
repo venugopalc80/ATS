@@ -386,11 +386,16 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
                 break
 
     experience = None
-    for pattern in (
+    # Only accept explicit numeric claims; vague phrases such as "over a decade"
+    # intentionally remain unknown rather than being converted into guessed values.
+    experience_patterns = (
         r"(?:total\s+)?(?:professional\s+|work\s+)?experience\s*[:：-]?\s*(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?",
         r"(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?(?:professional\s+)?experience",
         r"around\s+(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+of\s+experience",
-    ):
+        r"(\d{1,2}(?:\.\d+)?)\s*\+?\s+years?\s+(?:in|of)\s+(?:the\s+)?(?:IT|software|technology|development|engineering|recruitment|data|business\s+analysis)\b",
+        r"(?:over|more\s+than)\s+(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?experience",
+    )
+    for pattern in experience_patterns:
         match = re.search(pattern, text[:16000], re.I)
         if match:
             value = float(match.group(1))
