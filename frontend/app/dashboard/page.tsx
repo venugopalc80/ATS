@@ -402,7 +402,7 @@ export default function Dashboard() {
             </>}
           </section>
 
-          <section className="card dashboard-tasks-section">
+          <section className="card dashboard-tasks-section" id="tasks">
             <div className="card-head">
               <div><span className="card-title">Tasks &amp; candidate follow-ups</span><p className="muted-small">Organisation-scoped reminders. Overdue items appear first in today's priorities.</p></div>
               <span className="badge blue">{tasksLoading ? "Loading…" : tasks.length + " open"}</span>
