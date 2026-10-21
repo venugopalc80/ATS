@@ -334,11 +334,9 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
             if 1 <= len(words) <= 5 and len(line) >= 3:
                 name = line
                 break
-    if not name:
-        stem = Path(filename).stem
-        stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
-        stem = re.sub(r"[_-]+", " ", stem)
-        name = re.sub(r"\s+", " ", stem).strip(" .-_")
+    # Do not turn a filename into a candidate identity. Filenames can contain
+    # job titles, agency names, or arbitrary labels; the import route rejects
+    # this sentinel when no plausible person name was found in the CV text.
     parts = name.split()
     first_name = (parts[0] if parts else "CV candidate")[:100]
     last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
