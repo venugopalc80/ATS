@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -142,6 +142,16 @@ async def dashboard(
                 expiring_offers = list(cursor.fetchall())
 
                 cursor.execute(
+                    """select id,title,task_type,priority,due_at,candidate_id,job_id
+                       from public.recruiter_tasks
+                       where organization_id=%s and status='open'
+                         and due_at is not null and due_at <= now() + interval '7 days'
+                       order by due_at asc limit 20""",
+                    [organization_id],
+                )
+                due_tasks = list(cursor.fetchall())
+
+                cursor.execute(
                     """select ae.id,ae.action,ae.entity_type,ae.entity_id,ae.metadata,ae.created_at,
                               ae.actor_user_id,p.full_name as actor_name
                        from public.audit_events ae
@@ -214,6 +224,21 @@ async def dashboard(
                 "description": f"{job['title']}: " + "; ".join(job["reasons"]),
                 "href": f"/jobs?job_id={job['id']}",
                 "due_at": None,
+            })
+        for task in due_tasks:
+            task_href = (
+                f"/candidates/{task['candidate_id']}" if task["candidate_id"]
+                else f"/jobs?job_id={task['job_id']}" if task["job_id"]
+                else "/dashboard#tasks"
+            )
+            overdue = task["due_at"] < datetime.now(timezone.utc)
+            priorities.append({
+                "id": str(task["id"]),
+                "type": "candidate_follow_up" if task["task_type"] == "candidate_follow_up" else "recruiter_task",
+                "title": ("Overdue: " if overdue else "Due soon: ") + task["title"],
+                "description": f"{task['priority'].title()} priority" + (" · Candidate follow-up" if task["task_type"] == "candidate_follow_up" else " · Recruiter task"),
+                "href": task_href,
+                "due_at": task["due_at"],
             })
 
         return {
