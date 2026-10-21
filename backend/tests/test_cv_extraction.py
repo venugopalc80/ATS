@@ -132,3 +132,21 @@ def test_experience_extracts_explicit_sixteen_plus_years():
     )
     fields = cv_candidate_fields(text, "Jeevan-Java Lead Developer.pdf")
     assert fields["years_experience"] == 16.0
+
+
+@pytest.mark.parametrize(
+    ("summary", "expected"),
+    [
+        ("16+ years in IT", 16.0),
+        ("12 years in software development", 12.0),
+        ("More than 10 years of experience", 10.0),
+        ("Over a decade of experience", None),
+    ],
+)
+def test_experience_patterns_are_explicit_and_conservative(summary, expected):
+    fields = cv_candidate_fields(
+        "Jordan Taylor\\nSenior Software Engineer\\n"
+        "jordan@example.com\\nProfessional Summary\\n" + summary,
+        "jordan-taylor.pdf",
+    )
+    assert fields["years_experience"] == expected
