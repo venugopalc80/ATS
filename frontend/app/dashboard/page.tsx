@@ -94,6 +94,11 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskMessage, setTaskMessage] = useState("");
 
   const loadDashboard = useCallback(async () => {
     const org = getActiveOrganizationId();
@@ -131,6 +136,35 @@ export default function Dashboard() {
     () => Object.values(data?.pipeline ?? {}).reduce((total, count) => total + count, 0),
     [data],
   );
+
+
+  async function submitTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const org = getActiveOrganizationId();
+    if (!API_BASE || !org || !taskTitle.trim() || !taskDueAt) {
+      setTaskMessage("Enter a task title and due date.");
+      return;
+    }
+    setTaskSaving(true);
+    setTaskMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/dashboard/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: org, title: taskTitle.trim(), task_type: "task", due_at: new Date(taskDueAt).toISOString() }),
+      });
+      if (!response.ok) throw new Error(response.status === 403 ? "You cannot create tasks for this organisation." : "Task could not be saved (HTTP " + response.status + ").");
+      setTaskTitle("");
+      setTaskDueAt("");
+      setShowTaskForm(false);
+      setTaskMessage("Task created.");
+      await loadDashboard();
+    } catch (cause) {
+      setTaskMessage(cause instanceof Error ? cause.message : "Task could not be saved.");
+    } finally {
+      setTaskSaving(false);
+    }
+  }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -237,6 +271,15 @@ export default function Dashboard() {
           <div className="dashboard-section-grid">
             <section className="card dashboard-priorities" id="priorities">
               <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{error ? "Unavailable" : (data?.priorities.length ?? 0) + " items"}</span></div>
+              <div className="dashboard-task-controls">
+                <button className="btn" type="button" onClick={() => { setShowTaskForm((open) => !open); setTaskMessage(""); }}>{showTaskForm ? "Cancel task" : "+ Add task"}</button>
+                {taskMessage && <p role="status" className="muted-small">{taskMessage}</p>}
+                {showTaskForm && <form className="dashboard-task-form" onSubmit={submitTask}>
+                  <label>Task title <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} maxLength={200} required placeholder="e.g. Follow up with candidate" /></label>
+                  <label>Due date and time <input type="datetime-local" value={taskDueAt} onChange={(event) => setTaskDueAt(event.target.value)} required /></label>
+                  <button className="btn primary" type="submit" disabled={taskSaving}>{taskSaving ? "Saving…" : "Save task"}</button>
+                </form>}
+              </div>
               {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
                 <div className="dashboard-empty"><strong>Priorities unavailable</strong><p>We could not confirm whether any items need attention. Retry to load the latest data.</p></div>
               ) : !data?.priorities.length ? (
