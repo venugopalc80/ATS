@@ -8,7 +8,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id, get_org_role
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
@@ -31,6 +31,14 @@ class SearchCriteria(BaseModel):
     recruiter_id: UUID | None = None
     date_from: datetime | None = None
     date_to: datetime | None = None
+
+    @field_validator("skills")
+    @classmethod
+    def validate_skill_values(cls, value: list[str]) -> list[str]:
+        cleaned = [item.strip() for item in value]
+        if any(not item or len(item) > 80 for item in cleaned):
+            raise ValueError("Each skill must contain 1 to 80 characters")
+        return cleaned
 
 
 class SavedSearchCreate(BaseModel):
@@ -142,6 +150,8 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
           base.current_title as title, base.city, base.region, base.country_code, base.status,
           base.years_experience, base.skills, base.created_at"""
         source = "public.candidates base"
+        joins = " left join public.candidate_sources cs on cs.id=base.source_id and cs.organization_id=base.organization_id "
+        select = select.replace("base.created_at", "base.created_at, cs.display_name as source")
         if criteria.q:
             where.append("(base.first_name ilike %s escape '!' or coalesce(base.last_name,'') ilike %s escape '!' or coalesce(base.current_title,'') ilike %s escape '!' or coalesce(base.city,'') ilike %s escape '!')")
             term = "%" + _escape_like(criteria.q.strip()) + "%"
@@ -159,6 +169,9 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
             where.append("base.years_experience <= %s"); params.append(criteria.max_experience)
         if criteria.status:
             where.append("base.status = %s"); params.append(criteria.status)
+        if criteria.source:
+            where.append("(cs.source_key = %s or cs.display_name = %s)")
+            params.extend([criteria.source, criteria.source])
     elif record_type == "applications":
         joins = """ join public.candidates c on c.id=base.candidate_id and c.organization_id=base.organization_id
                     join public.jobs j on j.id=base.job_id and j.organization_id=base.organization_id """
