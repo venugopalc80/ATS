@@ -164,7 +164,7 @@ begin
   end if;
   return new;
 end;
-$;
+$$;
 
 drop trigger if exists scorecard_template_immutable on public.scorecard_templates;
 create trigger scorecard_template_immutable
