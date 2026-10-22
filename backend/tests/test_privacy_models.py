@@ -111,3 +111,19 @@ def test_privacy_request_can_keep_current_status():
 def test_partial_completion_rejects_whitespace_only_justification():
     with pytest.raises(ValidationError, match="documented exception"):
         PrivacyRequestUpdate(status="partially_completed", exception_details="   ")
+
+
+def test_privacy_request_can_record_supported_identity_verification_method():
+    payload = PrivacyRequestUpdate(
+        status="in_progress",
+        identity_verification_method="email_challenge",
+    )
+    assert payload.identity_verification_method == "email_challenge"
+
+
+def test_privacy_request_rejects_unknown_identity_verification_method():
+    with pytest.raises(ValidationError):
+        PrivacyRequestUpdate(
+            status="in_progress",
+            identity_verification_method="social_media_lookup",
+        )
