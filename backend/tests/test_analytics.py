@@ -114,6 +114,22 @@ class FakeAnalyticsCursor:
             }]
         if "group by a.status" in self.sql:
             return [{"status": "interview", "distinct_applications": 3}]
+        if "as campaign_name" in self.sql and "spend_amount" in self.sql:
+            return [{
+                "campaign_id": UUID("55555555-5555-4555-8555-555555555555"),
+                "campaign_name": "Engineering outreach",
+                "campaign_status": "active",
+                "budget_amount": 500,
+                "budget_currency": "GBP",
+                "channel_id": UUID("66666666-6666-4666-8666-666666666666"),
+                "channel_key": "job_board",
+                "source_label": "Job board",
+                "spend_amount": 120,
+                "spend_currency": "GBP",
+                "applications": 10,
+                "hires": 2,
+                "applications_with_accepted_offer": 2,
+            }]
         if "as source" in self.sql and "completed_interviews" in self.sql:
             return [{
                 "source": "Referral",
@@ -289,6 +305,22 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("record_type", body)
         self.assertIn("approved_headcount", body)
         self.assertIn("expected_approved_headcount", body)
+
+
+    async def test_campaign_efficiency_reports_costs_without_inventing_financial_roi(self):
+        result = await analytics_router.analytics_campaign_roi(
+            organization_id=ORG,
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 22),
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        row = result["campaign_channels"][0]
+        self.assertEqual(row["cost_per_application"], 12.0)
+        self.assertEqual(row["cost_per_hire"], 60.0)
+        self.assertIsNone(row["financial_roi"])
+        self.assertEqual(row["financial_roi_status"], "revenue_data_not_available")
+        self.assertFalse(row["sample_warning"])
+        self.assertIn("campaign_memberships", self.cursor.queries[0][0])
 
 
 if __name__ == "__main__":
