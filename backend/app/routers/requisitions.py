@@ -68,6 +68,8 @@ async def create_requisition(payload: RequisitionCreate, user_id: UUID = Depends
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
+
+
 @router.get("/assignees")
 async def list_requisition_assignees(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     """Return assignable team members for the caller's organisation only."""
