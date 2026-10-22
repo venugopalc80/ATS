@@ -73,3 +73,11 @@ Do not send real candidate data to an external provider before these gates have 
 - A live staging catalogue query confirmed all ten Section 7 tables have RLS enabled and one explicit read policy each. The policies for member-readable records scope membership to the row's organisation; evaluation, fairness and incident tables are restricted to organisation owners/admins.
 - The staging security advisor also reports broader existing findings outside this Section 7 migration: eight assessment/candidate-document tables have RLS but no policies; public.is_org_member(uuid) is a callable SECURITY DEFINER helper; the vector extension is in public; and leaked-password protection is disabled. These require a separate impact review before changing shared security primitives, because the membership helper is used by existing RLS policies.
 
+
+
+## Human-review audit improvement (2026-10-22)
+
+- Job-description and interview-kit review audit events now retain the review outcome and the reviewer's supplied override/send-back rationale.
+- Added unit tests for both review endpoints to verify that the reason is persisted in audit-event metadata.
+- Verification remains pending until the branch CI executes successfully.
+
