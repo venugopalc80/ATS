@@ -1,11 +1,19 @@
 from uuid import UUID
+import os
 
+import stripe
 from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel
 
 from app.auth import assert_org_admin, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
+
+
+class CheckoutRequest(BaseModel):
+    organization_id: UUID
+    plan_id: UUID
 
 
 @router.get("/plans")
@@ -40,11 +48,7 @@ async def get_subscription(
     organization_id: UUID = Query(...),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    """Return subscription details to organisation admins only.
-
-    Entitlements are resolved server-side. Only active and trialing subscriptions
-    receive their plan entitlements; all other states fail closed.
-    """
+    """Return subscription details to organisation admins only."""
     assert_org_admin(user_id, organization_id)
     try:
         with get_connection() as connection:
@@ -66,10 +70,8 @@ async def get_subscription(
                 subscription = cursor.fetchone()
                 if subscription is None:
                     return {"subscription": None, "entitlements": {}}
-
                 if subscription["status"] not in {"active", "trialing"}:
                     return {"subscription": subscription, "entitlements": {}}
-
                 cursor.execute(
                     """
                     select e.entitlement_key, e.entitlement_value
@@ -86,3 +88,69 @@ async def get_subscription(
                 return {"subscription": subscription, "entitlements": entitlements}
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Billing service is unavailable") from exc
+
+
+@router.post("/checkout")
+async def create_checkout_session(
+    payload: CheckoutRequest,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Create a subscription Checkout Session using server-owned Stripe price IDs."""
+    assert_org_admin(user_id, payload.organization_id)
+    secret_key = os.getenv("STRIPE_SECRET_KEY")
+    frontend_url = os.getenv("FRONTEND_URL", "https://aqerith.com").rstrip("/")
+    if not secret_key:
+        raise HTTPException(status_code=503, detail="Subscription checkout is not configured")
+
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select id, plan_key, display_name from public.subscription_plans where id=%s and is_active=true",
+                    [payload.plan_id],
+                )
+                plan = cursor.fetchone()
+                if plan is None:
+                    raise HTTPException(status_code=404, detail="Active plan not found")
+                cursor.execute(
+                    """
+                    select status from public.organization_subscriptions
+                    where organization_id=%s
+                      and status in ('incomplete','trialing','active','past_due','paused','unpaid')
+                    limit 1
+                    """,
+                    [payload.organization_id],
+                )
+                existing = cursor.fetchone()
+                if existing is not None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="An existing subscription requires management before starting checkout",
+                    )
+
+        price_env_key = "STRIPE_PRICE_ID_" + plan["plan_key"].upper().replace("-", "_")
+        price_id = os.getenv(price_env_key)
+        if not price_id:
+            raise HTTPException(status_code=503, detail="Pricing is not configured for this plan")
+
+        metadata = {
+            "organization_id": str(payload.organization_id),
+            "plan_id": str(payload.plan_id),
+        }
+        session = stripe.checkout.Session.create(
+            api_key=secret_key,
+            mode="subscription",
+            line_items=[{"price": price_id, "quantity": 1}],
+            success_url=f"{frontend_url}/settings/billing?checkout=success",
+            cancel_url=f"{frontend_url}/settings/billing?checkout=cancelled",
+            client_reference_id=str(payload.organization_id),
+            metadata=metadata,
+            subscription_data={"metadata": metadata},
+        )
+        return {"checkout_url": session.url, "session_id": session.id}
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Billing service is unavailable") from exc
+    except stripe.StripeError as exc:
+        raise HTTPException(status_code=502, detail="Unable to create checkout session") from exc
