@@ -399,6 +399,7 @@ async def create_talent_pool(payload: PoolCreate, user_id: UUID = Depends(get_cu
     owner = payload.owner_user_id or user_id
     if owner != user_id:
         assert_org_admin(user_id, payload.organization_id)
+        assert_org_member(owner, payload.organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -942,6 +943,10 @@ async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_curr
 @router.post("/campaigns", status_code=201)
 async def create_campaign(payload: CampaignCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, payload.organization_id)
+    campaign_owner = payload.owner_user_id or user_id
+    if campaign_owner != user_id:
+        assert_org_admin(user_id, payload.organization_id)
+        assert_org_member(campaign_owner, payload.organization_id)
     if payload.ends_at and payload.starts_at and payload.ends_at <= payload.starts_at:
         raise HTTPException(status_code=422, detail="Campaign end must be after its start")
     if (payload.budget_amount is None) != (payload.budget_currency is None):
@@ -954,7 +959,7 @@ async def create_campaign(payload: CampaignCreate, user_id: UUID = Depends(get_c
                     values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
                     returning id,organization_id,name,description,status,target_job_id,owner_user_id,starts_at,ends_at,budget_amount,budget_currency,attribution_window_days,created_at,updated_at""",
                     [payload.organization_id,payload.name.strip(),payload.description,payload.target_job_id,
-                     payload.owner_user_id or user_id,payload.starts_at,payload.ends_at,payload.budget_amount,
+                     campaign_owner,payload.starts_at,payload.ends_at,payload.budget_amount,
                      payload.budget_currency,payload.attribution_window_days,user_id])
                 row = cursor.fetchone()
                 cursor.execute("""insert into public.campaign_events
