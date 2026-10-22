@@ -28,6 +28,11 @@ class ApplicationUpdate(BaseModel):
     human_reviewed_at: datetime | None = None
 
 
+class ApplicationTransition(BaseModel):
+    status: ApplicationStatus
+    reason: str | None = Field(default=None, max_length=1000)
+
+
 class ApplicationOut(BaseModel):
     id: UUID
     organization_id: UUID
@@ -42,5 +47,18 @@ class ApplicationOut(BaseModel):
     human_reviewed_at: datetime | None
     created_at: datetime
     updated_at: datetime
+
+    model_config = {"from_attributes": True}
+
+
+class ApplicationStageHistoryOut(BaseModel):
+    id: UUID
+    organization_id: UUID
+    application_id: UUID
+    previous_stage: str | None
+    new_stage: str
+    actor_user_id: UUID | None
+    reason: str | None
+    created_at: datetime
 
     model_config = {"from_attributes": True}
