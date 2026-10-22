@@ -14,7 +14,7 @@ create table if not exists public.interview_kits (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
-  foreign key (organization_id, job_id) references public.jobs(organization_id, id) on delete set null
+  foreign key (job_id) references public.jobs(id) on delete set null
 );
 
 create table if not exists public.scorecard_templates (
@@ -81,8 +81,8 @@ create table if not exists public.interview_feedback (
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
   unique (organization_id, interview_id, interviewer_id),
-  foreign key (organization_id, interview_id) references public.interviews(organization_id, id) on delete cascade,
-  foreign key (organization_id, application_id) references public.applications(organization_id, id) on delete cascade,
+  foreign key (interview_id) references public.interviews(id) on delete cascade,
+  foreign key (application_id) references public.applications(id) on delete cascade,
   foreign key (organization_id, template_id) references public.scorecard_templates(organization_id, id) on delete restrict,
   check ((status = 'draft' and submitted_at is null) or (status = 'submitted' and submitted_at is not null))
 );
