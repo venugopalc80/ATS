@@ -94,6 +94,11 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskMessage, setTaskMessage] = useState("");
 
   const loadDashboard = useCallback(async () => {
     const org = getActiveOrganizationId();
@@ -131,6 +136,35 @@ export default function Dashboard() {
     () => Object.values(data?.pipeline ?? {}).reduce((total, count) => total + count, 0),
     [data],
   );
+
+
+  async function submitTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const org = getActiveOrganizationId();
+    if (!API_BASE || !org || !taskTitle.trim() || !taskDueAt) {
+      setTaskMessage("Enter a task title and due date.");
+      return;
+    }
+    setTaskSaving(true);
+    setTaskMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/dashboard/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: org, title: taskTitle.trim(), task_type: "task", due_at: new Date(taskDueAt).toISOString() }),
+      });
+      if (!response.ok) throw new Error(response.status === 403 ? "You cannot create tasks for this organisation." : "Task could not be saved (HTTP " + response.status + ").");
+      setTaskTitle("");
+      setTaskDueAt("");
+      setShowTaskForm(false);
+      setTaskMessage("Task created.");
+      await loadDashboard();
+    } catch (cause) {
+      setTaskMessage(cause instanceof Error ? cause.message : "Task could not be saved.");
+    } finally {
+      setTaskSaving(false);
+    }
+  }
 
   function submitSearch(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -224,7 +258,7 @@ export default function Dashboard() {
               { title: "Open jobs", value: data?.metrics.open_jobs, icon: "▣", href: "/jobs?status=open", detail: "Currently open vacancies" },
               { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates", detail: "Accessible candidate records" },
               { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews", detail: "Scheduled for today" },
-              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements", detail: (data?.metrics.placements_this_month ?? 0) + " created this month" },
+              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements", detail: data ? data.metrics.placements_this_month + " created this month" : "Monthly count unavailable" },
             ].map((metric) => (
               <Link key={metric.title} href={metric.href} className="card dashboard-metric-card" aria-label={metric.title + ", view records"}>
                 <div className="dashboard-metric-top"><span className="dashboard-metric-icon" aria-hidden="true">{metric.icon}</span><span className="metric-title">{metric.title}</span></div>
@@ -236,8 +270,19 @@ export default function Dashboard() {
 
           <div className="dashboard-section-grid">
             <section className="card dashboard-priorities" id="priorities">
-              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{data?.priorities.length ?? 0} items</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.priorities.length ? (
+              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{error ? "Unavailable" : (data?.priorities.length ?? 0) + " items"}</span></div>
+              <div className="dashboard-task-controls">
+                <button className="btn" type="button" onClick={() => { setShowTaskForm((open) => !open); setTaskMessage(""); }}>{showTaskForm ? "Cancel task" : "+ Add task"}</button>
+                {taskMessage && <p role="status" className="muted-small">{taskMessage}</p>}
+                {showTaskForm && <form className="dashboard-task-form" onSubmit={submitTask}>
+                  <label>Task title <input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} maxLength={200} required placeholder="e.g. Follow up with candidate" /></label>
+                  <label>Due date and time <input type="datetime-local" value={taskDueAt} onChange={(event) => setTaskDueAt(event.target.value)} required /></label>
+                  <button className="btn primary" type="submit" disabled={taskSaving}>{taskSaving ? "Saving…" : "Save task"}</button>
+                </form>}
+              </div>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Priorities unavailable</strong><p>We could not confirm whether any items need attention. Retry to load the latest data.</p></div>
+              ) : !data?.priorities.length ? (
                 <div className="dashboard-empty"><strong>You're all caught up</strong><p>No outstanding priority items were found for the current data.</p></div>
               ) : (
                 <div className="dashboard-priority-list">
@@ -263,29 +308,37 @@ export default function Dashboard() {
           </div>
 
           <section className="card dashboard-pipeline-section">
-            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">Application counts for the selected date range · {totalPipeline} total</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
-            <div className="pipeline dashboard-pipeline">
-              {stages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
-                  <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong><span>{stage.label}</span>
-                </Link>
-              ))}
-            </div>
-            <div className="dashboard-terminal-stages">
-              <span className="muted-small">Terminal outcomes</span>
-              {terminalStages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
-                  {stage.label} <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong>
-                </Link>
-              ))}
-            </div>
+            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">{error ? "Pipeline data unavailable" : "Application counts for the selected date range · " + totalPipeline + " total"}</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
+            {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+              <div className="dashboard-empty" role="status"><strong>Hiring pipeline unavailable</strong><p>Application counts could not be loaded. Retry before interpreting hiring progress.</p></div>
+            ) : Object.keys(data?.pipeline ?? {}).length === 0 ? (
+              <div className="dashboard-empty"><strong>No pipeline activity in this date range</strong><p>Try a wider date range or review submissions.</p></div>
+            ) : <>
+              <div className="pipeline dashboard-pipeline">
+                {stages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
+                    <strong>{data?.pipeline[stage.key] ?? 0}</strong><span>{stage.label}</span>
+                  </Link>
+                ))}
+              </div>
+              <div className="dashboard-terminal-stages">
+                <span className="muted-small">Terminal outcomes</span>
+                {terminalStages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
+                    {stage.label} <strong>{data?.pipeline[stage.key] ?? 0}</strong>
+                  </Link>
+                ))}
+              </div>
+            </>}
           </section>
 
           <div className="dashboard-section-grid dashboard-lower-grid">
             <section className="card">
               <div className="card-head"><span className="card-title">Vacancy health</span><Link href="/jobs" className="link">All vacancies →</Link></div>
               <p className="muted-small">Rules: flag open roles older than {data?.rules.vacancy_target_days ?? 30} days or with fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.jobs.length ? (
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Vacancy health unavailable</strong><p>We could not load vacancy records. Retry before making staffing decisions.</p></div>
+              ) : !data?.jobs.length ? (
                 <div className="dashboard-empty"><strong>No vacancies to display</strong><p>Create a requisition to start tracking vacancy health.</p><Link href="/jobs" className="btn">View jobs</Link></div>
               ) : (
                 <div className="dashboard-vacancy-list">
@@ -302,7 +355,9 @@ export default function Dashboard() {
 
             <section className="card">
               <div className="card-head"><span className="card-title">Recent activity</span><span className="muted-small">Latest recorded events</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.activity.length ? (
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Recent activity unavailable</strong><p>Activity could not be loaded, so this view may not reflect the latest changes.</p></div>
+              ) : !data?.activity.length ? (
                 <div className="dashboard-empty"><strong>No activity yet</strong><p>Recruitment events will appear here when recorded.</p></div>
               ) : (
                 <div className="activity dashboard-activity">
