@@ -183,7 +183,7 @@ begin
   end if;
   raise exception 'Recruitment template versions are immutable; create a new version';
 end;
-$;
+$$;
 drop trigger if exists recruitment_template_versions_immutable on public.recruitment_document_template_versions;
 create trigger recruitment_template_versions_immutable
 before update or delete on public.recruitment_document_template_versions
