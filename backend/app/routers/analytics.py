@@ -1,7 +1,11 @@
+import csv
+import io
 from datetime import date, timedelta
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import StreamingResponse
 
 from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
@@ -713,3 +717,77 @@ async def analytics_forecast(
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
+
+
+@router.get("/export")
+async def analytics_export(
+    organization_id: UUID,
+    report_type: Literal["kpis", "funnel", "workload", "sources", "forecast"] = Query(...),
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    job_id: UUID | None = Query(default=None),
+    recruiter_id: UUID | None = Query(default=None),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Export an allowlisted analytics report as CSV; never accepts user-defined SQL or column expressions."""
+    assert_org_member(user_id, organization_id)
+    _validate_dates(date_from, date_to)
+    if report_type == "kpis":
+        payload = await analytics_kpis(
+            organization_id=organization_id, date_from=date_from, date_to=date_to,
+            job_id=job_id, recruiter_id=recruiter_id, user_id=user_id,
+        )
+        rows = [
+            {"metric": name, **value}
+            for name, value in payload["metrics"].items()
+        ]
+    elif report_type == "funnel":
+        payload = await analytics_funnel(
+            organization_id=organization_id, date_from=date_from, date_to=date_to,
+            job_id=job_id, recruiter_id=recruiter_id, user_id=user_id,
+        )
+        waiting = {row["stage"]: row for row in payload["stage_waiting_time"]}
+        conversion = {row["stage"]: row for row in payload["stage_conversions"]}
+        stages = {row["stage"]: row for row in payload["stages"]}
+        rows = []
+        for stage in sorted(set(stages) | set(waiting) | set(conversion)):
+            rows.append({
+                "stage": stage,
+                **stages.get(stage, {}),
+                **waiting.get(stage, {}),
+                **conversion.get(stage, {}),
+            })
+    elif report_type == "workload":
+        payload = await analytics_workload(
+            organization_id=organization_id, recruiter_id=recruiter_id, user_id=user_id,
+        )
+        rows = [{"record_type": "recruiter", **row} for row in payload["recruiters"]]
+        rows.append({"record_type": "unassigned", **payload["unassigned"]})
+    elif report_type == "sources":
+        payload = await analytics_sources(
+            organization_id=organization_id, date_from=date_from, date_to=date_to,
+            job_id=job_id, recruiter_id=recruiter_id, user_id=user_id,
+        )
+        rows = payload["sources"]
+    else:
+        payload = await analytics_forecast(
+            organization_id=organization_id, recruiter_id=recruiter_id, user_id=user_id,
+        )
+        rows = [{"record_type": "history", **row} for row in payload["history"]]
+        rows.append({"record_type": "forecast", **payload["forecast"]})
+
+    fieldnames = list(dict.fromkeys(key for row in rows for key in row.keys()))
+    if not fieldnames:
+        fieldnames = ["message"]
+        rows = [{"message": "No rows available for this report and filter combination."}]
+    output = io.StringIO(newline="")
+    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
+    writer.writeheader()
+    writer.writerows(rows)
+    output.seek(0)
+    filename = f"aqerith-{report_type}-report.csv"
+    return StreamingResponse(
+        iter([output.getvalue()]),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
