@@ -16,6 +16,23 @@ def db_unavailable(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="Database operation failed")
 
 
+def job_change_audit_metadata(existing: dict, updated: dict, changed_fields: dict) -> dict:
+    """Preserve before/after values for meaningful job edits, especially ownership changes."""
+    changes = {
+        field: {
+            "old": str(existing.get(field)) if existing.get(field) is not None else None,
+            "new": str(updated.get(field)) if updated.get(field) is not None else None,
+        }
+        for field in changed_fields
+        if existing.get(field) != updated.get(field)
+    }
+    return {
+        "changes": changes,
+        "previous_status": existing.get("status"),
+        "status": updated.get("status"),
+    }
+
+
 @router.get("", response_model=list[JobOut])
 async def list_jobs(
     organization_id: UUID,
@@ -103,7 +120,7 @@ async def update_job(
                 with connection.cursor() as cursor:
                     cursor.execute(
                         "insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata) values (%s,%s,%s,'job',%s,%s)",
-                        [existing["organization_id"], user_id, "job.updated", job_id, Jsonb({"changed_fields": list(changes), "previous_status": existing.get("status"), "status": row.get("status")})],
+                        [existing["organization_id"], user_id, "job.updated", job_id, Jsonb(job_change_audit_metadata(existing, row, changes))],
                     )
         if row is not None:
             if row.get("status") == "open":
