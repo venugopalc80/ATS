@@ -32,7 +32,7 @@
 - [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, and old/new edit audit metadata
 - [ ] Add/verify broader database-backed lifecycle and job status-transition tests
 - [x] Backend unit tests pass on code/test commit `cb2c15ed94378ae69cf45c5b1378ea287437a204` (GitHub Actions run 39800730424)
-- [ ] Confirm frontend typecheck and production build in run 39800730424 (in progress at last check)
+- [x] Frontend typecheck and production build steps passed in GitHub Actions run 39800730424; the workflow run itself had not yet finalized at the last check
 - [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
