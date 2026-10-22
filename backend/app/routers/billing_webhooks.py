@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -10,6 +11,7 @@ from uuid import UUID
 
 import stripe
 from fastapi import APIRouter, Header, HTTPException, Request
+
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/billing", tags=["billing"])
@@ -21,6 +23,14 @@ STRIPE_SUBSCRIPTION_EVENTS = {
     "customer.subscription.deleted",
     "customer.subscription.paused",
     "customer.subscription.resumed",
+}
+
+HISTORY_EVENT_TYPES = {
+    "customer.subscription.created": "created",
+    "customer.subscription.updated": "reconciled",
+    "customer.subscription.deleted": "canceled",
+    "customer.subscription.paused": "paused",
+    "customer.subscription.resumed": "resumed",
 }
 
 
@@ -35,7 +45,6 @@ def _normalise_status(status: str, event_type: str) -> str:
         return "canceled"
     if status in {"incomplete", "trialing", "active", "past_due", "paused", "canceled", "unpaid"}:
         return status
-    # Stripe's incomplete_expired has no active access; map it to canceled.
     if status == "incomplete_expired":
         return "canceled"
     return "unpaid"
@@ -87,12 +96,10 @@ async def stripe_webhook(
                         plan_id = UUID(str(metadata.get("plan_id")))
                     except (ValueError, TypeError, AttributeError):
                         cursor.execute(
-                            """
-                            update public.billing_webhook_events
-                            set processing_status='ignored', processed_at=now(),
-                                failure_code='missing_subscription_metadata'
-                            where id=%s
-                            """,
+                            """update public.billing_webhook_events
+                               set processing_status='ignored', processed_at=now(),
+                                   failure_code='missing_subscription_metadata'
+                               where id=%s""",
                             [receipt["id"]],
                         )
                         return {"received": True, "ignored": True}
@@ -101,34 +108,24 @@ async def stripe_webhook(
                     if not provider_subscription_id:
                         raise ValueError("Verified Stripe subscription event has no subscription id")
 
-                    cursor.execute(
-                        "select id from public.organizations where id=%s",
-                        [organization_id],
-                    )
+                    cursor.execute("select id from public.organizations where id=%s", [organization_id])
                     if cursor.fetchone() is None:
                         cursor.execute(
-                            """
-                            update public.billing_webhook_events
-                            set processing_status='ignored', processed_at=now(),
-                                failure_code='unknown_organization'
-                            where id=%s
-                            """,
+                            """update public.billing_webhook_events
+                               set processing_status='ignored', processed_at=now(),
+                                   failure_code='unknown_organization'
+                               where id=%s""",
                             [receipt["id"]],
                         )
                         return {"received": True, "ignored": True}
 
-                    cursor.execute(
-                        "select id from public.subscription_plans where id=%s",
-                        [plan_id],
-                    )
+                    cursor.execute("select id from public.subscription_plans where id=%s", [plan_id])
                     if cursor.fetchone() is None:
                         cursor.execute(
-                            """
-                            update public.billing_webhook_events
-                            set processing_status='ignored', processed_at=now(),
-                                failure_code='unknown_plan'
-                            where id=%s
-                            """,
+                            """update public.billing_webhook_events
+                               set processing_status='ignored', processed_at=now(),
+                                   failure_code='unknown_plan'
+                               where id=%s""",
                             [receipt["id"]],
                         )
                         return {"received": True, "ignored": True}
@@ -144,64 +141,57 @@ async def stripe_webhook(
                     cancel_at_period_end = bool(data_object.get("cancel_at_period_end", False))
 
                     cursor.execute(
-                        """
-                        select id, organization_id, plan_id, status
-                        from public.organization_subscriptions
-                        where billing_provider='stripe' and provider_subscription_id=%s
-                        for update
-                        """,
+                        """select id, organization_id, plan_id, status
+                           from public.organization_subscriptions
+                           where billing_provider='stripe' and provider_subscription_id=%s
+                           for update""",
                         [provider_subscription_id],
                     )
                     existing = cursor.fetchone()
                     previous_state = {}
                     if existing:
+                        # Provider IDs are permanently bound to the original tenant.
+                        if str(existing["organization_id"]) != str(organization_id):
+                            raise ValueError("Stripe subscription tenant metadata does not match stored tenant")
                         previous_state = {
                             "organization_id": str(existing["organization_id"]),
                             "plan_id": str(existing["plan_id"]),
                             "status": existing["status"],
                         }
                         cursor.execute(
-                            """
-                            update public.organization_subscriptions
-                            set organization_id=%s, plan_id=%s, status=%s,
-                                provider_customer_id=%s, current_period_start=%s,
-                                current_period_end=%s, trial_ends_at=%s,
-                                cancel_at_period_end=%s, canceled_at=%s, updated_at=now()
-                            where id=%s
-                            returning id
-                            """,
-                            [organization_id, plan_id, status, customer, period_start,
-                             period_end, trial_end, cancel_at_period_end, canceled_at, existing["id"]],
+                            """update public.organization_subscriptions
+                               set plan_id=%s, status=%s, provider_customer_id=%s,
+                                   current_period_start=%s, current_period_end=%s,
+                                   trial_ends_at=%s, cancel_at_period_end=%s,
+                                   canceled_at=%s, updated_at=now()
+                               where id=%s returning id""",
+                            [plan_id, status, customer, period_start, period_end, trial_end,
+                             cancel_at_period_end, canceled_at, existing["id"]],
                         )
                         subscription_id = cursor.fetchone()["id"]
                     else:
                         cursor.execute(
-                            """
-                            insert into public.organization_subscriptions
-                              (organization_id, plan_id, status, billing_provider,
-                               provider_customer_id, provider_subscription_id,
-                               current_period_start, current_period_end, trial_ends_at,
-                               cancel_at_period_end, canceled_at)
-                            values (%s, %s, %s, 'stripe', %s, %s, %s, %s, %s, %s, %s)
-                            returning id
-                            """,
+                            """insert into public.organization_subscriptions
+                               (organization_id, plan_id, status, billing_provider,
+                                provider_customer_id, provider_subscription_id,
+                                current_period_start, current_period_end, trial_ends_at,
+                                cancel_at_period_end, canceled_at)
+                               values (%s, %s, %s, 'stripe', %s, %s, %s, %s, %s, %s, %s)
+                               returning id""",
                             [organization_id, plan_id, status, customer, provider_subscription_id,
                              period_start, period_end, trial_end, cancel_at_period_end, canceled_at],
                         )
                         subscription_id = cursor.fetchone()["id"]
 
                     cursor.execute(
-                        """
-                        insert into public.organization_subscription_history
-                          (organization_id, subscription_id, event_type, previous_state,
-                           new_state, source)
-                        values (%s, %s, %s, %s::jsonb, %s::jsonb, 'provider_webhook')
-                        """,
+                        """insert into public.organization_subscription_history
+                           (organization_id, subscription_id, event_type, previous_state,
+                            new_state, source)
+                           values (%s, %s, %s, %s::jsonb, %s::jsonb, 'provider_webhook')""",
                         [
-                            organization_id, subscription_id,
-                            event_type.replace("customer.subscription.", ""),
-                            __import__("json").dumps(previous_state),
-                            __import__("json").dumps({
+                            organization_id, subscription_id, HISTORY_EVENT_TYPES[event_type],
+                            json.dumps(previous_state),
+                            json.dumps({
                                 "plan_id": str(plan_id),
                                 "status": status,
                                 "provider_subscription_id": provider_subscription_id,
@@ -214,11 +204,9 @@ async def stripe_webhook(
                     )
 
                 cursor.execute(
-                    """
-                    update public.billing_webhook_events
-                    set processing_status='processed', processed_at=now()
-                    where id=%s
-                    """,
+                    """update public.billing_webhook_events
+                       set processing_status='processed', processed_at=now()
+                       where id=%s""",
                     [receipt["id"]],
                 )
         return {"received": True, "processed": event_type in STRIPE_SUBSCRIPTION_EVENTS}
@@ -227,6 +215,5 @@ async def stripe_webhook(
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Billing webhook processing is unavailable") from exc
     except Exception as exc:
-        # Do not log raw payloads or secrets. Returning 500 asks Stripe to retry.
         logger.exception("Stripe webhook processing failed for event id %s", event_id)
         raise HTTPException(status_code=500, detail="Billing webhook processing failed") from exc
