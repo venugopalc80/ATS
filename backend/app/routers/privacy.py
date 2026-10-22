@@ -288,7 +288,8 @@ async def preview_retention(
                         "e.organization_id = r.organization_id "
                         "and e.target_table = %s and e.target_record_id = r.id "
                         "and e.starts_at <= %s and (e.ends_at is null or e.ends_at > %s) "
-                        "and (e.policy_id is null or e.policy_id = %s)"
+                        "and (e.policy_id is null or e.policy_id = %s) "
+                        "and (e.exception_type = 'legal_hold' or e.approved_by is not null)"
                     )
                     common_processed = (
                         "l.organization_id = r.organization_id and l.policy_id = %s "
@@ -349,6 +350,17 @@ async def preview_retention(
                         "items_truncated": counts["eligible_count"] > len(items),
                     })
 
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, metadata)
+                       values (%s, %s, 'privacy.retention_previewed', 'retention_preview', %s::jsonb)""",
+                    [organization_id, user_id, json.dumps({
+                        "as_of": preview_at.isoformat(),
+                        "policies_scanned": len(policies),
+                        "eligible_count": sum(item.get("eligible_count", 0) for item in previews),
+                        "unsupported_category_count": sum(item.get("status") == "unsupported_category" for item in previews),
+                    })],
+                )
                 return {
                     "organization_id": organization_id,
                     "as_of": preview_at,
