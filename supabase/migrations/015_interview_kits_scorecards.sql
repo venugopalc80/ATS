@@ -159,9 +159,12 @@ begin
   if old.status = 'published' then
     raise exception 'Published scorecard templates are immutable; create a new version';
   end if;
-  return case when tg_op = 'DELETE' then old else new end;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
 end;
-$$;
+$;
 
 drop trigger if exists scorecard_template_immutable on public.scorecard_templates;
 create trigger scorecard_template_immutable
@@ -174,24 +177,26 @@ language plpgsql
 set search_path = public, pg_temp
 as $$
 declare
-  target_template_id uuid;
-  target_organization_id uuid;
   template_status text;
 begin
-  if tg_op = 'DELETE' then
-    target_template_id := old.template_id;
-    target_organization_id := old.organization_id;
-  else
-    target_template_id := new.template_id;
-    target_organization_id := new.organization_id;
+  if tg_op <> 'INSERT' then
+    select status into template_status
+      from public.scorecard_templates
+      where organization_id = old.organization_id and id = old.template_id;
+    if template_status = 'published' then
+      raise exception 'Published scorecard competencies and questions are immutable';
+    end if;
   end if;
-  select status into template_status
-    from public.scorecard_templates
-    where organization_id = target_organization_id and id = target_template_id;
-  if template_status = 'published' then
-    raise exception 'Published scorecard competencies and questions are immutable';
+  if tg_op <> 'DELETE' then
+    select status into template_status
+      from public.scorecard_templates
+      where organization_id = new.organization_id and id = new.template_id;
+    if template_status = 'published' then
+      raise exception 'Published scorecard competencies and questions are immutable';
+    end if;
+    return new;
   end if;
-  return case when tg_op = 'DELETE' then old else new end;
+  return old;
 end;
 $$;
 
@@ -207,3 +212,66 @@ for each row execute function public.prevent_published_scorecard_child_mutation(
 
 revoke all on function public.prevent_published_scorecard_template_mutation() from public;
 revoke all on function public.prevent_published_scorecard_child_mutation() from public;
+
+
+-- A submitted assessment is a durable record. Corrections require an explicit
+-- future workflow rather than silently rewriting the assessor's original score.
+create or replace function public.prevent_submitted_interview_feedback_mutation()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if old.status = 'submitted' then
+    raise exception 'Submitted interview feedback is immutable';
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
+create or replace function public.prevent_submitted_scorecard_response_mutation()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  target_feedback_id uuid;
+  target_organization_id uuid;
+  feedback_status text;
+begin
+  if tg_op <> 'INSERT' then
+    target_feedback_id := old.feedback_id;
+    target_organization_id := old.organization_id;
+    select status into feedback_status from public.interview_feedback
+      where organization_id=target_organization_id and id=target_feedback_id;
+    if feedback_status = 'submitted' then
+      raise exception 'Responses to submitted interview feedback are immutable';
+    end if;
+  end if;
+  if tg_op <> 'DELETE' then
+    select status into feedback_status from public.interview_feedback
+      where organization_id=new.organization_id and id=new.feedback_id;
+    if feedback_status = 'submitted' then
+      raise exception 'Responses to submitted interview feedback are immutable';
+    end if;
+    return new;
+  end if;
+  return old;
+end;
+$$;
+
+drop trigger if exists interview_feedback_immutable on public.interview_feedback;
+create trigger interview_feedback_immutable
+before update or delete on public.interview_feedback
+for each row execute function public.prevent_submitted_interview_feedback_mutation();
+
+drop trigger if exists scorecard_response_immutable on public.scorecard_responses;
+create trigger scorecard_response_immutable
+before insert or update or delete on public.scorecard_responses
+for each row execute function public.prevent_submitted_scorecard_response_mutation();
+
+revoke all on function public.prevent_submitted_interview_feedback_mutation() from public;
+revoke all on function public.prevent_submitted_scorecard_response_mutation() from public;
