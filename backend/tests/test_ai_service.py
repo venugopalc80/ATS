@@ -31,7 +31,7 @@ class AIServiceTests(unittest.TestCase):
     def test_provider_is_blocked_without_explicit_server_approval(self):
         with patch("app.services.ai_service.requests.post") as post:
             with self.assertRaisesRegex(RuntimeError, "disabled"):
-                generate_text("summarize_candidate", [], None, "model")
+                generate_text("summarize_candidate", [], None, "model", "openai-compatible")
             post.assert_not_called()
 
     @patch.dict(os.environ, {"AI_PROVIDER_APPROVED": "true", "AI_PROVIDER_API_KEY": "test-key"}, clear=False)
@@ -41,12 +41,17 @@ class AIServiceTests(unittest.TestCase):
         response.json.return_value = {"choices": [{"message": {"content": "Evidence-backed summary"}}]}
         response.raise_for_status.return_value = None
         post.return_value = response
-        result = generate_text("summarize_candidate", [{"id": "candidate-1"}], None, "test-model")
+        result = generate_text("summarize_candidate", [{"id": "candidate-1"}], None, "test-model", "openai-compatible")
         self.assertEqual(result, "Evidence-backed summary")
         args, kwargs = post.call_args
         self.assertTrue(args[0].endswith("/chat/completions"))
         self.assertEqual(kwargs["json"]["model"], "test-model")
         self.assertEqual(kwargs["timeout"], (5, 45))
+
+    @patch.dict(os.environ, {"AI_PROVIDER_APPROVED": "true", "AI_PROVIDER_NAME": "approved-provider"}, clear=False)
+    def test_provider_identifier_must_match_server_approval(self):
+        with self.assertRaisesRegex(RuntimeError, "does not match"):
+            generate_text("summarize_candidate", [], None, "model", "unapproved-provider")
 
     @patch.dict(os.environ, {"AI_PROVIDER_APPROVED": "true"}, clear=False)
     def test_provider_requires_credentials(self):
