@@ -63,6 +63,13 @@ class FormCreate(BaseModel):
     privacy_notice_version: str = Field(default="1", min_length=1, max_length=80)
     questions: list[QuestionIn] = Field(default_factory=list, max_length=100)
 
+    @field_validator("name", "privacy_notice_text")
+    @classmethod
+    def non_blank_required_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("This field cannot be blank")
+        return value.strip()
+
 
 class FormVersionUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=160)
@@ -70,6 +77,20 @@ class FormVersionUpdate(BaseModel):
     privacy_notice_text: str = Field(min_length=1, max_length=12000)
     privacy_notice_version: str = Field(default="1", min_length=1, max_length=80)
     questions: list[QuestionIn] = Field(default_factory=list, max_length=100)
+
+    @field_validator("name")
+    @classmethod
+    def name_not_blank(cls, value: str | None) -> str | None:
+        if value is not None and not value.strip():
+            raise ValueError("Form name cannot be blank")
+        return value.strip() if value is not None else None
+
+    @field_validator("privacy_notice_text")
+    @classmethod
+    def notice_not_blank(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Privacy notice cannot be blank")
+        return value.strip()
 
 
 class AssignFormIn(BaseModel):
