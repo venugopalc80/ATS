@@ -62,6 +62,8 @@ class FakeAnalyticsCursor:
         self.queries.append((self.sql, self.params))
 
     def fetchone(self):
+        if "pending_headcount" in self.sql:
+            return {"pending_headcount": 4, "pending_requisitions": 2}
         if "as applications" in self.sql:
             return {"applications": 6, "closed_unsuccessfully": 1, "active_applications": 4}
         if "as decided_offers" in self.sql:
@@ -85,6 +87,15 @@ class FakeAnalyticsCursor:
         raise AssertionError(f"Unexpected fetchone query: {self.sql}")
 
     def fetchall(self):
+        if "approved_headcount" in self.sql and "months as" in self.sql:
+            return [
+                {"month_start": date(2026, 4, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                {"month_start": date(2026, 5, 1), "approved_headcount": 1, "approved_requisitions": 1},
+                {"month_start": date(2026, 6, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                {"month_start": date(2026, 7, 1), "approved_headcount": 2, "approved_requisitions": 1},
+                {"month_start": date(2026, 8, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                {"month_start": date(2026, 9, 1), "approved_headcount": 3, "approved_requisitions": 1},
+            ]
         if "as stage_visits" in self.sql:
             return [
                 {"stage": "screening", "stage_visits": 7, "distinct_applications": 6},
@@ -246,6 +257,23 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(result["sources"][1]["sample_warning"])
         self.assertIsNone(result["sources"][1]["offer_acceptance_rate"])
         self.assertIn("coalesce(nullif(btrim(a.source), ''), 'Unknown')", self.cursor.queries[0][0])
+
+
+    async def test_forecast_uses_six_month_baseline_and_exposes_pending_demand(self):
+        result = await analytics_router.analytics_forecast(
+            organization_id=ORG,
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        forecast = result["forecast"]
+        self.assertEqual(result["history_months"], 6)
+        self.assertEqual(forecast["expected_approved_headcount"], 1.0)
+        self.assertEqual(forecast["pending_approval_headcount"], 4)
+        self.assertEqual(forecast["pending_approval_requisitions"], 2)
+        self.assertEqual(forecast["trend"], "increasing")
+        self.assertEqual(forecast["confidence"], "medium")
+        self.assertEqual(forecast["status"], "baseline_only")
+        self.assertIn("generate_series", self.cursor.queries[0][0])
+        self.membership.assert_called_once()
 
 
 if __name__ == "__main__":
