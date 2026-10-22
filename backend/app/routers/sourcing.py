@@ -936,12 +936,12 @@ async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_curr
                        from public.campaign_memberships cm2
                        join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
                       where cm2.organization_id=c.organization_id and cm2.campaign_id=c.id
-                        and a2.status in ('shortlisted','interview','assessment','offer','hired')) as qualified_applications,
+                        and a2.status in ('submitted','interview','offer','hired')) as qualified_applications,
                     (select count(distinct cm2.application_id)
                        from public.campaign_memberships cm2
                        join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
                       where cm2.organization_id=c.organization_id and cm2.campaign_id=c.id
-                        and a2.status in ('interview','assessment','offer','hired')) as interview_progressed_applications,
+                        and a2.status in ('interview','offer','hired')) as interview_progressed_applications,
                     (select count(distinct cm2.application_id)
                        from public.campaign_memberships cm2
                        join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
