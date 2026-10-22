@@ -699,7 +699,7 @@ async def review_job_description(version_id: UUID, payload: ReviewInput, user_id
             cur.execute(
                 """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
                    values (%s,%s,'ai_job_description_reviewed','ai_job_description_version',%s,%s::jsonb)""",
-                [payload.organization_id, user_id, row["id"], json.dumps({"status": row["status"], "version_number": row["version_number"]})],
+                [payload.organization_id, user_id, row["id"], json.dumps({"status": row["status"], "version_number": row["version_number"], "approved": payload.approved, "override_reason": payload.override_reason})],
             )
             return row
     except HTTPException:
@@ -776,7 +776,7 @@ async def review_interview_kit(kit_id: UUID, payload: ReviewInput, user_id: UUID
             cur.execute(
                 """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
                    values (%s,%s,'ai_interview_kit_reviewed','ai_interview_kit',%s,%s::jsonb)""",
-                [payload.organization_id, user_id, row["id"], json.dumps({"status": row["status"], "version_number": row["version_number"]})],
+                [payload.organization_id, user_id, row["id"], json.dumps({"status": row["status"], "version_number": row["version_number"], "approved": payload.approved, "override_reason": payload.override_reason})],
             )
             return row
     except HTTPException:
