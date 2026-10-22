@@ -124,7 +124,7 @@ async def search_help_articles(
                               summary, body_markdown, updated_at
                        from latest
                        where (%s = '' or title ilike %s or summary ilike %s or body_markdown ilike %s)
-                         and (%s is null or category ilike %s)
+                         and (%s::text is null or category ilike %s)
                        order by category, title
                        limit %s""",
                     [
