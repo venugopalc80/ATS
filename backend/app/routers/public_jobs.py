@@ -209,7 +209,7 @@ async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn, organ
                 cursor.execute(
                     """select id from public.applications
                        where organization_id=%s and job_id=%s and candidate_id=%s
-                       limit 1""",
+                         and status not in ('rejected', 'withdrawn') limit 1""",
                     [organization_id, job_id, candidate_id],
                 )
                 existing_application = cursor.fetchone()
