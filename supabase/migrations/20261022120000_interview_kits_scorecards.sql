@@ -93,7 +93,7 @@ create table if not exists public.scorecard_responses (
   feedback_id uuid not null,
   competency_id uuid not null,
   rating smallint not null check (rating between 1 and 5),
-  evidence text not null check (length(trim(evidence)) between 1 and 4000),
+  evidence text not null default '' check (length(trim(evidence)) between 0 and 4000),
   notes text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
