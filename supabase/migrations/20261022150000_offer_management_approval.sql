@@ -54,6 +54,7 @@ create table if not exists public.offer_versions (
   document_sha256 text check (document_sha256 is null or document_sha256 ~ '^[a-f0-9]{64}$'),
   unique (organization_id, id),
   unique (organization_id, offer_id, version_number),
+  unique (organization_id, offer_id, id),
   foreign key (organization_id, offer_id) references public.offers(organization_id, id) on delete cascade,
   check (document_storage_path is null or length(document_storage_path) <= 1000)
 );
@@ -70,7 +71,7 @@ create table if not exists public.offer_approvals (
   created_at timestamptz not null default now(),
   unique (organization_id, id),
   foreign key (organization_id, offer_id) references public.offers(organization_id, id) on delete cascade,
-  foreign key (organization_id, offer_version_id) references public.offer_versions(organization_id, id) on delete restrict,
+  foreign key (organization_id, offer_id, offer_version_id) references public.offer_versions(organization_id, offer_id, id) on delete restrict,
   check (comments is null or length(comments) <= 4000)
 );
 
@@ -87,7 +88,7 @@ create table if not exists public.offer_documents (
   created_at timestamptz not null default now(),
   unique (organization_id, id),
   foreign key (organization_id, offer_id) references public.offers(organization_id, id) on delete cascade,
-  foreign key (organization_id, offer_version_id) references public.offer_versions(organization_id, id) on delete restrict
+  foreign key (organization_id, offer_id, offer_version_id) references public.offer_versions(organization_id, offer_id, id) on delete restrict
 );
 
 create index if not exists offer_versions_offer_version_idx
