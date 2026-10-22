@@ -46,6 +46,20 @@ class SignatureProviderEvent(BaseModel):
     occurred_at: datetime | None = None
 
 
+def verify_adapter_signature(raw: bytes, timestamp_header: str, signature_header: str, secret: str, now: int | None = None) -> bool:
+    try:
+        timestamp = int(timestamp_header)
+    except (TypeError, ValueError):
+        return False
+    current_time = int(time.time()) if now is None else now
+    if abs(current_time - timestamp) > 300:
+        return False
+    signed_payload = timestamp_header.encode("ascii") + b"." + raw
+    expected = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
+    supplied = signature_header.removeprefix("sha256=").strip().lower()
+    return hmac.compare_digest(expected, supplied)
+
+
 def _template_body(body: str) -> tuple[list[str], str]:
     names = sorted(set(PLACEHOLDER_PATTERN.findall(body)))
     unknown = sorted(set(names) - TEMPLATE_PLACEHOLDERS)
@@ -181,19 +195,9 @@ async def receive_normalized_signature_event(
     secret = os.getenv("SIGNATURE_WEBHOOK_SECRET")
     if not secret:
         raise HTTPException(status_code=503, detail="Signature event adapter is not configured")
-    try:
-        timestamp = int(x_aqerith_timestamp)
-    except (TypeError, ValueError) as exc:
-        raise HTTPException(status_code=401, detail="Invalid webhook timestamp") from exc
-    if abs(int(time.time()) - timestamp) > 300:
-        raise HTTPException(status_code=401, detail="Webhook timestamp outside allowed window")
-
     raw = await request.body()
-    signed_payload = x_aqerith_timestamp.encode("ascii") + b"." + raw
-    expected = hmac.new(secret.encode("utf-8"), signed_payload, hashlib.sha256).hexdigest()
-    supplied = x_aqerith_signature.removeprefix("sha256=").strip().lower()
-    if not hmac.compare_digest(expected, supplied):
-        raise HTTPException(status_code=401, detail="Invalid webhook signature")
+    if not verify_adapter_signature(raw, x_aqerith_timestamp, x_aqerith_signature, secret):
+        raise HTTPException(status_code=401, detail="Invalid or expired webhook signature")
 
     try:
         event = SignatureProviderEvent.model_validate_json(raw)
