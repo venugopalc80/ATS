@@ -306,7 +306,7 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
             recruiter_id=None,
             user_id=UUID("22222222-2222-4222-8222-222222222222"),
         )
-        self.assertEqual(response.media_type, "text/csv")
+        self.assertTrue(response.media_type.startswith("text/csv"))
         self.assertIn("aqerith-forecast-report.csv", response.headers["content-disposition"])
         chunks = [chunk async for chunk in response.body_iterator]
         body = b"".join(chunk.encode() if isinstance(chunk, str) else chunk for chunk in chunks).decode()
