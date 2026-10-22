@@ -6,6 +6,10 @@ from app.schemas.applications import ApplicationCreate, ApplicationStageConfigUp
 
 APPLICATION_COLUMNS = "id, organization_id, job_id, candidate_id, source, status, match_score, match_explanation, human_reviewed, human_reviewed_by, human_reviewed_at, created_at, updated_at"
 STAGE_HISTORY_COLUMNS = "id, organization_id, application_id, previous_stage, new_stage, actor_user_id, reason, created_at"
+STAGE_CONFIG_COLUMNS = (
+    "organization_id, stage_key, label, display_order, allowed_next_stages, "
+    "is_terminal, enabled, created_at, updated_at"
+)
 
 
 def _load_stage_config(cursor, organization_id: UUID) -> dict[str, dict[str, Any]]:
@@ -37,6 +41,62 @@ def _validate_configured_transition(
 
 
 class ApplicationService:
+    async def list_stage_config(self, organization_id: UUID) -> list[dict[str, Any]]:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select " + STAGE_CONFIG_COLUMNS + " from public.application_stage_config "
+                    "where organization_id=%s order by display_order, stage_key",
+                    [organization_id],
+                )
+                return list(cursor.fetchall())
+
+    async def update_stage_config(
+        self, organization_id: UUID, stage_key: str, payload: ApplicationStageConfigUpdate
+    ) -> dict[str, Any] | None:
+        data = payload.model_dump(mode="python", exclude_unset=True)
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select " + STAGE_CONFIG_COLUMNS + " from public.application_stage_config "
+                    "where organization_id=%s and stage_key=%s for update",
+                    [organization_id, stage_key],
+                )
+                existing = cursor.fetchone()
+                if existing is None:
+                    return None
+                if not data:
+                    return existing
+                if any(value is None for value in data.values()):
+                    raise ValueError("Stage configuration fields cannot be null")
+
+                next_stages = data.get("allowed_next_stages", existing["allowed_next_stages"] or [])
+                terminal = data.get("is_terminal", existing["is_terminal"])
+                if stage_key in {"hired", "rejected", "withdrawn"} and terminal is False:
+                    raise ValueError("Hired, Rejected and Withdrawn must remain terminal stages")
+                if terminal and next_stages:
+                    raise ValueError("Terminal stages cannot have allowed next stages")
+                if stage_key in next_stages:
+                    raise ValueError("A stage cannot transition to itself")
+                if next_stages:
+                    cursor.execute(
+                        "select stage_key from public.application_stage_config "
+                        "where organization_id=%s and stage_key = any(%s)",
+                        [organization_id, next_stages],
+                    )
+                    available = {row["stage_key"] for row in cursor.fetchall()}
+                    if available != set(next_stages):
+                        raise ValueError("Allowed next stages must exist in this organisation")
+
+                assignments = ", ".join(f"{column}=%s" for column in data)
+                cursor.execute(
+                    "update public.application_stage_config set " + assignments +
+                    ", updated_at=now() where organization_id=%s and stage_key=%s returning " +
+                    STAGE_CONFIG_COLUMNS,
+                    list(data.values()) + [organization_id, stage_key],
+                )
+                return cursor.fetchone()
+
     async def list_applications(self, organization_id: UUID, status: str | None = None, job_id: UUID | None = None, candidate_id: UUID | None = None) -> list[dict[str, Any]]:
         query = "select " + APPLICATION_COLUMNS + " from public.applications where organization_id = %s"
         params: list[Any] = [organization_id]
