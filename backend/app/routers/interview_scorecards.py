@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id, get_org_role
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
+from app.schemas.interview_scorecard_decisions import InterviewScorecardDecision
 from app.schemas.interview_scorecards import InterviewFeedbackDraft, InterviewKitCreate, InterviewKitDefinition
 from app.services import interview_scorecard_service as service
 
@@ -187,6 +188,23 @@ def get_my_scorecard(interview_id: UUID, user_id: UUID = Depends(get_current_use
         return service.get_my_feedback(organization_id, interview_id, user_id)
     except HTTPException:
         raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+    except (LookupError, PermissionError, ValueError) as exc:
+        raise _handle_service_error(exc) from exc
+
+
+@router.post("/api/interviews/{interview_id}/scorecard-decision", status_code=201)
+def post_scorecard_decision(
+    interview_id: UUID, organization_id: UUID, payload: InterviewScorecardDecision,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_admin(user_id, organization_id)
+    try:
+        return service.record_decision(
+            organization_id, interview_id, user_id, payload.decision,
+            payload.rationale, payload.evidence_response_ids,
+        )
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _database_error(exc) from exc
     except (LookupError, PermissionError, ValueError) as exc:
