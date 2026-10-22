@@ -85,7 +85,7 @@ class AssessmentAssignmentUpdate(BaseModel):
     extension_reason: str | None = Field(default=None, min_length=1, max_length=2000)
     accommodation_requested: bool | None = None
     accommodation_arrangements: str | None = Field(default=None, max_length=2000)
-    status: Literal["cancelled", "expired"] | None = None
+    status: Literal["cancelled"] | None = None
 
     @field_validator("due_at")
     @classmethod
