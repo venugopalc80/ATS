@@ -235,7 +235,7 @@ async def preview_retention(
     limit: int = Query(default=100, ge=1, le=200),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    """Read-only retention preview. This endpoint never deletes or anonymises records."""
+    """Non-destructive retention preview; only the audit trail is written."""
     assert_org_admin(user_id, organization_id)
     preview_at = as_of or datetime.now(timezone.utc)
     if preview_at.tzinfo is None or preview_at.utcoffset() is None:
