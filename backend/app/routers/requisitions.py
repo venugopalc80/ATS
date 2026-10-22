@@ -2,13 +2,26 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from app.auth import assert_org_member, get_current_user_id, get_org_role
-from app.db import DatabaseConfigurationError, DatabaseConnectionError
+from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.schemas.requisitions import RequisitionCreate, RequisitionOut, RequisitionUpdate
 from app.services.requisition_service import RequisitionService
 
 router = APIRouter(prefix="/api/requisitions", tags=["requisitions"])
 service = RequisitionService()
 ADMINS = {"owner", "admin"}
+
+def validate_org_links(organization_id: UUID, client_id, hiring_manager_id, recruiter_id):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            if client_id is not None:
+                cursor.execute("select 1 from public.clients where id=%s and organization_id=%s", [client_id, organization_id])
+                if cursor.fetchone() is None:
+                    raise HTTPException(status_code=422, detail="Client must belong to the same organisation")
+            for label, assigned_user in (("Hiring manager", hiring_manager_id), ("Recruiter", recruiter_id)):
+                if assigned_user is not None:
+                    cursor.execute("select 1 from public.organization_members where organization_id=%s and user_id=%s", [organization_id, assigned_user])
+                    if cursor.fetchone() is None:
+                        raise HTTPException(status_code=422, detail=label + " must belong to the same organisation")
 
 def db_unavailable(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="Database operation failed")
@@ -43,6 +56,7 @@ async def create_requisition(payload: RequisitionCreate, user_id: UUID = Depends
     role = get_org_role(user_id, payload.organization_id)
     if role not in ADMINS | {"hiring_manager", "recruiter"}:
         raise HTTPException(status_code=403, detail="Your organisation role cannot request vacancies")
+    validate_org_links(payload.organization_id, payload.client_id, payload.hiring_manager_id, payload.recruiter_id)
     try:
         return RequisitionOut.model_validate(await service.create_requisition(payload, user_id))
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -60,6 +74,8 @@ async def update_requisition(requisition_id: UUID, payload: RequisitionUpdate, u
         raise HTTPException(status_code=409, detail="Only draft or rejected requisitions can be edited")
     if role not in ADMINS and not (role in {"hiring_manager", "recruiter"} and row["requested_by"] == user_id):
         raise HTTPException(status_code=403, detail="You cannot edit this requisition")
+    changes = payload.model_dump(exclude_unset=True)
+    validate_org_links(row["organization_id"], changes.get("client_id", row["client_id"]), changes.get("hiring_manager_id", row["hiring_manager_id"]), changes.get("recruiter_id", row["recruiter_id"]))
     try:
         updated = await service.update_requisition(requisition_id, payload, user_id)
         return RequisitionOut.model_validate(updated)

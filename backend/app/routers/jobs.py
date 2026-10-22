@@ -77,6 +77,13 @@ async def update_job(
         changes = payload.model_dump(exclude_unset=True)
         if ("recruiter_id" in changes or "hiring_manager_id" in changes) and role not in {"owner", "admin"}:
             raise HTTPException(status_code=403, detail="Only organisation owners or admins can reassign vacancy ownership")
+        for label, assigned_user in (("Recruiter", changes.get("recruiter_id")), ("Hiring manager", changes.get("hiring_manager_id"))):
+            if assigned_user is not None:
+                with get_connection() as connection:
+                    with connection.cursor() as cursor:
+                        cursor.execute("select 1 from public.organization_members where organization_id=%s and user_id=%s", [existing["organization_id"], assigned_user])
+                        if cursor.fetchone() is None:
+                            raise HTTPException(status_code=422, detail=label + " must belong to the same organisation")
         if "status" in changes and changes["status"] != existing.get("status"):
             allowed = {"draft": {"open", "cancelled"}, "open": {"on_hold", "closed", "filled"}, "on_hold": {"open", "closed", "cancelled"}, "closed": {"open"}, "filled": set(), "cancelled": set()}
             if changes["status"] not in allowed.get(existing.get("status"), set()):
@@ -116,6 +123,8 @@ async def delete_job(
         role = get_org_role(user_id, existing["organization_id"])
         if role not in {"owner", "admin", "recruiter"}:
             raise HTTPException(status_code=403, detail="You cannot close this vacancy")
+        if existing.get("status") in {"filled", "cancelled"}:
+            raise HTTPException(status_code=409, detail="Filled or cancelled vacancies cannot be closed")
         deleted = await service.delete_job(job_id)
         if deleted and existing.get("status") not in {"closed", "filled", "cancelled"}:
             from psycopg.types.json import Jsonb
