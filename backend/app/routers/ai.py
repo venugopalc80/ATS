@@ -66,6 +66,18 @@ class ReviewInput(BaseModel):
     override_reason: str | None = Field(default=None, max_length=2000)
 
 
+class RecommendationInput(BaseModel):
+    organization_id: UUID
+    object_type: Literal["candidate", "application", "job", "interview", "job_description"]
+    object_id: UUID
+    purpose: str = Field(min_length=10, max_length=2000)
+    input_references: list[dict] = Field(min_length=1, max_length=100)
+    evidence: list[dict] = Field(min_length=1, max_length=100)
+    explanation: str = Field(min_length=10, max_length=6000)
+    limitations: list[str] = Field(default_factory=list, max_length=50)
+    model_version_id: UUID | None = None
+
+
 def _db_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="AI service database operation failed")
 
@@ -431,9 +443,11 @@ async def review_recommendation(
         with get_connection() as conn, conn.cursor() as cur:
             cur.execute(
                 """update public.ai_recommendations set human_reviewed_by=%s, human_reviewed_at=now(),
-                          override_reason=%s
-                   where id=%s and organization_id=%s returning id, human_reviewed_by, human_reviewed_at, override_reason""",
-                [user_id, None if payload.approved else payload.override_reason, recommendation_id, payload.organization_id],
+                          review_outcome=%s, override_reason=%s
+                   where id=%s and organization_id=%s
+                   returning id, human_reviewed_by, human_reviewed_at, review_outcome, override_reason""",
+                [user_id, "accepted" if payload.approved else "overridden",
+                 None if payload.approved else payload.override_reason, recommendation_id, payload.organization_id],
             )
             row = cur.fetchone()
             if not row:
@@ -632,13 +646,13 @@ async def create_fairness_audit(payload: FairnessAuditInput, user_id: UUID = Dep
                 """insert into public.ai_fairness_audits
                    (organization_id, audit_name, dataset_version, methodology, outcome_metric,
                     aggregate_results, sample_sizes, missingness, uncertainty_notes,
-                    legal_review_reference, reviewed_by, reviewed_at)
-                   values (%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s,now())
+                    legal_review_reference)
+                   values (%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,%s)
                    returning id, audit_name, dataset_version, outcome_metric, sample_sizes,
-                             missingness, uncertainty_notes, legal_review_reference, reviewed_at, created_at""",
+                             missingness, uncertainty_notes, legal_review_reference, created_at""",
                 [payload.organization_id, payload.audit_name, payload.dataset_version, payload.methodology,
                  payload.outcome_metric, json.dumps(payload.aggregate_results), json.dumps(payload.sample_sizes),
-                 json.dumps(payload.missingness), json.dumps(notes), payload.legal_review_reference, user_id],
+                 json.dumps(payload.missingness), json.dumps(notes), payload.legal_review_reference],
             )
             row = cur.fetchone()
             cur.execute(
@@ -743,6 +757,60 @@ async def review_interview_kit(kit_id: UUID, payload: ReviewInput, user_id: UUID
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Interview kit draft not found")
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/recommendations", status_code=201)
+async def create_recorded_recommendation(
+    payload: RecommendationInput,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, payload.organization_id)
+    table_by_type = {
+        "candidate": "candidates",
+        "application": "applications",
+        "job": "jobs",
+        "interview": "interviews",
+        "job_description": "ai_job_description_versions",
+    }
+    table = table_by_type[payload.object_type]
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                f"select id from public.{table} where id=%s and organization_id=%s",
+                [payload.object_id, payload.organization_id],
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Recommendation target not found")
+            if payload.model_version_id:
+                cur.execute(
+                    "select id from public.ai_model_versions where id=%s and organization_id=%s",
+                    [payload.model_version_id, payload.organization_id],
+                )
+                if not cur.fetchone():
+                    raise HTTPException(status_code=404, detail="Model version not found")
+            cur.execute(
+                """insert into public.ai_recommendations
+                   (organization_id, object_type, object_id, purpose, input_references, evidence,
+                    explanation, limitations, model_version_id)
+                   values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,%s::jsonb,%s)
+                   returning id, object_type, object_id, purpose, input_references, evidence,
+                             explanation, limitations, model_version_id, created_at""",
+                [payload.organization_id, payload.object_type, payload.object_id, payload.purpose,
+                 json.dumps(payload.input_references), json.dumps(payload.evidence), payload.explanation,
+                 json.dumps(payload.limitations), payload.model_version_id],
+            )
+            row = cur.fetchone()
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_recommendation_recorded','ai_recommendation',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, row["id"], json.dumps({"object_type": payload.object_type,
+                 "object_id": str(payload.object_id), "purpose": payload.purpose})],
+            )
             return row
     except HTTPException:
         raise
