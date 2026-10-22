@@ -25,7 +25,7 @@
 
 supabase/migrations/20261022124500_candidate_assessments.sql
 
-Apply to ATS-Staging only after review. Do not apply to production as part of this PR.
+Applied successfully to ATS-Staging on 2026-10-22. Post-apply verification confirmed all seven assessment tables, RLS enabled on each, the append-only assignment-event trigger present, and no grants to anon/authenticated. Production was not changed.
 
 ## Provider configuration
 
@@ -50,7 +50,7 @@ Configure a distinct secret per provider using ASSESSMENT_PROVIDER_<PROVIDER_KEY
 - [x] Provider webhook signature verification and replay deduplication are implemented in code.
 - [ ] Candidate-facing submission and accessibility journey verified.
 - [ ] Private work-sample upload and retention path verified.
-- [ ] Migration applied and verified in ATS-Staging.
-- [ ] Backend tests and frontend typecheck/build pass in CI.
+- [x] Migration applied and schema verified in ATS-Staging.
+- [ ] Backend tests and frontend typecheck/build pass in CI. GitHub Actions workflow runs were not reported; Vercel preview checks failed due to the team's build-rate limit, so no build result is available.
 - [ ] Authenticated preview tested across tenant and permission boundaries.
 - [ ] Production release checks completed.
