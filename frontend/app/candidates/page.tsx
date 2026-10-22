@@ -300,10 +300,7 @@ export default function CandidatesPage() {
       if (!response.ok) throw new Error(payload?.detail || "CV import failed (HTTP " + response.status + ").");
       setCvImportResults(payload.results ?? []);
       setCvImportMessage("Finished: " + payload.imported + " imported, " + payload.duplicates + " duplicates skipped, " + payload.failed + " failed.");
-      if (payload.imported > 0) {
-        const refreshed = await apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId));
-        if (refreshed.ok) setCandidates(await refreshed.json());
-      }
+      if (payload.imported > 0) setRefreshKey((current) => current + 1);
     } catch (error) {
       setCvImportMessage(error instanceof Error ? error.message : "Unable to import CVs.");
     } finally {
@@ -463,12 +460,32 @@ export default function CandidatesPage() {
     };
 
     try {
-      if (!API_BASE || !ORGANIZATION_ID) {
-        setMessage("API configuration is missing.");
+      const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+      if (!API_BASE || !organizationId) {
+        setMessage("API or organisation configuration is missing.");
         return;
       }
 
-      const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+      if (!editing && (form.email.trim() || form.phone.trim())) {
+        const duplicateParams = new URLSearchParams({ organization_id: organizationId });
+        if (form.email.trim()) duplicateParams.set("email", form.email.trim());
+        if (form.phone.trim()) duplicateParams.set("phone", form.phone.trim());
+        const duplicateResponse = await apiFetch(API_BASE + "/api/candidates/duplicates?" + duplicateParams.toString());
+        if (!duplicateResponse.ok) {
+          const body = await duplicateResponse.json().catch(() => null);
+          throw new Error(body?.detail || "Could not check for duplicate candidate records.");
+        }
+        const duplicates: Candidate[] = await duplicateResponse.json();
+        if (duplicates.length) {
+          const summary = duplicates.slice(0, 5).map((candidate) =>
+            "• " + fullName(candidate) + (candidate.email ? " · " + candidate.email : "") +
+            ([candidate.city, candidate.country_code].filter(Boolean).length ? " · " + [candidate.city, candidate.country_code].filter(Boolean).join(", ") : "")
+          ).join("\n");
+          const more = duplicates.length > 5 ? "\n…and " + (duplicates.length - 5) + " more." : "";
+          if (!window.confirm("Possible existing candidate record(s) found:\n\n" + summary + more + "\n\nCreate a separate profile anyway?")) return;
+        }
+      }
+
       const endpoint = editing
         ? API_BASE + "/api/candidates/" + editing.id + "?organization_id=" + encodeURIComponent(organizationId)
         : API_BASE + "/api/candidates";
