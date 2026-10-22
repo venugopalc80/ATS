@@ -67,7 +67,7 @@ export default function PlatformOperationsPage() {
           organization_id: item.organization_id,
           support_case_id: item.id,
           purpose: "Investigate support case: " + item.subject,
-          scope: ["case_metadata"],
+          scope: ["case_metadata", "case_messages"],
           duration_minutes: 30,
         }),
       });
