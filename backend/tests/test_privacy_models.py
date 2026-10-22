@@ -4,16 +4,12 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.routers.privacy import ProcessingRecordCreate, PrivacyRequestUpdate
+from app.routers.privacy import ProcessingRecordCreate, PrivacyRequestUpdate, RetentionPolicyCreate
 
 
 def base_processing_record(**overrides):
-    payload = {
-        "organization_id": str(uuid4()),
-        "candidate_id": str(uuid4()),
-        "purpose": "recruitment",
-        "legal_basis": "legitimate_interests",
-    }
+    payload = {"organization_id": str(uuid4()), "candidate_id": str(uuid4()),
+               "purpose": "recruitment", "legal_basis": "legitimate_interests"}
     payload.update(overrides)
     return payload
 
@@ -32,34 +28,45 @@ def test_consent_basis_requires_status_and_capture_timestamp():
 def test_non_consent_basis_rejects_granted_consent_flag():
     with pytest.raises(ValidationError, match="non-consent legal basis"):
         ProcessingRecordCreate(**base_processing_record(
-            legal_basis="contract",
-            consent_status="granted",
-            consent_captured_at=datetime.now(timezone.utc).isoformat(),
-        ))
+            legal_basis="contract", consent_status="granted",
+            consent_captured_at=datetime.now(timezone.utc).isoformat()))
 
 
 def test_withdrawn_consent_requires_withdrawal_timestamp():
     with pytest.raises(ValidationError, match="withdrawal timestamp"):
         ProcessingRecordCreate(**base_processing_record(
-            legal_basis="consent",
-            consent_status="withdrawn",
-            consent_captured_at=datetime.now(timezone.utc).isoformat(),
-        ))
+            legal_basis="consent", consent_status="withdrawn",
+            consent_captured_at=datetime.now(timezone.utc).isoformat()))
 
 
 def test_withdrawal_cannot_predate_capture():
     with pytest.raises(ValidationError, match="cannot predate"):
         ProcessingRecordCreate(**base_processing_record(
-            legal_basis="consent",
-            consent_status="withdrawn",
+            legal_basis="consent", consent_status="withdrawn",
             consent_captured_at="2026-01-02T00:00:00+00:00",
-            consent_withdrawn_at="2026-01-01T00:00:00+00:00",
-        ))
+            consent_withdrawn_at="2026-01-01T00:00:00+00:00"))
 
 
 @pytest.mark.parametrize("status", ["partially_completed", "declined"])
 def test_partial_or_declined_request_requires_documented_exception(status):
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError, match="documented exception"):
         PrivacyRequestUpdate(status=status)
     accepted = PrivacyRequestUpdate(status=status, exception_details="Records retained under documented legal requirement")
     assert accepted.status == status
+
+
+def test_retention_policy_is_versioned_and_bounded():
+    policy = RetentionPolicyCreate(
+        organization_id=uuid4(), data_category="candidate_cv", purpose="recruitment",
+        jurisdiction="GB", retention_days=365, action="review", version=1,
+        effective_at=datetime(2026, 10, 22, tzinfo=timezone.utc))
+    assert policy.version == 1
+    assert policy.retention_days == 365
+
+
+def test_retention_policy_rejects_negative_retention_period():
+    with pytest.raises(ValidationError):
+        RetentionPolicyCreate(
+            organization_id=uuid4(), data_category="candidate_cv", purpose="recruitment",
+            jurisdiction="GB", retention_days=-1, action="delete", version=1,
+            effective_at=datetime(2026, 10, 22, tzinfo=timezone.utc))
