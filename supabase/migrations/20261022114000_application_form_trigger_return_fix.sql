@@ -1,3 +1,17 @@
+-- Published versions are immutable, while an unpublished draft may be deleted safely.
+create or replace function public.prevent_published_form_version_mutation()
+returns trigger language plpgsql set search_path = public as $$
+begin
+  if old.status = 'published' then
+    raise exception 'Published application form versions are immutable; create a new draft version';
+  end if;
+  if tg_op = 'DELETE' then
+    return old;
+  end if;
+  return new;
+end;
+$$;
+
 -- Use explicit trigger returns for PostgreSQL record values.
 create or replace function public.prevent_published_form_question_mutation()
 returns trigger language plpgsql set search_path = public as $$
