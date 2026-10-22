@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import math
 from typing import Any, Literal
 from uuid import UUID
 
@@ -37,10 +38,21 @@ class QuestionIn(BaseModel):
 
     @field_validator("options")
     @classmethod
-    def validate_options(cls, value: list[str], info):
-        if len(value) != len(set(value)):
+    def validate_options(cls, value: list[str]):
+        cleaned = [item.strip()[:200] for item in value if item.strip()]
+        if len(cleaned) != len(set(cleaned)):
             raise ValueError("Question options must be unique")
-        return [item.strip()[:200] for item in value if item.strip()]
+        return cleaned
+
+    @field_validator("validation")
+    @classmethod
+    def validate_rules(cls, value: dict[str, Any]):
+        for key in ("min", "max"):
+            if key in value and (isinstance(value[key], bool) or not isinstance(value[key], (int, float)) or not math.isfinite(value[key])):
+                raise ValueError("Numeric validation bounds must be finite numbers")
+        if value.get("min") is not None and value.get("max") is not None and value["min"] > value["max"]:
+            raise ValueError("Minimum validation bound cannot exceed maximum")
+        return value
 
 
 class FormCreate(BaseModel):
