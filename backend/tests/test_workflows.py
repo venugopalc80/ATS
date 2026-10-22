@@ -3,6 +3,7 @@ from pydantic import ValidationError
 
 from app.schemas.workflows import (
     WorkflowDefinitionPayload,
+    WorkflowCondition,
     condition_matches,
     preview_workflow,
 )
@@ -30,11 +31,11 @@ def definition(**overrides):
 
 def test_condition_supports_nested_fields_and_safe_operators():
     assert condition_matches(
-        {"field": "application.status", "operator": "eq", "value": "screening"},
+        WorkflowCondition(field="application.status", operator="eq", value="screening"),
         {"application": {"status": "screening"}},
     )
     assert not condition_matches(
-        {"field": "application.status", "operator": "in", "value": ["offer", "hired"]},
+        WorkflowCondition(field="application.status", operator="in", value=["offer", "hired"]),
         {"application": {"status": "screening"}},
     )
 
