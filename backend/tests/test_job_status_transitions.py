@@ -65,3 +65,21 @@ class RequisitionRouteOrderTests(unittest.TestCase):
         assignee_index = next(i for i, path in enumerate(paths) if path.endswith("/assignees"))
         dynamic_index = next(i for i, path in enumerate(paths) if path.endswith("/{requisition_id}"))
         self.assertLess(assignee_index, dynamic_index)
+
+
+
+class JobAuditMetadataTests(unittest.TestCase):
+    def test_recruiter_reassignment_audit_records_old_and_new_values(self):
+        previous = UUID("44444444-4444-4444-8444-444444444444")
+        next_user = UUID("55555555-5555-4555-8555-555555555555")
+        metadata = jobs_router.job_change_audit_metadata(
+            {"status": "draft", "recruiter_id": previous, "hiring_manager_id": None},
+            {"status": "draft", "recruiter_id": next_user, "hiring_manager_id": None},
+            {"recruiter_id": next_user},
+        )
+        self.assertEqual(
+            metadata["changes"]["recruiter_id"],
+            {"old": str(previous), "new": str(next_user)},
+        )
+        self.assertEqual(metadata["previous_status"], "draft")
+        self.assertEqual(metadata["status"], "draft")
