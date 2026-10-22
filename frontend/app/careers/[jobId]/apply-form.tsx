@@ -1,68 +1,35 @@
 "use client";
-
-import { FormEvent, useState } from "react";
-
+import { FormEvent, useEffect, useRef, useState } from "react";
+import "./apply-form.css";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
-
-export default function PublicApplyForm({ jobId }: { jobId: string }) {
-  const [busy, setBusy] = useState(false);
-  const [message, setMessage] = useState("");
-  const [success, setSuccess] = useState(false);
-
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setBusy(true);
-    setMessage("");
-    const formElement = event.currentTarget;
-    const form = new FormData(formElement);
-    const params = new URLSearchParams(typeof window === "undefined" ? "" : window.location.search);
-    const source = params.get("utm_source") || params.get("source") || "careers_page";
-    try {
-      const response = await fetch(`${API_BASE}/api/public/jobs/${encodeURIComponent(jobId)}/applications?organization_id=${encodeURIComponent(ORGANIZATION_ID)}`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          first_name: String(form.get("first_name") || "").trim(),
-          last_name: String(form.get("last_name") || "").trim(),
-          email: String(form.get("email") || "").trim(),
-          phone: String(form.get("phone") || "").trim() || null,
-          consent: form.get("consent") === "on",
-          source,
-        }),
-      });
-      const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.detail || "We couldn't submit your application. Please try again.");
-      setSuccess(true);
-      setMessage("Application received. Thank you for your interest.");
-      formElement.reset();
-    } catch (error) {
-      setSuccess(false);
-      setMessage(error instanceof Error ? error.message : "Something went wrong. Please try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  return (
-    <section className="public-apply" aria-labelledby="apply-title">
-      <h2 id="apply-title">Apply for this role</h2>
-      <p>Share your details to submit your application to the recruitment team.</p>
-      <form className="public-apply-form" onSubmit={submit}>
-        <div className="public-apply-fields">
-          <label>First name<input name="first_name" autoComplete="given-name" maxLength={100} required /></label>
-          <label>Last name<input name="last_name" autoComplete="family-name" maxLength={100} /></label>
-          <label>Email address<input name="email" type="email" autoComplete="email" maxLength={320} required /></label>
-          <label>Phone (optional)<input name="phone" type="tel" autoComplete="tel" maxLength={50} /></label>
-        </div>
-        <label className="public-consent">
-          <input type="checkbox" name="consent" required />
-          <span>I agree that my details may be processed to assess this application and contact me about this role. Read the <a href="/careers/privacy" target="_blank" rel="noreferrer">applicant privacy notice</a>. I understand I can request access or deletion subject to applicable legal requirements.</span>
-        </label>
-        <button className="public-apply-button" type="submit" disabled={busy}>{busy ? "Submitting…" : "Submit application"}</button>
-        {message ? <p role="status" className={success ? "public-apply-message success" : "public-apply-message"}>{message}</p> : null}
-        <p className="public-privacy-note">Please submit only information relevant to this application. Please read the privacy notice before submitting. Resume upload is not enabled yet.</p>
-      </form>
-    </section>
-  );
+type Question = { id:string; question_key:string; label:string; help_text?:string|null; field_type:"text"|"textarea"|"email"|"phone"|"number"|"date"|"select"|"radio"|"checkbox"|"multi_select"|"boolean"; required:boolean; options:string[]; is_eligibility:boolean; position:number };
+type PublishedForm = { form_version_id:string; version_number:number; form_name:string; privacy_notice_text:string; privacy_notice_version:string; questions:Question[] };
+type Step = "edit"|"review";
+function answerFor(data:FormData,q:Question) { if(q.field_type==="boolean"){const v=data.get(q.question_key);return v==="yes"?true:v==="no"?false:null;} if(q.field_type==="checkbox")return data.get(q.question_key)==="on"; if(q.field_type==="multi_select")return data.getAll(q.question_key).map(String); const v=data.get(q.question_key);return v==null?"":String(v).trim(); }
+export default function PublicApplyForm({jobId}:{jobId:string}) {
+ const [busy,setBusy]=useState(false),[message,setMessage]=useState(""),[success,setSuccess]=useState(false),[step,setStep]=useState<Step>("edit");
+ const [publishedForm,setPublishedForm]=useState<PublishedForm|null>(null),[answers,setAnswers]=useState<Record<string,unknown>>({});
+ const [formLoadError,setFormLoadError]=useState("");
+ const [formLoading,setFormLoading]=useState(true);
+ const [noticeAcknowledged,setNoticeAcknowledged]=useState(false),[marketingOptIn,setMarketingOptIn]=useState(false);
+ const idempotencyKey = useRef("");
+ useEffect(()=>{let cancelled=false;setFormLoading(true);async function load(){if(!API_BASE||!ORGANIZATION_ID){if(!cancelled)setFormLoading(false);return;}try{const r=await fetch(`${API_BASE}/api/public/jobs/${encodeURIComponent(jobId)}/application-form?organization_id=${encodeURIComponent(ORGANIZATION_ID)}`);if(r.ok){const f=await r.json();if(!cancelled)setPublishedForm(f);}else if(r.status!==404){if(!cancelled)setFormLoadError("We couldn’t load the application form. Please refresh this page before submitting.");}}catch{if(!cancelled)setFormLoadError("We couldn’t load the application form. Please check your connection and refresh this page.");}finally{if(!cancelled)setFormLoading(false);}}load();return()=>{cancelled=true};},[jobId]);
+ function review(event:FormEvent<HTMLFormElement>){event.preventDefault();const data=new FormData(event.currentTarget),next:Record<string,unknown>={};for(const q of publishedForm?.questions??[])next[q.question_key]=answerFor(data,q);setAnswers(next);setMessage("");setStep("review");}
+ async function submit(event:FormEvent<HTMLFormElement>){event.preventDefault();if(step==="edit"){review(event);return;}setBusy(true);setMessage("");const formElement=event.currentTarget,form=new FormData(formElement),params=new URLSearchParams(typeof window==="undefined"?"":window.location.search),source=params.get("utm_source")||params.get("source")||"careers_page";if(publishedForm&&!idempotencyKey.current)idempotencyKey.current=typeof crypto!=="undefined"&&"randomUUID"in crypto?crypto.randomUUID():`${Date.now()}-${Math.random().toString(36).slice(2)}`;try{const r=await fetch(`${API_BASE}/api/public/jobs/${encodeURIComponent(jobId)}/applications?organization_id=${encodeURIComponent(ORGANIZATION_ID)}`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({first_name:String(form.get("first_name")||"").trim(),last_name:String(form.get("last_name")||"").trim(),email:String(form.get("email")||"").trim(),phone:String(form.get("phone")||"").trim()||null,consent:!publishedForm&&form.get("consent")==="on",source,...(publishedForm?{form_version_id:publishedForm.form_version_id,answers,privacy_notice_acknowledged:noticeAcknowledged,marketing_opt_in:marketingOptIn,idempotency_key:idempotencyKey.current||undefined}:{})})});const body=await r.json().catch(()=>({}));if(!r.ok)throw new Error(body.detail||"We couldn't submit your application. Please try again.");setSuccess(true);setMessage("Application received. Thank you for your interest.");formElement.reset();}catch(e){setSuccess(false);setMessage(e instanceof Error?e.message:"Something went wrong. Please try again.");setStep("edit");}finally{setBusy(false);}}
+ function renderQuestion(q:Question){const n=q.question_key,opts=q.options??[];if(q.field_type==="textarea")return <textarea id={n} name={n} rows={4} required={q.required} aria-describedby={q.help_text?`${n}-help`:undefined}/>;if(q.field_type==="select"||q.field_type==="radio")return <select id={n} name={n} required={q.required} defaultValue=""><option value="">Choose an answer</option>{opts.map(o=><option key={o} value={o}>{o}</option>)}</select>;if(q.field_type==="boolean")return <select id={n} name={n} required={q.required} defaultValue=""><option value="">Choose yes or no</option><option value="yes">Yes</option><option value="no">No</option></select>;if(q.field_type==="checkbox")return <input id={n} name={n} type="checkbox" required={q.required}/>;if(q.field_type==="multi_select")return <div className="public-multi-select">{opts.map(o=><label key={o}><input id={n} name={n} type="checkbox" value={o}/> {o}</label>)}</div>;const type=q.field_type==="number"?"number":q.field_type==="date"?"date":q.field_type==="email"?"email":q.field_type==="phone"?"tel":"text";return <input id={n} name={n} type={type} required={q.required} maxLength={12000}/>;}
+ return <section className="public-apply" aria-labelledby="apply-title"><h2 id="apply-title">{publishedForm?.form_name??"Apply for this role"}</h2><p>{step==="review"?"Review your details carefully before sending your application.":"Share the information needed to assess your application."}</p>
+ {formLoading?<p role="status">Loading application form…</p>:null}{formLoadError?<p role="alert" className="public-apply-message">{formLoadError}</p>:null}<form className="public-apply-form" onSubmit={submit}><div className="public-apply-fields">
+ <label>First name<input name="first_name" autoComplete="given-name" maxLength={100} required readOnly={step==="review"}/></label>
+ <label>Last name<input name="last_name" autoComplete="family-name" maxLength={100} readOnly={step==="review"}/></label>
+ <label>Email address<input name="email" type="email" autoComplete="email" maxLength={320} required readOnly={step==="review"}/></label>
+ <label>Phone (optional)<input name="phone" type="tel" autoComplete="tel" maxLength={50} readOnly={step==="review"}/></label></div>
+ {publishedForm?<div className="public-form-notice"><h3>Applicant privacy notice</h3><p>{publishedForm.privacy_notice_text}</p></div>:null}
+ {(publishedForm?.questions??[]).map(q=><div className="public-question" key={q.id}><label htmlFor={q.question_key}>{q.label}{q.required?" *":""}</label>{q.help_text?<p id={`${q.question_key}-help`} className="public-question-help">{q.help_text}</p>:null}
+ {step==="review"?<p className="public-answer-review">{Array.isArray(answers[q.question_key])?(answers[q.question_key] as unknown[]).join(", ")||"Not provided":answers[q.question_key]===true?"Yes":answers[q.question_key]===false?"No":String(answers[q.question_key]??"Not provided")}</p>:renderQuestion(q)}{q.is_eligibility?<small>This is a job-related eligibility question.</small>:null}</div>)}
+ {!publishedForm?<label className="public-consent"><input type="checkbox" name="consent" required disabled={step==="review"}/><span>I agree that my details may be processed to assess this application and contact me about this role. Read the <a href="/careers/privacy" target="_blank" rel="noreferrer">applicant privacy notice</a>.</span></label>:null}
+ {publishedForm&&step==="edit"?<div className="public-consent"><label><input type="checkbox" checked={noticeAcknowledged} onChange={e=>setNoticeAcknowledged(e.target.checked)} required/> I have read and acknowledge the applicant privacy notice.</label><label><input type="checkbox" checked={marketingOptIn} onChange={e=>setMarketingOptIn(e.target.checked)}/> I would like to receive optional recruitment updates about other opportunities.</label></div>:null}
+ {publishedForm&&step==="review"?<div className="public-consent"><p>{noticeAcknowledged?"Privacy notice acknowledged.":"Privacy notice not acknowledged."}</p><p>{marketingOptIn?"Optional recruitment updates: yes.":"Optional recruitment updates: no."}</p></div>:null}
+ <div className="public-apply-actions">{step==="review"?<button className="public-apply-button secondary" type="button" onClick={()=>setStep("edit")} disabled={busy}>Edit answers</button>:null}<button className="public-apply-button" type="submit" disabled={busy||success||formLoading||Boolean(formLoadError)||(Boolean(publishedForm)&&step==="edit"&&!noticeAcknowledged)}>{busy?"Submitting…":success?"Submitted":step==="review"?"Confirm and submit":"Review application"}</button></div>
+ {message?<p role="status" className={success?"public-apply-message success":"public-apply-message"}>{message}</p>:null}<p className="public-privacy-note">Only provide information relevant to this application. Optional recruitment updates are separate from your application.</p></form></section>;
 }

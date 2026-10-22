@@ -2,8 +2,8 @@ import Link from "next/link";
 import type { Metadata } from "next";
 
 export const metadata: Metadata = {
-  title: "Applicant Privacy Notice | TalentOS Careers",
-  description: "How information submitted through a TalentOS Careers application is used.",
+  title: "Applicant Privacy Notice | AQERITH Careers",
+  description: "How information submitted through an AQERITH Careers application is used.",
   robots: { index: true, follow: true },
 };
 
@@ -11,7 +11,7 @@ export default function ApplicantPrivacyPage() {
   return (
     <main className="careers-page">
       <header className="careers-header">
-        <Link href="/careers" className="careers-brand">Talent<span>OS</span> Careers</Link>
+        <Link href="/careers" className="careers-brand">AQERITH Careers</Link>
         <Link href="/careers" className="career-back-link">← Careers</Link>
       </header>
       <article className="career-detail">
@@ -20,7 +20,7 @@ export default function ApplicantPrivacyPage() {
         <p className="career-detail-meta">Last updated: 10 October 2026</p>
         <div className="career-detail-content">
           <h2>Who is responsible for your information?</h2>
-          <p>The organisation advertising the role is responsible for deciding how applicant information is used. TalentOS provides recruitment software to support that process.</p>
+          <p>The organisation advertising the role is responsible for deciding how applicant information is used. AQERITH provides recruitment software to support that process.</p>
           <h2>What information is collected?</h2>
           <p>When you apply through this page, the form collects your name, email address, optional phone number, the role you applied for, the source of your visit when provided, and a record that you agreed to the application notice.</p>
           <h2>Why is it used?</h2>
@@ -32,7 +32,7 @@ export default function ApplicantPrivacyPage() {
         </div>
         <Link className="career-view-link" href="/careers">Back to careers <span aria-hidden="true">→</span></Link>
       </article>
-      <footer className="careers-footer">Powered by TalentOS · Recruitment, made more human.</footer>
+      <footer className="careers-footer">Powered by AQERITH · Recruitment, made clearer.</footer>
     </main>
   );
 }
