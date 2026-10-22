@@ -7,9 +7,10 @@ from app.schemas.offer_management import (
     OfferApprovalDecision, OfferApprovalOut, OfferCandidateResponse, OfferVersionOut,
 )
 from app.schemas.offers import OfferCreate, OfferOut, OfferUpdate
+from app.schemas.offer_withdrawal import OfferWithdrawalRequest
 from app.services.offer_management_service import (
     decide_approval, issue_offer, list_approvals, list_versions,
-    record_candidate_response, submit_for_approval,
+    record_candidate_response, submit_for_approval, withdraw_offer, expire_offer,
 )
 from app.services.offer_service import create_offer, get_offer, list_offers, update_offer
 
@@ -106,3 +107,21 @@ def get_approvals(
 ):
     assert_org_member(user_id, organization_id)
     return list_approvals(organization_id, offer_id)
+
+
+
+@router.post("/{offer_id}/withdraw", response_model=OfferOut)
+def withdraw_one(
+    offer_id: UUID, organization_id: UUID, payload: OfferWithdrawalRequest,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _require_role(user_id, organization_id, OFFER_MANAGER_ROLES)
+    return withdraw_offer(organization_id, offer_id, user_id, payload.reason)
+
+
+@router.post("/{offer_id}/expire", response_model=OfferOut)
+def expire_one(
+    offer_id: UUID, organization_id: UUID, user_id: UUID = Depends(get_current_user_id),
+):
+    _require_role(user_id, organization_id, APPROVER_ROLES)
+    return expire_offer(organization_id, offer_id, user_id)
