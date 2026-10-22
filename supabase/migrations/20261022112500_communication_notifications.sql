@@ -219,3 +219,34 @@ grant select, insert, update on public.communication_threads, public.message_tem
   public.messages, public.message_recipients, public.notification_preferences to authenticated;
 grant select on public.delivery_events, public.notification_events,
   public.notification_deliveries to authenticated;
+
+
+-- Enforce the application/candidate relationship even for direct authenticated inserts.
+create or replace function public.validate_communication_thread_links()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if not exists (
+    select 1
+    from public.applications a
+    join public.candidates c
+      on c.id = a.candidate_id
+     and c.organization_id = a.organization_id
+    where a.id = new.application_id
+      and a.organization_id = new.organization_id
+      and a.candidate_id = new.candidate_id
+  ) then
+    raise exception 'Application and candidate must belong to the same organisation and match'
+      using errcode = '23514';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists communication_threads_validate_links on public.communication_threads;
+create trigger communication_threads_validate_links
+before insert or update of organization_id, application_id, candidate_id
+on public.communication_threads
+for each row execute function public.validate_communication_thread_links();
