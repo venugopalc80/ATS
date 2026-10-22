@@ -27,6 +27,8 @@ type Candidate = {
 };
 
 type LatestNote = { candidate_id: string; note: string; created_at: string; author_user_id?: string | null };
+type CandidateTag = { id: string; organization_id: string; name: string; colour: string };
+type CandidateTagAssignment = { candidate_id: string; tag_id: string; name: string; colour: string };
 type CandidateCv = { id: string; original_filename: string; content_type: string; file_size_bytes: number; created_at?: string | null };
 type CandidateCvPreview = { filename: string; kind: "pdf" | "text"; url?: string; text?: string };
 
@@ -119,6 +121,16 @@ export default function CandidatesPage() {
   const [form, setForm] = useState<CandidateForm>(emptyForm);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [tagCandidate, setTagCandidate] = useState<Candidate | null>(null);
+  const [organisationTags, setOrganisationTags] = useState<CandidateTag[]>([]);
+  const [assignedTagIds, setAssignedTagIds] = useState<string[]>([]);
+  const [tagName, setTagName] = useState("");
+  const [tagColour, setTagColour] = useState("#2563EB");
+  const [tagLoading, setTagLoading] = useState(false);
+  const [tagSaving, setTagSaving] = useState(false);
+  const [tagError, setTagError] = useState("");
+  const [candidateTagAssignments, setCandidateTagAssignments] = useState<CandidateTagAssignment[]>([]);
+  const [tagFilter, setTagFilter] = useState("all");
   const [showImport, setShowImport] = useState(false);
   const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [importFileName, setImportFileName] = useState("");
@@ -135,6 +147,81 @@ export default function CandidatesPage() {
   const [cvPreviewMessage, setCvPreviewMessage] = useState("");
   const [cvPreview, setCvPreview] = useState<CandidateCvPreview | null>(null);
   const [cvPreviewDocumentId, setCvPreviewDocumentId] = useState<string | null>(null);
+  function activeOrganisationId() {
+    return typeof window !== "undefined"
+      ? window.localStorage.getItem("aqerith_active_org") || window.localStorage.getItem("talentos_active_org") || ORGANIZATION_ID
+      : ORGANIZATION_ID;
+  }
+
+  async function openCandidateTagManager(candidate: Candidate) {
+    setTagCandidate(candidate);
+    setTagError("");
+    setTagLoading(true);
+    const organizationId = activeOrganisationId();
+    try {
+      if (!API_BASE || !organizationId) throw new Error("Organisation configuration is missing.");
+      const [allResponse, assignedResponse] = await Promise.all([
+        apiFetch(API_BASE + "/api/candidate-tags?organization_id=" + encodeURIComponent(organizationId)),
+        apiFetch(API_BASE + "/api/candidate-tags?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id)),
+      ]);
+      const allBody = await allResponse.json().catch(() => null);
+      const assignedBody = await assignedResponse.json().catch(() => null);
+      if (!allResponse.ok) throw new Error(allBody?.detail || "Could not load organisation tags.");
+      if (!assignedResponse.ok) throw new Error(assignedBody?.detail || "Could not load candidate tags.");
+      setOrganisationTags(allBody as CandidateTag[]);
+      setAssignedTagIds((assignedBody as CandidateTag[]).map((tag) => tag.id));
+    } catch (error) {
+      setTagError(error instanceof Error ? error.message : "Could not load tags.");
+    } finally {
+      setTagLoading(false);
+    }
+  }
+
+  async function createCandidateTag(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const organizationId = activeOrganisationId();
+    if (!tagCandidate || !organizationId) return;
+    setTagSaving(true);
+    setTagError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/candidate-tags", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: organizationId, name: tagName.trim(), colour: tagColour }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Could not create tag.");
+      setOrganisationTags((current) => [...current, body as CandidateTag].sort((a, b) => a.name.localeCompare(b.name)));
+      setTagName("");
+    } catch (error) {
+      setTagError(error instanceof Error ? error.message : "Could not create tag.");
+    } finally {
+      setTagSaving(false);
+    }
+  }
+
+  async function toggleCandidateTag(tag: CandidateTag, checked: boolean) {
+    const candidate = tagCandidate;
+    const organizationId = activeOrganisationId();
+    if (!candidate || !organizationId) return;
+    setTagSaving(true);
+    setTagError("");
+    try {
+      const endpoint = API_BASE + "/api/candidate-tags/" + encodeURIComponent(tag.id) + "/candidates/" + encodeURIComponent(candidate.id) + "?organization_id=" + encodeURIComponent(organizationId);
+      const response = await apiFetch(endpoint, { method: checked ? "PUT" : "DELETE" });
+      const body = response.status === 204 ? null : await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Could not update candidate tag.");
+      setAssignedTagIds((current) => checked ? Array.from(new Set([...current, tag.id])) : current.filter((id) => id !== tag.id));
+      setCandidateTagAssignments((current) => checked
+        ? [...current.filter((item) => !(item.candidate_id === candidate.id && item.tag_id === tag.id)), { candidate_id: candidate.id, tag_id: tag.id, name: tag.name, colour: tag.colour }]
+        : current.filter((item) => !(item.candidate_id === candidate.id && item.tag_id === tag.id)));
+    } catch (error) {
+      setTagError(error instanceof Error ? error.message : "Could not update candidate tag.");
+    } finally {
+      setTagSaving(false);
+    }
+  }
+
   async function openCandidateCv(candidate: Candidate) {
     setCvPreviewCandidate(candidate); setCvPreviewDocuments([]); setCvPreview(null); setCvPreviewDocumentId(null); setCvPreviewMessage(""); setCvPreviewLoading(true);
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
@@ -199,6 +286,33 @@ export default function CandidatesPage() {
     return () => { cancelled = true; };
   }, []);
 
+  useEffect(() => {
+    const organizationId = activeOrganisationId();
+    if (!API_BASE || !organizationId || candidates.length === 0) {
+      if (!candidates.length) setCandidateTagAssignments([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      apiFetch(API_BASE + "/api/candidate-tags/assignments?organization_id=" + encodeURIComponent(organizationId)),
+      apiFetch(API_BASE + "/api/candidate-tags?organization_id=" + encodeURIComponent(organizationId)),
+    ])
+      .then(async ([assignmentResponse, tagResponse]) => {
+        const assignmentBody = await assignmentResponse.json().catch(() => null);
+        const tagBody = await tagResponse.json().catch(() => null);
+        if (!assignmentResponse.ok) throw new Error(assignmentBody?.detail || "Could not load candidate tag assignments.");
+        if (!tagResponse.ok) throw new Error(tagBody?.detail || "Could not load organisation tags.");
+        if (!cancelled) {
+          setCandidateTagAssignments(assignmentBody as CandidateTagAssignment[]);
+          setOrganisationTags(tagBody as CandidateTag[]);
+        }
+      })
+      .catch((error) => {
+        if (!cancelled) setMessage(error instanceof Error ? error.message : "Could not load candidate tags.");
+      });
+    return () => { cancelled = true; };
+  }, [candidates]);
+
   const filtered = useMemo(() => candidates.filter((candidate) => {
     const haystack = (
       fullName(candidate) + " " +
@@ -208,12 +322,12 @@ export default function CandidatesPage() {
       candidate.skills.join(" ")
     ).toLowerCase();
 
-    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country);
+    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country) && (tagFilter === "all" || candidateTagAssignments.some((assignment) => assignment.candidate_id === candidate.id && assignment.tag_id === tagFilter));
   }).sort((a, b) => {
     const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
     const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
     return sortDirection === "asc" ? comparison : -comparison;
-  }), [candidates, query, status, country, sortBy, sortDirection]);
+  }), [candidates, query, status, country, sortBy, sortDirection, tagFilter, candidateTagAssignments]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
   const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
@@ -555,6 +669,7 @@ export default function CandidatesPage() {
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
+              <select className="filter" aria-label="Filter by candidate tag" value={tagFilter} onChange={(e) => { setTagFilter(e.target.value); setPage(1); }}><option value="all">All tags</option>{organisationTags.slice().sort((a, b) => a.name.localeCompare(b.name)).map((tag) => <option key={tag.id} value={tag.id}>{tag.name}</option>)}</select>
               <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
               <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
             </div>
@@ -575,6 +690,7 @@ export default function CandidatesPage() {
                     <td>
                       <Link className="link" href={"/candidates/" + candidate.id}><strong>{fullName(candidate)}</strong></Link>
                       <div className="muted-small">{candidate.email ?? "No email"}</div>
+                      {candidateTagAssignments.filter((assignment) => assignment.candidate_id === candidate.id).map((assignment) => <span key={assignment.tag_id} style={{ display: "inline-flex", alignItems: "center", gap: 5, margin: "5px 5px 0 0", padding: "2px 8px", borderRadius: 999, background: assignment.colour + "20", border: "1px solid " + assignment.colour, color: assignment.colour, fontSize: 11, fontWeight: 600 }}>{assignment.name}</span>)}
                     </td>
                     <td>{candidate.phone ? <a className="link" href={"tel:" + candidate.phone} title="Call candidate">{candidate.phone}</a> : <span className="muted-small">No phone</span>}</td>
                     <td>{candidate.current_title ?? "Not specified"}</td>
@@ -585,7 +701,7 @@ export default function CandidatesPage() {
                     <td><span className={"badge " + (candidate.status === "active" ? "green" : candidate.status === "placed" ? "blue" : "amber")}>{candidate.status.replaceAll("_", " ")}</span></td>
                     <td>
                       <div style={{ display: "flex", gap: 6 }}>
-                        <button className="btn" type="button" title={"Preview CV for " + fullName(candidate)} aria-label={"Preview CV for " + fullName(candidate)} onClick={() => void openCandidateCv(candidate)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h3l2 5 2-5h3l2 5v9a2 2 0 0 1-2 2h-2l-3-5-3 5H7a2 2 0 0 1-2-2V9z"/><circle cx="8.5" cy="13" r="2.5"/><circle cx="15.5" cy="13" r="2.5"/></svg></button><Link className="btn" href={"/candidates/" + candidate.id}>View</Link><button className="btn" onClick={() => openEdit(candidate)}>Edit</button>
+                        <button className="btn" type="button" title={"Preview CV for " + fullName(candidate)} aria-label={"Preview CV for " + fullName(candidate)} onClick={() => void openCandidateCv(candidate)}><svg aria-hidden="true" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M7 4h3l2 5 2-5h3l2 5v9a2 2 0 0 1-2 2h-2l-3-5-3 5H7a2 2 0 0 1-2-2V9z"/><circle cx="8.5" cy="13" r="2.5"/><circle cx="15.5" cy="13" r="2.5"/></svg></button><Link className="btn" href={"/candidates/" + candidate.id}>View</Link><button className="btn" type="button" title={"Manage tags for " + fullName(candidate)} onClick={() => void openCandidateTagManager(candidate)}>Tags</button><button className="btn" onClick={() => openEdit(candidate)}>Edit</button>
                         <button className="btn" onClick={() => deleteCandidate(candidate)}>Delete</button>
                       </div>
                     </td>
@@ -669,6 +785,30 @@ export default function CandidatesPage() {
           </form>
         </div>
       )}
+      {tagCandidate && <div role="dialog" aria-modal="true" aria-label={"Manage tags for " + fullName(tagCandidate)} onClick={(event) => { if (event.target === event.currentTarget && !tagSaving) setTagCandidate(null); }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15, 23, 42, 0.62)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+        <section className="card" style={{ width: "min(560px, 96vw)", maxHeight: "85vh", overflowY: "auto", padding: 24 }}>
+          <header style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16, marginBottom: 18 }}>
+            <div><div className="card-title">Candidate tags</div><div className="muted-small">{fullName(tagCandidate)} · tags are shared within this organisation</div></div>
+            <button type="button" className="btn" disabled={tagSaving} onClick={() => setTagCandidate(null)}>Close ✕</button>
+          </header>
+          {tagError && <div className="notice" role="alert" style={{ marginBottom: 12 }}>{tagError}</div>}
+          {tagLoading ? <p>Loading organisation tags…</p> : <div style={{ display: "grid", gap: 10, marginBottom: 24 }}>
+            {organisationTags.length === 0 ? <p className="muted-small">No tags yet. Create the first one below.</p> : organisationTags.map((tag) => <label key={tag.id} style={{ display: "flex", alignItems: "center", gap: 10, border: "1px solid #e5e7eb", borderRadius: 8, padding: "10px 12px", cursor: tagSaving ? "wait" : "pointer" }}>
+              <input type="checkbox" checked={assignedTagIds.includes(tag.id)} disabled={tagSaving} onChange={(event) => void toggleCandidateTag(tag, event.target.checked)} />
+              <span aria-hidden="true" style={{ width: 12, height: 12, borderRadius: 99, background: tag.colour, flexShrink: 0 }} />
+              <span>{tag.name}</span>
+              {assignedTagIds.includes(tag.id) && <span className="muted-small" style={{ marginLeft: "auto" }}>Assigned</span>}
+            </label>)}
+          </div>}
+          <form onSubmit={(event) => void createCandidateTag(event)} style={{ borderTop: "1px solid #e5e7eb", paddingTop: 18, display: "grid", gap: 12 }}>
+            <strong>Create an organisation tag</strong>
+            <label>Tag name<input required minLength={1} maxLength={50} value={tagName} onChange={(event) => setTagName(event.target.value)} placeholder="e.g. Available immediately" /></label>
+            <label style={{ display: "flex", alignItems: "center", gap: 10 }}>Label colour<input aria-label="Tag colour" type="color" value={tagColour} onChange={(event) => setTagColour(event.target.value.toUpperCase())} style={{ width: 54, height: 36, padding: 2 }} /></label>
+            <div className="modal-actions"><button type="submit" className="btn primary" disabled={tagSaving || tagLoading || !tagName.trim()}>{tagSaving ? "Saving…" : "Create tag"}</button></div>
+            <p className="muted-small">Creating tags requires organisation-admin permission. Assigning and removing tags requires organisation membership.</p>
+          </form>
+        </section>
+      </div>}
       {cvPreviewCandidate && <div role="dialog" aria-modal="true" aria-label={"CV preview for " + fullName(cvPreviewCandidate)} onClick={(event) => { if (event.target === event.currentTarget) { setCvPreviewCandidate(null); setCvPreview(null); } }} style={{ position: "fixed", inset: 0, zIndex: 1000, background: "rgba(15, 23, 42, 0.72)", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
         <section className="card" style={{ width: "min(1100px, 96vw)", height: "min(88vh, 900px)", display: "flex", flexDirection: "column", overflow: "hidden", padding: 0 }}>
           <header className="card-head" style={{ padding: "16px 20px", borderBottom: "1px solid #e5e7eb", flexShrink: 0 }}><div><div className="card-title">CV preview</div><div className="muted-small">{fullName(cvPreviewCandidate)}</div></div><button type="button" className="btn" onClick={() => { setCvPreviewCandidate(null); setCvPreview(null); }} aria-label="Close CV preview">Close ✕</button></header>
