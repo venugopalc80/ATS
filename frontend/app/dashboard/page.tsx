@@ -222,8 +222,8 @@ export default function Dashboard() {
           <div className="metrics dashboard-metrics">
             {[
               { title: "Open jobs", value: data?.metrics.open_jobs, icon: "▣", href: "/jobs?status=open", detail: "Currently open vacancies" },
-              { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates", detail: "Accessible candidate records" },
-              { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews", detail: "Scheduled for today" },
+              { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates?status=active", detail: "Active candidate records" },
+              { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews?today=1", detail: "Scheduled for today" },
               { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements", detail: data ? data.metrics.placements_this_month + " created this month" : "Monthly count unavailable" },
             ].map((metric) => (
               <Link key={metric.title} href={metric.href} className="card dashboard-metric-card" aria-label={metric.title + ", view records"}>
