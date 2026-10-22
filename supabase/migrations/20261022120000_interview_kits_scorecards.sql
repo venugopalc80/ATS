@@ -168,7 +168,7 @@ $$;
 
 drop trigger if exists scorecard_template_immutable on public.scorecard_templates;
 create trigger scorecard_template_immutable
-before update or delete on public.scorecard_templates
+before update on public.scorecard_templates
 for each row execute function public.prevent_published_scorecard_template_mutation();
 
 create or replace function public.prevent_published_scorecard_child_mutation()
@@ -202,12 +202,12 @@ $$;
 
 drop trigger if exists competency_template_immutable on public.competencies;
 create trigger competency_template_immutable
-before insert or update or delete on public.competencies
+before insert or update on public.competencies
 for each row execute function public.prevent_published_scorecard_child_mutation();
 
 drop trigger if exists interview_question_template_immutable on public.interview_kit_questions;
 create trigger interview_question_template_immutable
-before insert or update or delete on public.interview_kit_questions
+before insert or update on public.interview_kit_questions
 for each row execute function public.prevent_published_scorecard_child_mutation();
 
 revoke all on function public.prevent_published_scorecard_template_mutation() from public;
