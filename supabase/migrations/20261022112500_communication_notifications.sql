@@ -221,10 +221,12 @@ revoke all on public.communication_threads, public.message_templates, public.mes
   public.message_recipients, public.delivery_events, public.notification_preferences,
   public.notification_events, public.notification_deliveries from anon;
 
-grant select, insert, update on public.communication_threads, public.message_templates,
-  public.messages, public.message_recipients, public.notification_preferences to authenticated;
-grant select on public.delivery_events, public.notification_events,
-  public.notification_deliveries to authenticated;
+-- Mutations go through the authenticated FastAPI service, which checks membership and
+-- role. Browser clients receive read-only access so they cannot forge delivery states,
+-- bypass template approval, or disable essential notification types with direct SQL.
+grant select on public.communication_threads, public.message_templates, public.messages,
+  public.message_recipients, public.delivery_events, public.notification_preferences,
+  public.notification_events, public.notification_deliveries to authenticated;
 
 
 -- Enforce the application/candidate relationship even for direct authenticated inserts.
