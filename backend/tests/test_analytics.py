@@ -226,6 +226,21 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(context.exception.status_code, 422)
         self.assertEqual(self.cursor.queries, [])
 
+    async def test_non_member_is_rejected_before_analytics_queries(self):
+        self.membership.side_effect = HTTPException(status_code=403, detail="Not a member")
+        with self.assertRaises(HTTPException) as context:
+            await analytics_router.analytics_kpis(
+                organization_id=ORG,
+                date_from=None,
+                date_to=None,
+                job_id=None,
+                recruiter_id=None,
+                user_id=UUID("22222222-2222-4222-8222-222222222222"),
+            )
+        self.assertEqual(context.exception.status_code, 403)
+        self.membership.assert_called_once()
+        self.assertEqual(self.cursor.queries, [])
+
     async def test_funnel_reports_application_cohort_size_and_stage_visits(self):
         result = await analytics_router.analytics_funnel(
             organization_id=ORG,
