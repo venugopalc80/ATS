@@ -418,7 +418,7 @@ async def update_rights_request(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select organization_id, status from public.privacy_rights_requests where id = %s",
+                    "select organization_id, status, identity_verified_at, identity_verified_by, identity_verification_method from public.privacy_rights_requests where id = %s",
                     [request_id],
                 )
                 existing = cursor.fetchone()
@@ -455,7 +455,7 @@ async def update_rights_request(
                      json.dumps({"from": existing["status"], "to": payload.status,
                                  "affected_systems": payload.affected_systems,
                                  "has_exception": bool(payload.exception_details and payload.exception_details.strip()),
-                                 "has_retention_justification": bool(payload.retention_justification and payload.retention_justification.strip())})],
+                                 "has_retention_justification": bool(payload.retention_justification and payload.retention_justification.strip()),\n                                 "identity_verification_method": identity_verification_method})],
                 )
                 return row
     except HTTPException:
