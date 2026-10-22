@@ -143,8 +143,12 @@ def test_retention_preview_uses_explicit_candidate_clock_and_allowlisted_table()
 
 
 def test_retention_preview_supported_categories_have_fixed_table_mappings():
-    assert retention_category_definition("candidate_document")["table"] == "candidate_documents"
-    assert retention_category_definition("processing_record")["table"] == "candidate_processing_records"
+    document = retention_category_definition("candidate_document")
+    processing_record = retention_category_definition("processing_record")
+    assert document["table"] == "candidate_documents"
+    assert processing_record["table"] == "candidate_processing_records"
+    assert "r.candidate_id" in document["exception_match"]
+    assert "r.candidate_id" in processing_record["exception_match"]
 
 
 @pytest.mark.parametrize("category", ["audit_event", "application_record", "candidates; drop table candidates"])
