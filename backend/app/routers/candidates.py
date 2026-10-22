@@ -24,12 +24,15 @@ async def list_candidates(
     country_code: str | None = Query(default=None, min_length=2, max_length=2, pattern=r"^[A-Za-z]{2}$"),
     page: int | None = Query(default=None, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
+    sort_by: str = Query(default="name", pattern="^(name|title|location|status)$"),
+    sort_direction: str = Query(default="asc", pattern="^(asc|desc)$"),
     user_id: UUID = Depends(get_current_user_id),
 ) -> list[CandidateOut]:
     assert_org_member(user_id, organization_id)
     try:
         rows, total = await service.list_candidates(
-            organization_id, status, search, country_code, page, page_size
+            organization_id, status, search, country_code, page, page_size,
+            sort_by, sort_direction
         )
         response.headers["X-Total-Count"] = str(total)
         if page is not None:
