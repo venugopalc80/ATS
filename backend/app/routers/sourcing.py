@@ -96,6 +96,7 @@ class CampaignChannelCreate(BaseModel):
     source_label: str | None = Field(default=None, max_length=160)
     external_reference: str | None = Field(default=None, max_length=500)
     spend_amount: float | None = Field(default=None, ge=0)
+    spend_currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
 
 
 class ReferralCreate(BaseModel):
@@ -946,9 +947,15 @@ async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_curr
                        join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
                       where cm2.organization_id=c.organization_id and cm2.campaign_id=c.id
                         and a2.status='hired') as hired_applications,
-                    (select sum(cc.spend_amount) from public.campaign_channels cc
+                    (select case when count(distinct cc.spend_currency) filter (where cc.spend_amount is not null) <= 1
+                                      then sum(cc.spend_amount) end
+                       from public.campaign_channels cc
                       where cc.organization_id=c.organization_id and cc.campaign_id=c.id) as channel_spend,
-                    (select sum(cc.spend_amount) from public.campaign_channels cc
+                    (select min(cc.spend_currency) from public.campaign_channels cc
+                      where cc.organization_id=c.organization_id and cc.campaign_id=c.id and cc.spend_amount is not null) as channel_spend_currency,
+                    (select case when count(distinct cc.spend_currency) filter (where cc.spend_amount is not null) <= 1
+                                      then sum(cc.spend_amount) end
+                       from public.campaign_channels cc
                       where cc.organization_id=c.organization_id and cc.campaign_id=c.id)
                       / nullif((select count(distinct cm2.application_id)
                         from public.campaign_memberships cm2
@@ -1005,7 +1012,7 @@ async def list_campaign_channels(campaign_id: UUID, organization_id: UUID,
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("""select id,organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount,created_at
+                cursor.execute("""select id,organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount,spend_currency,created_at
                     from public.campaign_channels where organization_id=%s and campaign_id=%s order by created_at""",
                     [organization_id,campaign_id])
                 return list(cursor.fetchall())
@@ -1017,16 +1024,18 @@ async def list_campaign_channels(campaign_id: UUID, organization_id: UUID,
 async def create_campaign_channel(campaign_id: UUID, payload: CampaignChannelCreate,
                                   user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, payload.organization_id)
+    if (payload.spend_amount is None) != (payload.spend_currency is None):
+        raise HTTPException(status_code=422, detail="Channel spend amount and currency must be supplied together")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute("""insert into public.campaign_channels
-                    (organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount)
-                    select %s,c.id,%s,%s,%s,%s from public.recruitment_campaigns c
+                    (organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount,spend_currency)
+                    select %s,c.id,%s,%s,%s,%s,%s from public.recruitment_campaigns c
                     where c.id=%s and c.organization_id=%s
-                    returning id,organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount,created_at""",
+                    returning id,organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount,spend_currency,created_at""",
                     [payload.organization_id,payload.channel_key,payload.source_label,payload.external_reference,
-                     payload.spend_amount,campaign_id,payload.organization_id])
+                     payload.spend_amount,payload.spend_currency,campaign_id,payload.organization_id])
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Campaign not found")
