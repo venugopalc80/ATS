@@ -16,7 +16,8 @@
 - Requisition activity entries written to `audit_events`; edit events capture old/new values for changed fields
 - Jobs & Requisitions page with draft creation/edit-resume, tenant-scoped recruiter and hiring-manager assignment controls, search/status filtering, sortable columns, visible pagination, submit/approve/reject/convert actions
 - Vacancy close action uses a soft close instead of deleting the job row, preserving application links
-- Server-side status-transition and role checks for job updates; organisation membership checks for assignment links
+- Server-side status-transition and role checks for job updates; organisation membership and eligible-role checks for job/requisition assignment links
+- Static requisition assignee route registered before the dynamic requisition-ID route so `/assignees` is not captured by UUID path matching
 
 ## Acceptance tracker
 - [x] Requisition database migration authored with tenant scope, RLS policies, and indexes
@@ -29,8 +30,8 @@
 - [x] Add draft edit/resume in the UI for draft/rejected requisitions
 - [x] Add table sorting and visible pagination controls to the workspace (client-side over the API's 100-row result cap)
 - [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
-- [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, and old/new edit audit metadata
-- [ ] Add/verify broader database-backed lifecycle and job status-transition tests
+- [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new edit audit metadata, invalid job status transitions, and route ordering
+- [ ] Add/verify broader database-backed lifecycle and job status-transition tests (current regression tests mock persistence; staging/browser acceptance remains required)
 - [x] Latest backend unit-test run 39800965630 passed: 44 tests run, 4 skipped, including the old/new recruiter assignment audit assertion
 - [x] Frontend typecheck and production build steps passed in run 39800730424; frontend code has not changed since that successful run
 - [ ] Latest overall workflow run 39800965630 to finalize its frontend job (queued at last check)
