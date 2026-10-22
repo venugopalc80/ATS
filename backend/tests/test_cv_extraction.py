@@ -177,3 +177,35 @@ def test_filename_is_not_used_as_candidate_name_when_text_has_no_name():
     )
     assert fields["first_name"] == "CV candidate"
     assert fields["last_name"] is None
+
+
+
+def test_education_is_returned_as_structured_records_without_losing_source_text():
+    text = (
+        "Girish Changlere\\nEducation\\n"
+        "Master of Science of Information Studies, Trine University, 2017\\n"
+        "Master of Business Administration, University of Pune, 2010\\n"
+        "B. Com, SRTMU of Nanded, 2007\\nAREAS OF EXPERTISE\\nSDLC"
+    )
+    fields = cv_candidate_fields(text, "girish.pdf")
+    records = fields["education_records"]
+    assert len(records) == 3
+    assert records[0]["qualification"] == "Master of Science of Information Studies"
+    assert records[0]["institution"] == "Trine University"
+    assert records[0]["graduation_year"] == 2017
+    assert records[0]["raw_text"] == "Master of Science of Information Studies, Trine University, 2017"
+    assert records[1]["institution"] == "University of Pune"
+    assert records[1]["graduation_year"] == 2010
+    assert records[2]["graduation_year"] == 2007
+
+
+def test_education_parser_does_not_invent_missing_institution_or_year():
+    fields = cv_candidate_fields(
+        "Jordan Taylor\\nEducation\\nBachelor of Computer Science\\nSkills\\nPython",
+        "jordan.pdf",
+    )
+    records = fields["education_records"]
+    assert len(records) == 1
+    assert records[0]["qualification"] == "Bachelor of Computer Science"
+    assert records[0]["institution"] is None
+    assert records[0]["graduation_year"] is None
