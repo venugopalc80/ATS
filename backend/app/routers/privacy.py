@@ -16,6 +16,7 @@ RequestStatus = Literal[
     "received", "identity_verification", "in_progress", "awaiting_information",
     "partially_completed", "completed", "declined", "cancelled",
 ]
+IdentityVerificationMethod = Literal["existing_account", "email_challenge", "document_review", "other"]
 LegalBasis = Literal[
     "consent", "contract", "legal_obligation", "legitimate_interests",
     "public_task", "vital_interests", "other",
@@ -51,6 +52,7 @@ class PrivacyRequestUpdate(BaseModel):
     affected_systems: list[str] = Field(default_factory=list)
     exception_details: str | None = Field(default=None, max_length=4000)
     retention_justification: str | None = Field(default=None, max_length=4000)
+    identity_verification_method: IdentityVerificationMethod | None = None
 
     @model_validator(mode="after")
     def validate_exceptions(self):
@@ -430,20 +432,33 @@ async def update_rights_request(
                         status_code=409,
                         detail=f"Invalid privacy request transition: {existing['status']} -> {payload.status}",
                     )
+                if existing["status"] == "identity_verification" and payload.status == "in_progress":
+                    if payload.identity_verification_method is None:
+                        raise HTTPException(status_code=422, detail="Identity verification method is required before processing can begin")
                 completed_at = datetime.now(timezone.utc) if payload.status in {
                     "partially_completed", "completed", "declined", "cancelled"
                 } else None
+                identity_verified_at = datetime.now(timezone.utc) if (
+                    existing["status"] == "identity_verification" and payload.status == "in_progress"
+                ) else existing["identity_verified_at"]
+                identity_verified_by = user_id if identity_verified_at is not None else existing["identity_verified_by"]
+                identity_verification_method = (
+                    payload.identity_verification_method if identity_verified_at is not None
+                    else existing["identity_verification_method"]
+                )
                 cursor.execute(
                     """update public.privacy_rights_requests
                        set status = %s, affected_systems = %s::jsonb,
                            exception_details = %s, retention_justification = %s,
-                           completed_at = %s, updated_by = %s, updated_at = now()
+                           completed_at = %s, identity_verified_at = %s, identity_verified_by = %s,
+                           identity_verification_method = %s, updated_by = %s, updated_at = now()
                        where id = %s
                        returning id, organization_id, candidate_id, request_type, status,
                                  affected_systems, exception_details, retention_justification,
                                  received_at, due_at, completed_at, updated_at""",
                     [payload.status, json.dumps(payload.affected_systems), payload.exception_details,
-                     payload.retention_justification, completed_at, user_id, request_id],
+                     payload.retention_justification, completed_at, identity_verified_at,
+                     identity_verified_by, identity_verification_method, user_id, request_id],
                 )
                 row = cursor.fetchone()
                 cursor.execute(
@@ -455,7 +470,8 @@ async def update_rights_request(
                      json.dumps({"from": existing["status"], "to": payload.status,
                                  "affected_systems": payload.affected_systems,
                                  "has_exception": bool(payload.exception_details and payload.exception_details.strip()),
-                                 "has_retention_justification": bool(payload.retention_justification and payload.retention_justification.strip()),\n                                 "identity_verification_method": identity_verification_method})],
+                                 "has_retention_justification": bool(payload.retention_justification and payload.retention_justification.strip()),
+                                 "identity_verification_method": identity_verification_method})],
                 )
                 return row
     except HTTPException:
