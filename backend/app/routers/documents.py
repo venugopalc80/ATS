@@ -292,6 +292,38 @@ def extract_cv_text(data: bytes, mime: str) -> str:
     return ""
 
 
+def parse_education_records(raw_education: str | None) -> list[dict]:
+    """Parse education lines conservatively; preserve the source line for recruiter correction."""
+    if not raw_education:
+        return []
+    records = []
+    seen = set()
+    for raw_line in raw_education.split(" | "):
+        line = re.sub(r"\s+", " ", raw_line).strip(" •\t-")
+        if not line or line.casefold() in seen:
+            continue
+        seen.add(line.casefold())
+        year_match = re.search(r"\b(19\d{2}|20\d{2}|2100)\b", line)
+        graduation_year = int(year_match.group(1)) if year_match else None
+        without_year = re.sub(r"[,;|()\-]*\s*\b(?:19\d{2}|20\d{2}|2100)\b\s*[,;|()\-]*", " ", line).strip(" ,;|()")
+        parts = [part.strip(" ,;|") for part in re.split(r"[,;|]", without_year) if part.strip(" ,;|")]
+        qualification = parts[0][:180] if parts else None
+        institution = parts[1][:240] if len(parts) > 1 else None
+        field_of_study = None
+        if qualification:
+            field_match = re.search(r"\b(?:of|in)\s+(.+)$", qualification, re.I)
+            if field_match:
+                field_of_study = field_match.group(1).strip(" ,;")[:180] or None
+        records.append({
+            "institution": institution,
+            "qualification": qualification,
+            "field_of_study": field_of_study,
+            "graduation_year": graduation_year,
+            "raw_text": line[:500],
+        })
+    return records
+
+
 def cv_candidate_fields(text: str, filename: str) -> dict:
     """Extract conservative candidate fields from selectable CV text.
 
@@ -425,6 +457,7 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         "current_title": title,
         "years_experience": experience,
         "education": education,
+        "education_records": parse_education_records(education),
         "skills": skills[:30],
     }
 
@@ -510,6 +543,16 @@ async def bulk_upload_cvs(
                              fields["email"], fields["phone"], fields["current_title"], fields["years_experience"],
                              fields["skills"], path, text or None],
                         )
+                        for education in fields["education_records"]:
+                            cursor.execute(
+                                """insert into public.candidate_education
+                                   (organization_id, candidate_id, institution, qualification,
+                                    field_of_study, graduation_year, raw_text)
+                                   values (%s,%s,%s,%s,%s,%s,%s)""",
+                                [organization_id, candidate_id, education["institution"],
+                                 education["qualification"], education["field_of_study"],
+                                 education["graduation_year"], education["raw_text"]],
+                            )
                         cursor.execute(
                             """insert into public.candidate_documents
                                (id, organization_id, candidate_id, application_id, document_type,
