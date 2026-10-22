@@ -17,12 +17,22 @@ from app.routers.public_jobs import router as public_jobs_router
 from app.routers.documents import router as documents_router
 
 app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
-frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
+
+# Keep browser origins explicit. FRONTEND_URLS supports a comma-separated list
+# of additional exact origins for approved preview deployments; never use a
+# wildcard for Vercel preview hosts because that would trust unrelated projects.
+frontend_urls = os.getenv("FRONTEND_URLS", "")
+frontend_url = os.getenv("FRONTEND_URL", "http://localhost:3000")
+configured_origins = [
+    "https://aqerith.com",
+    "https://www.aqerith.com",
+    "https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app",
+    "https://aqerith-git-fix-dashboard-update-1-acceptance-the-pixel-muses.vercel.app",
+    "https://aqerith-r5t7uzo35-the-pixel-muses.vercel.app",
+]
 frontend_origins = {
     origin.strip().rstrip("/")
-    for origin in (
-        frontend_url + ",https://aqerith.com,https://www.aqerith.com,https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app,https://aqerith-git-fix-dashboard-update-1-acceptance-the-pixel-muses.vercel.app,https://aqerith-r5t7uzo35-the-pixel-muses.vercel.app"
-    ).split(",")
+    for origin in [frontend_url, *frontend_urls.split(","), *configured_origins]
     if origin.strip()
 }
 app.add_middleware(
