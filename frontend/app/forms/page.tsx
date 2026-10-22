@@ -157,7 +157,7 @@ export default function ApplicationFormsPage() {
     <main className="content">
       <div className="header-row">
         <div><p className="eyebrow">Recruitment setup</p><h1>Application forms</h1><p className="subtitle">Build reusable question sets and preserve the exact version candidates answered.</p></div>
-        <button className="btn" type="button" onClick={() => setPreview(value => !value)}>{preview ? "Back to editor" : "Preview candidate form"}</button>
+        <div className="actions"><a className="btn" href="/jobs">Back to jobs</a><button className="btn" type="button" onClick={() => setPreview(value => !value)}>{preview ? "Back to editor" : "Preview candidate form"}</button></div>
       </div>
       {error ? <p role="alert" className="form-error">{error}</p> : null}
       {message ? <p role="status" className="form-success">{message}</p> : null}
