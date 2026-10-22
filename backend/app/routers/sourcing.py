@@ -338,6 +338,8 @@ async def list_saved_searches(organization_id: UUID, user_id: UUID = Depends(get
 @router.post("/saved-searches", status_code=201)
 async def create_saved_search(payload: SavedSearchCreate, user_id: UUID = Depends(get_current_user_id)):
     _assert_sourcing_manager(user_id, payload.organization_id)
+    if payload.alerts_enabled:
+        raise HTTPException(status_code=409, detail="Saved-search alerts are not enabled until the notification worker is configured")
     if payload.is_shared:
         assert_org_admin(user_id, payload.organization_id)
     try:
@@ -362,6 +364,8 @@ async def update_saved_search(search_id: UUID, organization_id: UUID, payload: S
                               user_id: UUID = Depends(get_current_user_id)):
     _assert_sourcing_manager(user_id, organization_id)
     data = payload.model_dump(exclude_unset=True)
+    if data.get("alerts_enabled") is True:
+        raise HTTPException(status_code=409, detail="Saved-search alerts are not enabled until the notification worker is configured")
     if not data:
         raise HTTPException(status_code=422, detail="Provide at least one field to update")
     if "is_shared" in data and data["is_shared"] is not None:
