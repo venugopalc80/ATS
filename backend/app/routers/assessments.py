@@ -316,7 +316,7 @@ async def update_assignment(assignment_id: UUID, payload: AssessmentAssignmentUp
 @router.post("/assignments/{assignment_id}/start", response_model=AssessmentAssignmentOut)
 async def start_assessment(assignment_id: UUID, organization_id: UUID,
                            user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    require_manager(user_id, organization_id)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -343,7 +343,7 @@ async def start_assessment(assignment_id: UUID, organization_id: UUID,
 @router.post("/assignments/{assignment_id}/submissions", status_code=201)
 async def submit_assessment(assignment_id: UUID, payload: AssessmentSubmissionCreate,
                             organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    require_manager(user_id, organization_id)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
@@ -461,7 +461,7 @@ async def review_result(assignment_id: UUID, payload: AssessmentReviewCreate, or
 @router.get("/assignments/{assignment_id}/evidence")
 async def get_evidence(assignment_id: UUID, organization_id: UUID,
                        user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    require_manager(user_id, organization_id)
     try:
         with get_connection() as conn:
             with conn.cursor() as cur:
