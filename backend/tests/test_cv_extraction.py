@@ -182,10 +182,10 @@ def test_filename_is_not_used_as_candidate_name_when_text_has_no_name():
 
 def test_education_is_returned_as_structured_records_without_losing_source_text():
     text = (
-        "Girish Changlere\\nEducation\\n"
-        "Master of Science of Information Studies, Trine University, 2017\\n"
-        "Master of Business Administration, University of Pune, 2010\\n"
-        "B. Com, SRTMU of Nanded, 2007\\nAREAS OF EXPERTISE\\nSDLC"
+        "Girish Changlere\nEducation\n"
+        "Master of Science of Information Studies, Trine University, 2017\n"
+        "Master of Business Administration, University of Pune, 2010\n"
+        "B. Com, SRTMU of Nanded, 2007\nAREAS OF EXPERTISE\nSDLC"
     )
     fields = cv_candidate_fields(text, "girish.pdf")
     records = fields["education_records"]
@@ -201,7 +201,7 @@ def test_education_is_returned_as_structured_records_without_losing_source_text(
 
 def test_education_parser_does_not_invent_missing_institution_or_year():
     fields = cv_candidate_fields(
-        "Jordan Taylor\\nEducation\\nBachelor of Computer Science\\nSkills\\nPython",
+        "Jordan Taylor\nEducation\nBachelor of Computer Science\nSkills\nPython",
         "jordan.pdf",
     )
     records = fields["education_records"]
