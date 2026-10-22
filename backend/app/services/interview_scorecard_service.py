@@ -47,10 +47,16 @@ def list_kits(organization_id: UUID) -> list[dict[str, Any]]:
             cursor.execute(
                 """select k.id, k.organization_id, k.job_id, k.name, k.description, k.status,
                           k.current_version_id, k.created_by, k.updated_at,
-                          t.version_number, t.instructions, t.published_at
+                          t.version_number, t.instructions, t.published_at,
+                          draft.id as draft_template_id
                    from public.interview_kits k
                    left join public.scorecard_templates t
                      on t.organization_id=k.organization_id and t.id=k.current_version_id
+                   left join lateral (
+                     select id from public.scorecard_templates d
+                     where d.organization_id=k.organization_id and d.kit_id=k.id and d.status='draft'
+                     order by d.version_number desc limit 1
+                   ) draft on true
                    where k.organization_id=%s and k.status <> 'archived'
                    order by k.updated_at desc""",
                 [organization_id],
@@ -343,3 +349,35 @@ def review_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID, ca
                     "submitted_feedback_count": submitted, "missing_interviewer_ids": missing,
                     "feedback": rows,
                     "note": "Ratings are evidence summaries, not an automated hiring decision."}
+
+
+def get_my_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID) -> dict[str, Any] | None:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """select interviewer_ids from public.interviews
+                   where organization_id=%s and id=%s""",
+                [organization_id, interview_id],
+            )
+            interview = cursor.fetchone()
+            if interview is None:
+                return None
+            if user_id not in {UUID(str(value)) for value in (interview["interviewer_ids"] or [])}:
+                raise PermissionError("Only an assigned interviewer can access their own scorecard")
+            cursor.execute(
+                """select id, template_id, status, overall_summary, strengths, concerns, submitted_at
+                   from public.interview_feedback
+                   where organization_id=%s and interview_id=%s and interviewer_id=%s""",
+                [organization_id, interview_id, user_id],
+            )
+            feedback = cursor.fetchone()
+            if feedback is None:
+                return None
+            cursor.execute(
+                """select competency_id, rating, evidence, notes
+                   from public.scorecard_responses
+                   where organization_id=%s and feedback_id=%s""",
+                [organization_id, feedback["id"]],
+            )
+            feedback["responses"] = list(cursor.fetchall())
+            return feedback
