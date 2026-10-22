@@ -549,6 +549,7 @@ def _default_column_mapping(headers: list[str]) -> dict[str, str]:
 def _map_csv_row(row: dict[str, str | None], mapping: dict[str, str]) -> tuple[dict, list[str]]:
     data: dict[str, object] = {}
     errors: list[str] = []
+    field_limits = {"first_name": 100, "last_name": 100, "email": 320, "phone": 50, "city": 120, "region": 120, "country_code": 2, "current_title": 200}
     for field, header in mapping.items():
         raw = (row.get(header) or "").strip()
         if field == "skills":
@@ -575,7 +576,7 @@ def _map_csv_row(row: dict[str, str | None], mapping: dict[str, str]) -> tuple[d
             else:
                 data[field] = value
         else:
-            data[field] = raw[:320] or None
+            data[field] = raw[:field_limits.get(field, 320)] or None
     data.setdefault("first_name", None)
     data.setdefault("last_name", None)
     data.setdefault("email", None)
@@ -733,8 +734,8 @@ async def commit_candidate_csv_import(
                 batch = cursor.fetchone()
                 if not batch:
                     raise HTTPException(status_code=404, detail="Import batch not found")
-                if batch["status"] not in {"previewed", "completed_with_errors"}:
-                    raise HTTPException(status_code=409, detail="This import batch cannot be committed in its current state")
+                if batch["status"] != "previewed":
+                    raise HTTPException(status_code=409, detail="This import batch has already been committed or cannot be committed in its current state")
                 cursor.execute("""select id,row_number,status,mapped_data,duplicate_candidate_id
                     from public.import_row_results where organization_id=%s and batch_id=%s
                     order by row_number for update""", [organization_id,batch_id])
