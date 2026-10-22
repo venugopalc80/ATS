@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from app.schemas.applications import ApplicationCreate, ApplicationStageConfigUpdate, ApplicationTransition
-from app.services.application_service import ApplicationService
+from app.services.application_service import ApplicationService, _validate_stage_config_shape
 
 
 ORG = UUID("11111111-1111-4111-8111-111111111111")
@@ -170,6 +170,41 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
     def test_stage_config_update_rejects_blank_label(self):
         with self.assertRaisesRegex(ValueError, "Stage label cannot be blank"):
             ApplicationStageConfigUpdate(label="   ")
+
+    def test_enabled_non_terminal_stage_cannot_become_a_dead_end(self):
+        existing = {
+            "allowed_next_stages": ["screening"],
+            "is_terminal": False,
+            "enabled": True,
+        }
+        with self.assertRaisesRegex(ValueError, "must allow at least one next stage"):
+            _validate_stage_config_shape(
+                "new", {"allowed_next_stages": []}, existing
+            )
+
+    def test_disabled_non_terminal_stage_may_have_no_next_stages(self):
+        existing = {
+            "allowed_next_stages": ["screening"],
+            "is_terminal": False,
+            "enabled": True,
+        }
+        next_stages, terminal, enabled = _validate_stage_config_shape(
+            "new", {"allowed_next_stages": [], "enabled": False}, existing
+        )
+        self.assertEqual(next_stages, [])
+        self.assertFalse(terminal)
+        self.assertFalse(enabled)
+
+    def test_terminal_stage_cannot_have_next_stages(self):
+        existing = {
+            "allowed_next_stages": [],
+            "is_terminal": True,
+            "enabled": True,
+        }
+        with self.assertRaisesRegex(ValueError, "Terminal stages cannot have allowed next stages"):
+            _validate_stage_config_shape(
+                "hired", {"allowed_next_stages": ["screening"]}, existing
+            )
 
     def test_new_application_defaults_to_initial_stage(self):
         payload = ApplicationCreate(organization_id=ORG, job_id=JOB, candidate_id=CANDIDATE)
