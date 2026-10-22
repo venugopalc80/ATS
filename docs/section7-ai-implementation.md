@@ -81,3 +81,10 @@ Do not send real candidate data to an external provider before these gates have 
 - Added unit tests for both review endpoints to verify that the reason is persisted in audit-event metadata.
 - The same verified Section 7 workflow passed the backend unit test suite, including both review-audit tests.
 
+
+
+## Governance regression tests (2026-10-22)
+
+- Added model-approval gate tests: a model cannot be approved without recorded data-processing approval, and cannot be approved without a passing evaluation run.
+- Added a fairness-audit test verifying groups with fewer than 10 observations are flagged in uncertainty notes and audit metadata.
+- The latest branch commits do not yet expose a verifiable CI run through the connected GitHub status/run results. Treat these latest tests as committed but unverified until a fresh GitHub Actions result is visible.
