@@ -816,3 +816,63 @@ async def create_recorded_recommendation(
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_error(exc) from exc
+
+
+class IncidentUpdateInput(BaseModel):
+    organization_id: UUID
+    status: Literal["open", "investigating", "mitigated", "closed"]
+    remediation: str | None = Field(default=None, max_length=6000)
+
+
+@router.patch("/governance/incidents/{incident_id}")
+async def update_incident(
+    incident_id: UUID,
+    payload: IncidentUpdateInput,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_admin(user_id, payload.organization_id)
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """update public.ai_incidents set status=%s, remediation=%s,
+                          resolved_at=case when %s in ('mitigated','closed') then now() else null end
+                   where id=%s and organization_id=%s
+                   returning id, severity, category, status, remediation, resolved_at""",
+                [payload.status, payload.remediation, payload.status, incident_id, payload.organization_id],
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="AI incident not found")
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_incident_updated','ai_incident',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, incident_id,
+                 json.dumps({"status": payload.status, "remediation_recorded": bool(payload.remediation)})],
+            )
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/governance/retention-cleanup")
+async def cleanup_expired_ai_runs(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    """Admin-triggered cleanup. Production must schedule this endpoint or equivalent trusted job."""
+    assert_org_admin(user_id, organization_id)
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """delete from public.ai_runs where organization_id=%s and retention_expires_at <= now()
+                   returning id""",
+                [organization_id],
+            )
+            deleted_ids = [str(row["id"]) for row in cur.fetchall()]
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, metadata)
+                   values (%s,%s,'ai_retention_cleanup','ai_run',%s::jsonb)""",
+                [organization_id, user_id, json.dumps({"deleted_count": len(deleted_ids)})],
+            )
+            return {"deleted_count": len(deleted_ids), "cleanup_at": datetime.now(timezone.utc)}
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
