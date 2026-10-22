@@ -132,6 +132,16 @@ class CandidateServiceTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     CandidateUpdate.model_validate({"first_name": "Alex", field: value})
 
+    def test_candidate_update_rejects_null_for_required_fields(self):
+        for payload in (
+            {"first_name": None},
+            {"status": None},
+            {"skills": None},
+        ):
+            with self.subTest(payload=payload):
+                with self.assertRaises(ValidationError):
+                    CandidateUpdate.model_validate(payload)
+
     def test_permanent_delete_is_blocked_when_candidate_has_applications(self):
         candidate_id = uuid4()
         self.cursor.rowcount = 0
