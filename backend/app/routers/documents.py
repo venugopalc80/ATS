@@ -518,9 +518,11 @@ def _run_document_extraction(document_id: UUID, organization_id: UUID, user_id: 
                     """update public.document_extractions
                        set status='processing', attempt_count=attempt_count+1,
                            started_at=now(), updated_at=now(), errors='[]'::jsonb
-                       where organization_id=%s and document_id=%s and status <> 'confirmed'""",
+                       where organization_id=%s and document_id=%s and status='queued'""",
                     [organization_id, document_id],
                 )
+                if cursor.rowcount == 0:
+                    return
         raw = storage_client().storage.from_(doc["storage_bucket"]).download(doc["storage_path"])
         text = extract_cv_text(raw, doc["content_type"])
         if not text.strip():
@@ -579,8 +581,8 @@ async def parse_candidate_document(
                    (organization_id, document_id, candidate_id, status, parser_version, requested_by)
                    values (%s,%s,%s,'queued',%s,%s)
                    on conflict (organization_id, document_id) do update
-                     set status=case when public.document_extractions.status='confirmed'
-                                     then 'confirmed' else 'queued' end,
+                     set status=case when public.document_extractions.status in ('confirmed','processing')
+                                     then public.document_extractions.status else 'queued' end,
                          requested_by=excluded.requested_by, updated_at=now(),
                          errors=case when public.document_extractions.status='confirmed'
                                      then public.document_extractions.errors else '[]'::jsonb end
@@ -596,9 +598,9 @@ async def parse_candidate_document(
                     [organization_id, user_id, document_id,
                      json.dumps({"parser_version": PARSER_VERSION})],
                 )
-    if state["status"] != "confirmed":
+    if state["status"] == "queued":
         background_tasks.add_task(_run_document_extraction, document_id, organization_id, user_id)
-    return {"document_id": str(document_id), "status": state["status"], "processing": state["status"] != "confirmed"}
+    return {"document_id": str(document_id), "status": state["status"], "processing": state["status"] in {"queued", "processing"}}
 
 
 @router.get("/{document_id}/extraction")
