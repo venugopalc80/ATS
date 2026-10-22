@@ -243,7 +243,7 @@ export default function InterviewScorecardPage() {
         </div>}
       </section>
 
-      {review && (submitted || review.submitted_feedback_count > 0) && (
+      {review && (submitted || review.assigned_interviewer_count > 0) && (
         <section className="mt-10">
           <h2 className="text-xl font-semibold">Consolidated review</h2>
           <p className="mt-2 text-sm text-gray-600">{review.submitted_feedback_count} of {review.assigned_interviewer_count} assigned interviewers submitted feedback.</p>
