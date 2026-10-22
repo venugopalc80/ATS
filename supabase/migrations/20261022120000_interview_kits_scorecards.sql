@@ -6,6 +6,7 @@
 create unique index if not exists jobs_organization_id_id_uidx on public.jobs(organization_id, id);
 create unique index if not exists applications_organization_id_id_uidx on public.applications(organization_id, id);
 create unique index if not exists interviews_organization_id_id_uidx on public.interviews(organization_id, id);
+create unique index if not exists interviews_org_id_application_uidx on public.interviews(organization_id, id, application_id);
 
 create table if not exists public.interview_kits (
   id uuid primary key default gen_random_uuid(),
@@ -87,7 +88,7 @@ create table if not exists public.interview_feedback (
   updated_at timestamptz not null default now(),
   unique (organization_id, id),
   unique (organization_id, interview_id, interviewer_id),
-  foreign key (organization_id, interview_id) references public.interviews(organization_id, id) on delete cascade,
+  foreign key (organization_id, interview_id, application_id) references public.interviews(organization_id, id, application_id) on delete cascade,
   foreign key (organization_id, application_id) references public.applications(organization_id, id) on delete cascade,
   foreign key (organization_id, template_id) references public.scorecard_templates(organization_id, id) on delete restrict,
   check ((status = 'draft' and submitted_at is null) or (status = 'submitted' and submitted_at is not null))
