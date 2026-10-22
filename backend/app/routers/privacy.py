@@ -1,5 +1,5 @@
 import json
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
@@ -21,6 +21,22 @@ LegalBasis = Literal[
     "public_task", "vital_interests", "other",
 ]
 
+PRIVACY_REQUEST_TRANSITIONS = {
+    "received": {"identity_verification", "cancelled"},
+    "identity_verification": {"in_progress", "awaiting_information", "declined", "cancelled"},
+    "in_progress": {"awaiting_information", "partially_completed", "completed", "declined", "cancelled"},
+    "awaiting_information": {"in_progress", "cancelled"},
+    "partially_completed": {"in_progress", "completed", "declined", "cancelled"},
+    "completed": set(),
+    "declined": set(),
+    "cancelled": set(),
+}
+
+
+def is_privacy_request_transition_allowed(current_status: str, next_status: str) -> bool:
+    """Keep API validation aligned with the database transition guard."""
+    return next_status == current_status or next_status in PRIVACY_REQUEST_TRANSITIONS.get(current_status, set())
+
 
 class PrivacyRequestCreate(BaseModel):
     organization_id: UUID
@@ -39,7 +55,7 @@ class PrivacyRequestUpdate(BaseModel):
     @model_validator(mode="after")
     def validate_exceptions(self):
         if self.status in {"partially_completed", "declined"} and not (
-            self.exception_details or self.retention_justification
+            (self.exception_details or "").strip() or (self.retention_justification or "").strip()
         ):
             raise ValueError("Partial completion or decline requires a documented exception or retention justification")
         return self
@@ -128,10 +144,7 @@ async def list_notices(
 
 
 @router.post("/notices", status_code=201)
-async def create_notice(
-    payload: NoticeCreate,
-    user_id: UUID = Depends(get_current_user_id),
-):
+async def create_notice(payload: NoticeCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_admin(user_id, payload.organization_id)
     try:
         with get_connection() as connection:
@@ -181,10 +194,7 @@ async def list_retention_policies(
 
 
 @router.post("/retention-policies", status_code=201)
-async def create_retention_policy(
-    payload: RetentionPolicyCreate,
-    user_id: UUID = Depends(get_current_user_id),
-):
+async def create_retention_policy(payload: RetentionPolicyCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_admin(user_id, payload.organization_id)
     try:
         with get_connection() as connection:
@@ -241,10 +251,7 @@ async def list_retention_exceptions(
 
 
 @router.post("/retention-exceptions", status_code=201)
-async def create_retention_exception(
-    payload: RetentionExceptionCreate,
-    user_id: UUID = Depends(get_current_user_id),
-):
+async def create_retention_exception(payload: RetentionExceptionCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_admin(user_id, payload.organization_id)
     if payload.ends_at is not None and payload.ends_at <= payload.starts_at:
         raise HTTPException(status_code=422, detail="Exception end must be after its start")
@@ -288,18 +295,8 @@ async def create_retention_exception(
 
 
 @router.post("/processing-records", status_code=201)
-async def create_processing_record(
-    payload: ProcessingRecordCreate,
-    user_id: UUID = Depends(get_current_user_id),
-):
+async def create_processing_record(payload: ProcessingRecordCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, payload.organization_id)
-    if payload.legal_basis == "consent":
-        if payload.consent_status not in {"granted", "withdrawn"} or payload.consent_captured_at is None:
-            raise HTTPException(status_code=422, detail="Consent basis requires explicit consent status and capture timestamp")
-        if payload.consent_status == "withdrawn" and payload.consent_withdrawn_at is None:
-            raise HTTPException(status_code=422, detail="Withdrawn consent requires a withdrawal timestamp")
-    elif payload.consent_status not in {None, "not_applicable"}:
-        raise HTTPException(status_code=422, detail="Consent status must be separate from non-consent legal bases")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -347,10 +344,7 @@ async def create_processing_record(
 
 
 @router.post("/requests", status_code=201)
-async def create_rights_request(
-    payload: PrivacyRequestCreate,
-    user_id: UUID = Depends(get_current_user_id),
-):
+async def create_rights_request(payload: PrivacyRequestCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, payload.organization_id)
     try:
         with get_connection() as connection:
@@ -431,16 +425,14 @@ async def update_rights_request(
                 if existing is None:
                     raise HTTPException(status_code=404, detail="Privacy request not found")
                 assert_org_admin(user_id, existing["organization_id"])
-                completed_at = datetime.now().astimezone() if payload.status in {
+                if not is_privacy_request_transition_allowed(existing["status"], payload.status):
+                    raise HTTPException(
+                        status_code=409,
+                        detail=f"Invalid privacy request transition: {existing['status']} -> {payload.status}",
+                    )
+                completed_at = datetime.now(timezone.utc) if payload.status in {
                     "partially_completed", "completed", "declined", "cancelled"
                 } else None
-                if payload.status in {"partially_completed", "declined"} and not (
-                    payload.exception_details or payload.retention_justification
-                ):
-                    raise HTTPException(
-                        status_code=422,
-                        detail="Document an exception or retention justification for partial completion or decline",
-                    )
                 cursor.execute(
                     """update public.privacy_rights_requests
                        set status = %s, affected_systems = %s::jsonb,
@@ -462,8 +454,8 @@ async def update_rights_request(
                     [existing["organization_id"], user_id, request_id,
                      json.dumps({"from": existing["status"], "to": payload.status,
                                  "affected_systems": payload.affected_systems,
-                                 "has_exception": bool(payload.exception_details),
-                                 "has_retention_justification": bool(payload.retention_justification)})],
+                                 "has_exception": bool(payload.exception_details and payload.exception_details.strip()),
+                                 "has_retention_justification": bool(payload.retention_justification and payload.retention_justification.strip())})],
                 )
                 return row
     except HTTPException:
