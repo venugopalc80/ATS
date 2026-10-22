@@ -66,11 +66,18 @@ class FakeAnalyticsCursor:
             return {"applications": 6, "closed_unsuccessfully": 1, "active_applications": 4}
         if "as decided_offers" in self.sql:
             return {"decided_offers": 4, "accepted_offers": 3}
+        if "as complete_requisitions" in self.sql:
+            return {"median_days": 20.0, "complete_requisitions": 3}
         if "as median_days" in self.sql:
             self.asserted_time_to_hire_query = self.sql
             return {"median_days": 12.5, "complete_records": 2}
         if "as open_vacancies" in self.sql:
-            return {"open_vacancies": 2}
+            return {
+                "open_vacancies": 2,
+                "open_more_than_30_days": 1,
+                "missing_opened_at": 1,
+                "median_days_open": 35.0,
+            }
         if "as cohort_size" in self.sql:
             return {"cohort_size": 6}
         if "as unassigned_open_vacancies" in self.sql:
@@ -168,6 +175,9 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["metrics"]["applications"]["value"], 6)
         self.assertEqual(result["metrics"]["offer_acceptance_rate"]["value"], 0.75)
         self.assertEqual(result["metrics"]["median_time_to_hire_days"]["value"], 12.5)
+        self.assertEqual(result["metrics"]["median_time_to_fill_days"]["value"], 20.0)
+        self.assertEqual(result["metrics"]["vacancy_ageing"]["median_days_open"], 35.0)
+        self.assertEqual(result["metrics"]["vacancy_ageing"]["open_more_than_30_days"], 1)
         self.assertIn("organization_id = %s", self.cursor.queries[0][0])
         self.assertIn("j.recruiter_id = %s", self.cursor.queries[0][0])
         self.assertIn("select min(off.responded_at) as accepted_at", self.cursor.queries[2][0])
