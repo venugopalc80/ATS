@@ -254,11 +254,42 @@ export default function CandidatesPage() {
     else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status); setCountry(view.country); } }
     setPage(1);
   }
-  function exportCandidates() {
-    const escapeCsv = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
-    const rows = [["Candidate ID","First name","Last name","Email","Phone","City","Region","Country","Current title","Years experience","Skills","Status"], ...filtered.map((candidate) => [candidate.id,candidate.first_name,candidate.last_name,candidate.email,candidate.phone,candidate.city,candidate.region,candidate.country_code,candidate.current_title,candidate.years_experience,candidate.skills.join("; "),candidate.status])];
-    const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" })); const link = document.createElement("a"); link.href = url; link.download = "aqerith-candidates.csv"; link.click(); URL.revokeObjectURL(url);
+  async function exportCandidates() {
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+    if (!API_BASE || !organizationId) { setMessage("API or organisation configuration is missing."); return; }
+    setMessage("");
+    try {
+      const allCandidates: Candidate[] = [];
+      let exportPage = 1;
+      let total = 0;
+      do {
+        const params = new URLSearchParams({
+          organization_id: organizationId,
+          page: String(exportPage),
+          page_size: String(pageSize),
+          sort_by: sortBy,
+          sort_direction: sortDirection,
+        });
+        if (query.trim()) params.set("search", query.trim());
+        if (status !== "all") params.set("status", status);
+        if (country !== "all") params.set("country_code", country);
+        const response = await apiFetch(API_BASE + "/api/candidates?" + params.toString());
+        if (!response.ok) throw new Error("Could not export candidates (HTTP " + response.status + ").");
+        const batch: Candidate[] = await response.json();
+        total = Number(response.headers.get("X-Total-Count") ?? batch.length);
+        allCandidates.push(...batch);
+        exportPage += 1;
+        if (!batch.length) break;
+      } while (allCandidates.length < total);
+      const escapeCsv = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+      const rows = [["Candidate ID","First name","Last name","Email","Phone","City","Region","Country","Current title","Years experience","Skills","Status"], ...allCandidates.map((candidate) => [candidate.id,candidate.first_name,candidate.last_name,candidate.email,candidate.phone,candidate.city,candidate.region,candidate.country_code,candidate.current_title,candidate.years_experience,candidate.skills.join("; "),candidate.status])];
+      const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+      const link = document.createElement("a"); link.href = url; link.download = "aqerith-candidates.csv"; link.click(); URL.revokeObjectURL(url);
+      setMessage("Exported " + allCandidates.length + " candidate(s).");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to export candidates.");
+    }
   }
   async function applyBulkStatus() {
     if (!selectedIds.length) return; setSaving(true); setMessage("");
