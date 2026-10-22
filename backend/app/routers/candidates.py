@@ -116,7 +116,15 @@ async def delete_candidate(
     assert_org_admin(user_id, organization_id)
     try:
         deleted = await service.delete_candidate(candidate_id, organization_id)
+        if not deleted:
+            existing = await service.get_candidate(candidate_id, organization_id)
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Candidate not found")
+            raise HTTPException(
+                status_code=409,
+                detail="Candidate has linked applications and cannot be permanently deleted. Mark the candidate inactive instead.",
+            )
+    except HTTPException:
+        raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
-    if not deleted:
-        raise HTTPException(status_code=404, detail="Candidate not found")
