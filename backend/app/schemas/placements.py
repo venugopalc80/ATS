@@ -12,13 +12,13 @@ class PlacementCreate(BaseModel):
     job_id: UUID
     candidate_id: UUID
     client_id: UUID | None = None
-    status: PlacementStatus = "pending"
+    status: Literal["pending"] = "pending"
     start_date: date
     end_date: date | None = None
     fee_amount: Decimal | None = Field(default=None,ge=0)
     fee_currency: str | None = Field(default=None,min_length=3,max_length=3)
     fee_type: FeeType | None = None
-    fee_percentage: Decimal | None = Field(default=None,ge=0,le=100)
+    fee_percentage: Decimal | None = Field(default=None,gt=0,le=100)
     notes: str | None = None
 class PlacementUpdate(BaseModel):
     status: PlacementStatus | None = None
@@ -32,6 +32,7 @@ class PlacementUpdate(BaseModel):
     fee_percentage: Decimal | None = Field(default=None,ge=0,le=100)
     notes: str | None = None
 class PlacementOut(PlacementCreate):
+    status: PlacementStatus
     id: UUID
     created_by: UUID | None
     created_at: datetime
