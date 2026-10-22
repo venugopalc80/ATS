@@ -16,7 +16,9 @@ class ApplicationCreate(BaseModel):
     job_id: UUID
     candidate_id: UUID
     source: str | None = Field(default=None, max_length=100)
-    status: ApplicationStatus = "new"
+    # New applications must enter through the initial stage. Later stage changes
+    # must use the audited transition endpoint with a reason.
+    status: Literal["new"] = "new"
 
 
 class ApplicationUpdate(BaseModel):
