@@ -18,6 +18,13 @@ def _validate_dates(date_from: date | None, date_to: date | None) -> None:
         raise HTTPException(status_code=422, detail="date_from must be on or before date_to")
 
 
+def _csv_safe_value(value):
+    """Neutralize spreadsheet formula prefixes in untrusted text cells."""
+    if isinstance(value, str) and value.lstrip().startswith(("=", "+", "-", "@")):
+        return "'" + value
+    return value
+
+
 def _application_scope(organization_id: UUID, date_from: date | None, date_to: date | None,
                        job_id: UUID | None, recruiter_id: UUID | None) -> tuple[str, list]:
     clauses = ["a.organization_id = %s"]
@@ -789,7 +796,11 @@ async def analytics_export(
     output = io.StringIO(newline="")
     writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction="ignore")
     writer.writeheader()
-    writer.writerows(rows)
+    safe_rows = [
+        {key: _csv_safe_value(value) for key, value in row.items()}
+        for row in rows
+    ]
+    writer.writerows(safe_rows)
     output.seek(0)
     filename = f"aqerith-{report_type}-report.csv"
     return StreamingResponse(
