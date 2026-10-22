@@ -318,8 +318,8 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_campaign_efficiency_reports_costs_without_inventing_financial_roi(self):
         result = await analytics_router.analytics_campaign_roi(
             organization_id=ORG,
-            date_from=date(2026, 10, 1),
-            date_to=date(2026, 10, 22),
+            date_from=None,
+            date_to=None,
             job_id=None,
             recruiter_id=None,
             user_id=UUID("22222222-2222-4222-8222-222222222222"),
@@ -329,8 +329,24 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["cost_per_hire"], 60.0)
         self.assertIsNone(row["financial_roi"])
         self.assertEqual(row["financial_roi_status"], "revenue_data_not_available")
+        self.assertEqual(row["cost_metrics_status"], "all_time_channel_spend_snapshot")
         self.assertFalse(row["sample_warning"])
         self.assertIn("campaign_memberships", self.cursor.queries[0][0])
+
+
+    async def test_campaign_period_filters_do_not_misstate_lifetime_spend_as_period_cost(self):
+        result = await analytics_router.analytics_campaign_roi(
+            organization_id=ORG,
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 22),
+            job_id=None,
+            recruiter_id=None,
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        row = result["campaign_channels"][0]
+        self.assertIsNone(row["cost_per_application"])
+        self.assertIsNone(row["cost_per_hire"])
+        self.assertEqual(row["cost_metrics_status"], "period_spend_history_not_available")
 
 
 if __name__ == "__main__":
