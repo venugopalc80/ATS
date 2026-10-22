@@ -1,7 +1,7 @@
 # Section 6 — Analytics and Business Intelligence
 
 **Scope:** AQERITH Ideas 28–33  
-**Status:** Metric contract proposal; implementation and calculations remain unverified.  
+**Status:** Metric contract plus initial KPI/funnel API slice committed on the feature branch. Automated and database-backed verification remains pending.  
 **Last reviewed:** 2026-10-22
 
 This document defines the proposed shared contract for analytics APIs, dashboards, exports and forecast comparisons. A metric is not accepted solely because the UI displays a value.
