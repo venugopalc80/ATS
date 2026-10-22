@@ -7,13 +7,15 @@ import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 const FALLBACK_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
-type Req = { id:string; organization_id:string; requisition_code:string; title:string; department?:string|null; headcount:number; justification:string; location?:string|null; country_code?:string|null; employment_type?:string|null; work_mode?:string|null; salary_min?:number|string|null; salary_max?:number|string|null; salary_currency?:string|null; required_skills?:string[]|null; status:string; rejection_reason?:string|null; job_id?:string|null; updated_at:string };
-type FormState = { title:string; department:string; justification:string; headcount:string; location:string; country_code:string; employment_type:string; work_mode:string; salary_min:string; salary_max:string; salary_currency:string; required_skills:string };
-const initial:FormState = { title:"",department:"",justification:"",headcount:"1",location:"",country_code:"GB",employment_type:"Permanent",work_mode:"Hybrid",salary_min:"",salary_max:"",salary_currency:"GBP",required_skills:"" };
+type Req = { id:string; organization_id:string; requisition_code:string; title:string; department?:string|null; headcount:number; justification:string; location?:string|null; country_code?:string|null; employment_type?:string|null; work_mode?:string|null; salary_min?:number|string|null; salary_max?:number|string|null; salary_currency?:string|null; required_skills?:string[]|null; recruiter_id?:string|null; hiring_manager_id?:string|null; status:string; rejection_reason?:string|null; job_id?:string|null; updated_at:string };
+type Assignee = { user_id:string; full_name?:string|null; email?:string|null; role:string };
+type FormState = { title:string; department:string; justification:string; headcount:string; location:string; country_code:string; employment_type:string; work_mode:string; salary_min:string; salary_max:string; salary_currency:string; required_skills:string; recruiter_id:string; hiring_manager_id:string };
+const initial:FormState = { title:"",department:"",justification:"",headcount:"1",location:"",country_code:"GB",employment_type:"Permanent",work_mode:"Hybrid",salary_min:"",salary_max:"",salary_currency:"GBP",required_skills:"",recruiter_id:"",hiring_manager_id:"" };
 const labels:Record<string,string> = { draft:"Draft",pending_approval:"Awaiting approval",approved:"Approved",rejected:"Rejected",converted:"Converted to job",cancelled:"Cancelled" };
 
 export default function RequisitionsPage() {
  const [rows,setRows]=useState<Req[]>([]);
+ const [assignees,setAssignees]=useState<Assignee[]>([]);
  const [form,setForm]=useState<FormState>(initial);
  const [showForm,setShowForm]=useState(false);
  const [editingId,setEditingId]=useState<string|null>(null);
@@ -36,7 +38,10 @@ export default function RequisitionsPage() {
    if(search.trim())params.set("search",search.trim());
    const response=await apiFetch(API_BASE+"/api/requisitions?"+params.toString());
    if(!response.ok)throw new Error((await response.json().catch(()=>null))?.detail||"Unable to load requisitions ("+response.status+")");
-   setRows(await response.json());setMessage("");
+   setRows(await response.json());
+   const teamResponse=await apiFetch(API_BASE+"/api/requisitions/assignees?organization_id="+encodeURIComponent(org));
+   if(teamResponse.ok)setAssignees(await teamResponse.json());
+   setMessage("");
   }catch(e){setMessage(e instanceof Error?e.message:"Unable to load requisitions.");}
   finally{setLoading(false);}
  },[filter,search]);
@@ -44,7 +49,7 @@ export default function RequisitionsPage() {
  function change<K extends keyof FormState>(key:K,value:FormState[K]){setForm(old=>({...old,[key]:value}));}
  function startEdit(row:Req){
   setEditingId(row.id);setShowForm(true);setMessage("");
-  setForm({title:row.title,department:row.department||"",justification:row.justification||"",headcount:String(row.headcount||1),location:row.location||"",country_code:row.country_code||"GB",employment_type:row.employment_type||"Permanent",work_mode:row.work_mode||"Hybrid",salary_min:row.salary_min==null?"":String(row.salary_min),salary_max:row.salary_max==null?"":String(row.salary_max),salary_currency:row.salary_currency||"GBP",required_skills:(row.required_skills||[]).join(", ")});
+  setForm({title:row.title,department:row.department||"",justification:row.justification||"",headcount:String(row.headcount||1),location:row.location||"",country_code:row.country_code||"GB",employment_type:row.employment_type||"Permanent",work_mode:row.work_mode||"Hybrid",salary_min:row.salary_min==null?"":String(row.salary_min),salary_max:row.salary_max==null?"":String(row.salary_max),salary_currency:row.salary_currency||"GBP",required_skills:(row.required_skills||[]).join(", "),recruiter_id:row.recruiter_id||"",hiring_manager_id:row.hiring_manager_id||""});
  }
  async function create(event:FormEvent<HTMLFormElement>){
   event.preventDefault();const org=getActiveOrganizationId(FALLBACK_ORG);
@@ -52,7 +57,7 @@ export default function RequisitionsPage() {
   if(form.salary_min&&form.salary_max&&Number(form.salary_max)<Number(form.salary_min)){setMessage("Maximum salary must be greater than or equal to minimum salary.");return;}
   setSaving(true);setMessage("");
   try{
-   const payload={organization_id:org,title:form.title.trim(),department:form.department.trim()||null,justification:form.justification.trim(),headcount:Number(form.headcount),location:form.location.trim()||null,country_code:form.country_code,employment_type:form.employment_type,work_mode:form.work_mode,salary_min:form.salary_min?Number(form.salary_min):null,salary_max:form.salary_max?Number(form.salary_max):null,salary_currency:form.salary_currency,required_skills:form.required_skills.split(",").map(x=>x.trim()).filter(Boolean)};
+   const payload={organization_id:org,title:form.title.trim(),department:form.department.trim()||null,justification:form.justification.trim(),headcount:Number(form.headcount),location:form.location.trim()||null,country_code:form.country_code,employment_type:form.employment_type,work_mode:form.work_mode,salary_min:form.salary_min?Number(form.salary_min):null,salary_max:form.salary_max?Number(form.salary_max):null,salary_currency:form.salary_currency,required_skills:form.required_skills.split(",").map(x=>x.trim()).filter(Boolean),recruiter_id:form.recruiter_id||null,hiring_manager_id:form.hiring_manager_id||null};
    const response=await apiFetch(API_BASE+"/api/requisitions"+(editingId?"/"+editingId:""),{method:editingId?"PATCH":"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify(payload)});
    if(!response.ok)throw new Error((await response.json().catch(()=>null))?.detail||"Unable to save draft.");
    setForm(initial);setShowForm(false);setEditingId(null);setMessage(editingId?"Draft requisition updated.":"Draft requisition saved.");await load();
@@ -96,6 +101,8 @@ export default function RequisitionsPage() {
      <label>Country<select value={form.country_code} onChange={e=>change("country_code",e.target.value)}><option value="GB">United Kingdom</option><option value="US">United States</option><option value="IN">India</option><option value="AU">Australia</option></select></label>
      <label>Employment type<select value={form.employment_type} onChange={e=>change("employment_type",e.target.value)}><option>Permanent</option><option>Contract</option><option>Temporary</option><option>Internship</option><option>Part-time</option></select></label>
      <label>Work mode<select value={form.work_mode} onChange={e=>change("work_mode",e.target.value)}><option>Hybrid</option><option>On-site</option><option>Remote</option></select></label>
+     <label>Assigned recruiter<select value={form.recruiter_id} onChange={e=>change("recruiter_id",e.target.value)}><option value="">Unassigned</option>{assignees.filter(a=>["owner","admin","recruiter"].includes(a.role)).map(a=><option key={a.user_id} value={a.user_id}>{a.full_name||a.email||a.user_id} · {a.role}</option>)}</select></label>
+     <label>Hiring manager<select value={form.hiring_manager_id} onChange={e=>change("hiring_manager_id",e.target.value)}><option value="">Unassigned</option>{assignees.filter(a=>["owner","admin","hiring_manager"].includes(a.role)).map(a=><option key={a.user_id} value={a.user_id}>{a.full_name||a.email||a.user_id} · {a.role}</option>)}</select></label>
      <label>Salary currency<select value={form.salary_currency} onChange={e=>change("salary_currency",e.target.value)}><option>GBP</option><option>USD</option><option>INR</option><option>AUD</option></select></label>
      <label>Salary minimum<input type="number" min="0" value={form.salary_min} onChange={e=>change("salary_min",e.target.value)}/></label><label>Salary maximum<input type="number" min="0" value={form.salary_max} onChange={e=>change("salary_max",e.target.value)}/></label>
      <label className="span-2">Required skills, comma-separated<input value={form.required_skills} onChange={e=>change("required_skills",e.target.value)} placeholder="Python, SQL, stakeholder management"/></label>
