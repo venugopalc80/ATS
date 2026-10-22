@@ -45,7 +45,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Verified the newly added tables have RLS enabled and policies in place for their intended browser roles.
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - No production database changes, merges or production deployments were performed.
-- Full repository tests, frontend typecheck/build and end-to-end Stripe checkout/webhook tests have **not** been executed in this environment. Tests are committed and a draft PR is open, but CI results are not yet verified.
+- GitHub Actions Section 9 billing/unit-test workflow passed on commit f61738e78ad0a875ea0a7cb8cfa4e04e196ed369: entitlement policy, billing API, organisation settings validation, onboarding payload validation, platform support validation and Stripe webhook safeguards all passed. Frontend typecheck/build and end-to-end Stripe checkout/webhook tests have not yet been executed.
 - Vercel preview deployments reported the account's daily deployment limit has been reached; preview deployment validation is blocked until the limit resets or the account limit changes.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
 
