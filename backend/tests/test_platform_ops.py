@@ -24,6 +24,7 @@ class SupportOperationsValidationTests(unittest.TestCase):
     def test_support_access_is_time_limited_and_scope_bound(self):
         request = SupportAccessRequest(
             organization_id="11111111-1111-4111-8111-111111111111",
+            support_case_id="44444444-4444-4444-8444-444444444444",
             purpose="Investigate the reported billing screen error",
             scope=["case_metadata", "subscription_metadata"],
             duration_minutes=30,
@@ -32,6 +33,7 @@ class SupportOperationsValidationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             SupportAccessRequest(
                 organization_id="11111111-1111-4111-8111-111111111111",
+                support_case_id="44444444-4444-4444-8444-444444444444",
                 purpose="Investigate issue",
                 scope=["candidate_records"],
                 duration_minutes=30,
@@ -41,6 +43,7 @@ class SupportOperationsValidationTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             SupportAccessRequest(
                 organization_id="11111111-1111-4111-8111-111111111111",
+                support_case_id="44444444-4444-4444-8444-444444444444",
                 purpose="Investigate a reported service issue",
                 scope=["case_metadata"],
                 duration_minutes=120,
