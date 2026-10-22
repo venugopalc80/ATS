@@ -114,8 +114,10 @@ class RequisitionServiceAuditTests(unittest.IsolatedAsyncioTestCase):
         from app.services import requisition_service as service_module
 
         rid = UUID("33333333-3333-4333-8333-333333333333")
-        before = {"id": rid, "organization_id": ORG, "title": "Old title"}
-        after = {"id": rid, "organization_id": ORG, "title": "New title"}
+        previous_recruiter = UUID("77777777-7777-4777-8777-777777777777")
+        next_recruiter = UUID("88888888-8888-4888-8888-888888888888")
+        before = {"id": rid, "organization_id": ORG, "title": "Old title", "recruiter_id": previous_recruiter}
+        after = {"id": rid, "organization_id": ORG, "title": "New title", "recruiter_id": next_recruiter}
         cursor = MagicMock()
         cursor.fetchone.side_effect = [before, after]
         connection = MagicMock()
@@ -124,10 +126,10 @@ class RequisitionServiceAuditTests(unittest.IsolatedAsyncioTestCase):
         connection.cursor.return_value.__enter__.return_value = cursor
         connection.cursor.return_value.__exit__.return_value = False
         with patch.object(service_module, "get_connection", return_value=connection), patch.object(service_module, "audit") as audit_mock:
-            await service_module.RequisitionService().update_requisition(rid, RequisitionUpdate(title="New title"), USER)
+            await service_module.RequisitionService().update_requisition(rid, RequisitionUpdate(title="New title", recruiter_id=next_recruiter), USER)
         self.assertEqual(audit_mock.call_args.args[2], USER)
         self.assertEqual(audit_mock.call_args.args[4], rid)
-        self.assertEqual(audit_mock.call_args.args[5], {"changes": {"title": {"old": "Old title", "new": "New title"}}})
+        self.assertEqual(audit_mock.call_args.args[5], {"changes": {"title": {"old": "Old title", "new": "New title"}, "recruiter_id": {"old": "77777777-7777-4777-8777-777777777777", "new": "88888888-8888-4888-8888-888888888888"}}})
 
 
 
