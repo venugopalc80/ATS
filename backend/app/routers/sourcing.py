@@ -851,6 +851,33 @@ async def commit_candidate_csv_import(
         raise _db_error(exc) from exc
 
 
+@router.get("/imports/{batch_id}/rows")
+async def list_candidate_import_rows(
+    batch_id: UUID,
+    organization_id: UUID,
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0, le=100000),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_sourcing_manager(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select id from public.import_batches where id=%s and organization_id=%s",
+                               [batch_id,organization_id])
+                if cursor.fetchone() is None:
+                    raise HTTPException(status_code=404, detail="Import batch not found")
+                cursor.execute("""select id,row_number,status,errors,duplicate_candidate_id,candidate_id,processed_at
+                    from public.import_row_results where organization_id=%s and batch_id=%s
+                    order by row_number limit %s offset %s""",
+                    [organization_id,batch_id,limit,offset])
+                return list(cursor.fetchall())
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
 @router.get("/imports")
 async def list_candidate_import_batches(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     _assert_sourcing_manager(user_id, organization_id)
