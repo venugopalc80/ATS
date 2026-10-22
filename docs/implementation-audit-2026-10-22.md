@@ -175,3 +175,14 @@ The acceptance score remains **2.5/6 = 41.7% evidenced**, with **58.3% not passe
 2. Test migrations 014 and 015 in a disposable PostgreSQL database, including fresh install, re-run/partial-state behaviour, triggers, RLS and organisation seeding.
 3. Add authenticated API tests for cross-tenant access and admin-only stage configuration changes.
 4. Only after those pass, apply through the tracked migration mechanism to **ATS-Staging**, then run authenticated preview QA. Do not touch production until staging acceptance and release approval are complete.
+
+
+### Staging schema comparison follow-up
+
+A further read-only inspection of ATS-Staging confirmed:
+- The existing `application_stage_history` table has the expected eight columns from migration 014.
+- The expected member-read and member-insert policies are present.
+- Both application insert and status-update history triggers are present.
+- RLS is enabled, and `anon` and `authenticated` have no direct SELECT or INSERT grants on the history table.
+- The committed migration is still not represented in the Supabase migration ledger. Treat the live staging object as manually provisioned/drifted until that history is reconciled; do not blindly reapply or mark it as tracked.
+- `application_stage_config` is absent from staging and production, so migration 015 has not been applied to either environment.
