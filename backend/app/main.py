@@ -15,8 +15,9 @@ from app.routers.notes import router as notes_router
 from app.routers.job_distribution import router as job_distribution_router
 from app.routers.public_jobs import router as public_jobs_router
 from app.routers.documents import router as documents_router
+from app.routers.application_forms import admin_router as application_forms_router, public_router as public_application_forms_router
 
-app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
+app=FastAPI(title="ATS API",version="0.11.0",description="AI-powered Applicant Tracking System API")
 frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
 frontend_origins = {
     origin.strip().rstrip("/")
@@ -46,6 +47,8 @@ app.include_router(notes_router)
 app.include_router(job_distribution_router)
 app.include_router(public_jobs_router)
 app.include_router(documents_router)
+app.include_router(application_forms_router)
+app.include_router(public_application_forms_router)
 
 @app.get("/")
 async def root()->dict[str,str]: return {"status":"ok","service":"ats-api","docs":"/docs"}
