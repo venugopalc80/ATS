@@ -108,6 +108,7 @@ create table if not exists public.recruitment_document_signers (
   foreign key (document_id, organization_id)
     references public.recruitment_documents(id, organization_id) on delete cascade,
   unique (id, organization_id),
+  unique (document_id, organization_id, id),
   unique (document_id, signer_role, email)
 );
 create index if not exists recruitment_signers_document_idx
@@ -128,8 +129,8 @@ create table if not exists public.recruitment_signature_events (
   verification_method text not null,
   foreign key (document_id, organization_id)
     references public.recruitment_documents(id, organization_id) on delete restrict,
-  foreign key (signer_id, organization_id)
-    references public.recruitment_document_signers(id, organization_id) on delete restrict,
+  foreign key (document_id, organization_id, signer_id)
+    references public.recruitment_document_signers(document_id, organization_id, id) on delete restrict,
   unique (provider, provider_event_id)
 );
 create index if not exists recruitment_signature_events_doc_idx
