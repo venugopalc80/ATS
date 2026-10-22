@@ -340,22 +340,22 @@ export default function JobsPage() {
   async function deleteJob(job: Job) {
     if (!job.id) return;
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
-    if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
+    if (!window.confirm(`Close "${job.title}"? Applications and audit history will be preserved.`)) return;
 
     setDeletingId(job.id);
     setMessage("");
     try {
       if (!API_BASE || !organizationId) {
-        setJobs((current) => current.filter((item) => item.id !== job.id));
+        setJobs((current) => current.map((item) => item.id === job.id ? { ...item, status: "closed" } : item));
       } else {
         const response = await apiFetch(`${API_BASE}/api/jobs/${job.id}`, { method: "DELETE" });
         if (!response.ok) {
           const errorBody = await response.json().catch(() => null);
           throw new Error(errorBody?.detail || `API returned ${response.status}`);
         }
-        setJobs((current) => current.filter((item) => item.id !== job.id));
+        setJobs((current) => current.map((item) => item.id === job.id ? { ...item, status: "closed" } : item));
       }
-      setMessage("Requisition deleted.");
+      setMessage("Vacancy closed. Applications and history were preserved.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to delete requisition.");
     } finally {
@@ -393,7 +393,7 @@ export default function JobsPage() {
         <section className="content">
           <div className="header-row">
             <div><div className="eyebrow">Recruitment operations</div><h1>Jobs</h1><p className="subtitle">Manage requisitions, hiring requirements and recruitment status.</p></div>
-            <button className="btn primary" onClick={openCreate}>+ New requisition</button>
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}><Link href="/requisitions" className="btn">Approval queue</Link><button className="btn primary" onClick={openCreate}>+ Create job</button></div>
           </div>
 
           <div className="card" style={{ marginBottom: 18 }}>
@@ -421,7 +421,7 @@ export default function JobsPage() {
                     <td><span className={`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}`}>{job.status.replace("_", " ")}</span></td>
                     <td>{(job.required_skills ?? []).slice(0, 3).join(", ") || "-"}</td>
                     <td><button className="btn" onClick={() => openDistribution(job)}>Distribute job</button></td>
-                    <td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
+                    <td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Close"}</button></div></td>
                   </tr>
                 ))}
               </tbody>
