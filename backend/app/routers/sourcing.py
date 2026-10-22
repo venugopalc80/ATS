@@ -509,8 +509,10 @@ async def remove_talent_pool_member(pool_id: UUID, membership_id: UUID, organiza
                 cursor.execute("""update public.talent_pool_memberships m set status='removed',removed_at=now(),updated_at=now()
                     from public.talent_pools p where m.id=%s and m.pool_id=%s and m.organization_id=%s
                     and p.id=m.pool_id and p.organization_id=m.organization_id
-                    and m.status='active' and (p.visibility='organisation' or p.owner_user_id=%s or p.created_by=%s)
-                    returning m.id""", [membership_id,pool_id,organization_id,user_id,user_id])
+                    and m.status='active' and (p.visibility='organisation' or p.owner_user_id=%s or p.created_by=%s
+                    or exists (select 1 from public.organization_members om where om.organization_id=p.organization_id
+                               and om.user_id=%s and om.role in ('owner','admin')))
+                    returning m.id""", [membership_id,pool_id,organization_id,user_id,user_id,user_id])
                 row = cursor.fetchone()
                 if not row:
                     raise HTTPException(status_code=404, detail="Active pool membership not found or access denied")
@@ -1041,6 +1043,8 @@ async def list_referrals(organization_id: UUID, campaign_id: UUID | None = None,
 @router.post("/referrals", status_code=201)
 async def create_referral(payload: ReferralCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, payload.organization_id)
+    if payload.referrer_user_id is not None:
+        assert_org_member(payload.referrer_user_id, payload.organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
