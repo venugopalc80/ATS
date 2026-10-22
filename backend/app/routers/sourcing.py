@@ -106,7 +106,7 @@ def _db_error(exc: Exception) -> HTTPException:
 
 
 def _escape_like(value: str) -> str:
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return value.replace("!", "!!").replace("%", "!%").replace("_", "!_")
 
 
 def _search_rows(organization_id: UUID, record_type: RecordType, criteria: SearchCriteria, limit: int, offset: int):
@@ -119,14 +119,14 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
           base.years_experience, base.skills, base.created_at"""
         source = "public.candidates base"
         if criteria.q:
-            where.append("(base.first_name ilike %s escape '\\' or coalesce(base.last_name,'') ilike %s escape '\\' or coalesce(base.current_title,'') ilike %s escape '\\' or coalesce(base.city,'') ilike %s escape '\\')")
+            where.append("(base.first_name ilike %s escape '!' or coalesce(base.last_name,'') ilike %s escape '!' or coalesce(base.current_title,'') ilike %s escape '!' or coalesce(base.city,'') ilike %s escape '!')")
             term = "%" + _escape_like(criteria.q.strip()) + "%"
             params.extend([term] * 4)
         if criteria.skills:
             where.append("base.skills && %s::text[]")
             params.append(criteria.skills)
         if criteria.location:
-            where.append("(coalesce(base.city,'') ilike %s escape '\\' or coalesce(base.region,'') ilike %s escape '\\' or coalesce(base.country_code,'') ilike %s escape '\\')")
+            where.append("(coalesce(base.city,'') ilike %s escape '!' or coalesce(base.region,'') ilike %s escape '!' or coalesce(base.country_code,'') ilike %s escape '!')")
             term = "%" + _escape_like(criteria.location.strip()) + "%"
             params.extend([term] * 3)
         if criteria.min_experience is not None:
@@ -143,7 +143,7 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
           base.status, base.source, base.created_at"""
         source = "public.applications base"
         if criteria.q:
-            where.append("(concat_ws(' ',c.first_name,c.last_name) ilike %s escape '\\' or coalesce(j.title,'') ilike %s escape '\\')")
+            where.append("(concat_ws(' ',c.first_name,c.last_name) ilike %s escape '!' or coalesce(j.title,'') ilike %s escape '!')")
             term = "%" + _escape_like(criteria.q.strip()) + "%"
             params.extend([term, term])
         if criteria.status:
@@ -153,7 +153,7 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
         if criteria.recruiter_id:
             where.append("j.recruiter_id = %s"); params.append(criteria.recruiter_id)
         if criteria.location:
-            where.append("(coalesce(j.location,'') ilike %s escape '\\' or coalesce(j.country_code,'') ilike %s escape '\\')")
+            where.append("(coalesce(j.location,'') ilike %s escape '!' or coalesce(j.country_code,'') ilike %s escape '!')")
             term = "%" + _escape_like(criteria.location.strip()) + "%"
             params.extend([term, term])
         if criteria.skills:
@@ -164,7 +164,7 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
           base.experience_max, base.created_at"""
         source = "public.jobs base"
         if criteria.q:
-            where.append("(base.title ilike %s escape '\\' or coalesce(base.location,'') ilike %s escape '\\')")
+            where.append("(base.title ilike %s escape '!' or coalesce(base.location,'') ilike %s escape '!')")
             term = "%" + _escape_like(criteria.q.strip()) + "%"
             params.extend([term, term])
         if criteria.status:
@@ -172,11 +172,15 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
         if criteria.recruiter_id:
             where.append("base.recruiter_id = %s"); params.append(criteria.recruiter_id)
         if criteria.location:
-            where.append("(coalesce(base.location,'') ilike %s escape '\\' or coalesce(base.country_code,'') ilike %s escape '\\')")
+            where.append("(coalesce(base.location,'') ilike %s escape '!' or coalesce(base.country_code,'') ilike %s escape '!')")
             term = "%" + _escape_like(criteria.location.strip()) + "%"
             params.extend([term, term])
         if criteria.skills:
             where.append("base.required_skills && %s::text[]"); params.append(criteria.skills)
+        if criteria.min_experience is not None:
+            where.append("coalesce(base.experience_max, base.experience_min, 0) >= %s"); params.append(criteria.min_experience)
+        if criteria.max_experience is not None:
+            where.append("coalesce(base.experience_min, base.experience_max, 0) <= %s"); params.append(criteria.max_experience)
     else:
         joins = " join public.candidates c on c.id=base.candidate_id and c.organization_id=base.organization_id "
         select = """select base.id, 'document' as record_type, base.candidate_id, base.document_type,
@@ -185,7 +189,7 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
         source = "public.candidate_documents base"
         where.append("base.deleted_at is null")
         if criteria.q:
-            where.append("(base.original_filename ilike %s escape '\\' or concat_ws(' ',c.first_name,c.last_name) ilike %s escape '\\')")
+            where.append("(base.original_filename ilike %s escape '!' or concat_ws(' ',c.first_name,c.last_name) ilike %s escape '!')")
             term = "%" + _escape_like(criteria.q.strip()) + "%"
             params.extend([term, term])
     if criteria.date_from:
