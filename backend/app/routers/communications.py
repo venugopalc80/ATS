@@ -246,9 +246,12 @@ async def create_message_draft(
                     )
                     existing_recipient = cursor.fetchone()
                     same_request = (
-                        message["body_text"] == payload.body_text.strip()
+                        message["thread_id"] == thread_id
+                        and message["body_text"] == payload.body_text.strip()
                         and message["subject"] == payload.subject
                         and message["channel"] == payload.channel
+                        and message["template_id"] == payload.template_id
+                        and message["template_version"] == template_version
                         and existing_recipient is not None
                         and existing_recipient["recipient_address"] == payload.recipient_address.strip()
                     )
