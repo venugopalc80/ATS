@@ -324,7 +324,7 @@ def review_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID, ca
                     raise PermissionError("Submit your own scorecard before viewing other interviewers' feedback")
             cursor.execute(
                 """select f.id, f.interviewer_id, f.template_id, f.status, f.overall_summary,
-                          f.strengths, f.concerns, f.submitted_at, r.competency_id, r.rating,
+                          f.strengths, f.concerns, f.submitted_at, r.id as response_id, r.competency_id, r.rating,
                           r.evidence, r.notes, c.name as competency_name, c.competency_key
                    from public.interview_feedback f
                    left join public.scorecard_responses r
