@@ -931,7 +931,30 @@ async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_curr
                     count(distinct r.id) as referrals,
                     count(distinct r.id) filter (where r.status='qualified') as qualified_referrals,
                     count(distinct r.id) filter (where r.status='hired') as hired_referrals,
-                    c.budget_amount / nullif(count(distinct r.id) filter (where r.status='hired'),0) as budget_per_hire
+                    (select count(distinct cm2.application_id)
+                       from public.campaign_memberships cm2
+                       join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
+                      where cm2.organization_id=c.organization_id and cm2.campaign_id=c.id
+                        and a2.status in ('shortlisted','interview','assessment','offer','hired')) as qualified_applications,
+                    (select count(distinct cm2.application_id)
+                       from public.campaign_memberships cm2
+                       join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
+                      where cm2.organization_id=c.organization_id and cm2.campaign_id=c.id
+                        and a2.status in ('interview','assessment','offer','hired')) as interview_progressed_applications,
+                    (select count(distinct cm2.application_id)
+                       from public.campaign_memberships cm2
+                       join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
+                      where cm2.organization_id=c.organization_id and cm2.campaign_id=c.id
+                        and a2.status='hired') as hired_applications,
+                    (select sum(cc.spend_amount) from public.campaign_channels cc
+                      where cc.organization_id=c.organization_id and cc.campaign_id=c.id) as channel_spend,
+                    (select sum(cc.spend_amount) from public.campaign_channels cc
+                      where cc.organization_id=c.organization_id and cc.campaign_id=c.id)
+                      / nullif((select count(distinct cm2.application_id)
+                        from public.campaign_memberships cm2
+                        join public.applications a2 on a2.id=cm2.application_id and a2.organization_id=cm2.organization_id
+                        where cm2.organization_id=c.organization_id and cm2.campaign_id=c.id and a2.status='hired'),0)
+                      as cost_per_hire
                     from public.recruitment_campaigns c
                     left join public.campaign_memberships cm on cm.organization_id=c.organization_id and cm.campaign_id=c.id
                     left join public.referrals r on r.organization_id=c.organization_id and r.campaign_id=c.id
