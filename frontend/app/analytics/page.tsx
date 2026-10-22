@@ -19,6 +19,8 @@ type Funnel = {
 type Workload = { recruiters: Array<{ user_id: string; name: string; role: string; open_vacancies: number; on_hold_vacancies: number; active_applications: number; upcoming_interviews: number; open_tasks: number; overdue_tasks: number }>; unassigned: { unassigned_open_vacancies: number; unassigned_open_tasks: number }; definitions: { note: string } };
 type Source = { source: string; applications: number; qualified_applications: number; completed_interviews: number; offers: number; decided_offers: number; accepted_offers: number; hires: number; offer_acceptance_rate: number | null; conversion_rate: number | null; sample_warning: boolean };
 type Sources = { sources: Source[]; limitations: string[] };
+type CampaignChannel = { campaign_id: string; campaign_name: string; campaign_status: string; budget_amount: number | null; budget_currency: string | null; channel_id: string; channel_key: string; source_label: string | null; spend_amount: number | null; spend_currency: string | null; applications: number; hires: number; applications_with_accepted_offer: number; cost_per_application: number | null; cost_per_hire: number | null; sample_warning: boolean; financial_roi: number | null; financial_roi_status: string };
+type CampaignROI = { campaign_channels: CampaignChannel[]; limitations: string[] };
 type Forecast = {
   history_months: number;
   history: Array<{ month: string; approved_headcount: number; approved_requisitions: number }>;
@@ -50,6 +52,7 @@ export default function AnalyticsPage() {
   const [workload, setWorkload] = useState<Workload | null>(null);
   const [sources, setSources] = useState<Sources | null>(null);
   const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [campaignROI, setCampaignROI] = useState<CampaignROI | null>(null);
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState("kpis");
   const [exporting, setExporting] = useState(false);
@@ -79,6 +82,7 @@ export default function AnalyticsPage() {
         "/api/analytics/workload?organization_id=" + encodeURIComponent(organizationId),
         "/api/analytics/sources?" + params.toString(),
         "/api/analytics/forecast?organization_id=" + encodeURIComponent(organizationId),
+        "/api/analytics/campaign-roi?" + params.toString(),
       ];
       const responses = await Promise.all(paths.map((path) => apiFetch(API_BASE + path)));
       const failed = responses.find((response) => !response.ok);
@@ -88,12 +92,13 @@ export default function AnalyticsPage() {
         if (failed.status === 503) throw new Error("Analytics data is temporarily unavailable. Please retry.");
         throw new Error("Analytics could not be loaded (HTTP " + failed.status + ").");
       }
-      const [k, f, w, s, forecastData] = await Promise.all(responses.map((response) => response.json()));
+      const [k, f, w, s, forecastData, campaignData] = await Promise.all(responses.map((response) => response.json()));
       setKpis(k);
       setFunnel(f);
       setWorkload(w);
       setSources(s);
       setForecast(forecastData);
+      setCampaignROI(campaignData);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load analytics.");
     } finally {
@@ -185,7 +190,7 @@ export default function AnalyticsPage() {
             <div><div className="eyebrow">Reporting</div><h1>Recruitment analytics</h1><p className="subtitle">A measurable view of hiring performance, with explicit cohorts and honest gaps.</p></div>
             <div className="actions analytics-header-actions">
               <select className="filter" aria-label="Report to export" value={reportType} onChange={(event) => setReportType(event.target.value)}>
-                <option value="kpis">KPI report</option><option value="funnel">Funnel report</option><option value="workload">Workload report</option><option value="sources">Source report</option><option value="forecast">Forecast report</option>
+                <option value="kpis">KPI report</option><option value="funnel">Funnel report</option><option value="workload">Workload report</option><option value="sources">Source report</option><option value="forecast">Forecast report</option><option value="campaign_roi">Campaign efficiency report</option>
               </select>
               <button className="btn" onClick={() => void exportReport()} disabled={exporting}>{exporting ? "Exporting…" : "Export CSV"}</button>
               <button className="btn" onClick={() => void load()} disabled={loading}>{loading ? "Refreshing…" : "Refresh data"}</button>
@@ -254,6 +259,14 @@ export default function AnalyticsPage() {
               {!sources?.sources.length && <tr><td colSpan={8}>No source-attributed applications are available for this period.</td></tr>}
             </tbody></table></div>
             {sources?.limitations.length ? <details className="analytics-details"><summary>Source metric notes</summary><ul>{sources.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details> : null}
+          </section>
+          <section className="card analytics-table-card">
+            <div className="card-head"><div><div className="card-title">Campaign spend efficiency</div><div className="muted-small">Attributed campaign/channel spend and hiring outcomes. Financial ROI is intentionally unavailable without revenue data.</div></div></div>
+            <div className="analytics-table-wrap"><table className="table"><thead><tr><th>Campaign / channel</th><th>Spend</th><th>Budget</th><th>Applications</th><th>Hires</th><th>Cost / application</th><th>Cost / hire</th><th>Financial ROI</th></tr></thead><tbody>
+              {campaignROI?.campaign_channels.map((item) => <tr key={item.channel_id}><td><strong>{item.campaign_name}</strong><div className="muted-small">{item.source_label || item.channel_key} · {nice(item.campaign_status)}</div>{item.sample_warning && <div className="muted-small analytics-sample-warning">Small sample (&lt;5)</div>}</td><td>{item.spend_amount == null ? "—" : number(item.spend_amount, 2) + " " + (item.spend_currency || "")}</td><td>{item.budget_amount == null ? "—" : number(item.budget_amount, 2) + " " + (item.budget_currency || "")}</td><td>{number(item.applications)}</td><td>{number(item.hires)}</td><td>{item.cost_per_application == null ? "—" : number(item.cost_per_application, 2) + " " + (item.spend_currency || "")}</td><td>{item.cost_per_hire == null ? "—" : number(item.cost_per_hire, 2) + " " + (item.spend_currency || "")}</td><td><span className="muted-small">Revenue data needed</span></td></tr>)}
+              {!campaignROI?.campaign_channels.length && <tr><td colSpan={8}>No campaign channels are configured for this organisation.</td></tr>}
+            </tbody></table></div>
+            {campaignROI?.limitations.length ? <details className="analytics-details"><summary>Campaign attribution and ROI limitations</summary><ul>{campaignROI.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details> : null}
           </section>
           <p className="muted-small analytics-footer">AQERITH Analytics · Metric definitions version {kpis ? "1.0" : "—"} · Null means unavailable or an insufficient denominator, not zero.</p>
         </main>
