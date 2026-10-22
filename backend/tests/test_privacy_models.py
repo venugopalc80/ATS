@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.routers.privacy import ProcessingRecordCreate, PrivacyRequestUpdate, RetentionPolicyCreate
+from app.routers.privacy import (ProcessingRecordCreate, PrivacyRequestUpdate, RetentionPolicyCreate,\n                                 retention_category_definition)
 
 
 def base_processing_record(**overrides):
@@ -127,3 +127,23 @@ def test_privacy_request_rejects_unknown_identity_verification_method():
             status="in_progress",
             identity_verification_method="social_media_lookup",
         )
+
+
+
+def test_retention_preview_uses_explicit_candidate_clock_and_allowlisted_table():
+    definition = retention_category_definition("candidate_profile")
+    assert definition is not None
+    assert definition["table"] == "candidates"
+    assert definition["target_table"] == "candidates"
+    assert "retention_until" in definition["due_expression"]
+    assert "created_at" in definition["clock_start"]
+
+
+def test_retention_preview_supported_categories_have_fixed_table_mappings():
+    assert retention_category_definition("candidate_document")["table"] == "candidate_documents"
+    assert retention_category_definition("processing_record")["table"] == "candidate_processing_records"
+
+
+@pytest.mark.parametrize("category", ["audit_event", "application_record", "candidates; drop table candidates"])
+def test_retention_preview_rejects_unconfigured_categories_without_sql_mapping(category):
+    assert retention_category_definition(category) is None
