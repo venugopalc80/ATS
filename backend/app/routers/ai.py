@@ -50,6 +50,7 @@ class GenerateInput(BaseModel):
     job_id: UUID | None = None
     application_id: UUID | None = None
     interview_id: UUID | None = None
+    recommendation_id: UUID | None = None
     user_request: str | None = Field(default=None, max_length=4000)
 
 
@@ -183,6 +184,21 @@ async def register_model(
 def _load_evidence(cur, payload: GenerateInput) -> tuple[list[dict], list[dict]]:
     evidence: list[dict] = []
     refs: list[dict] = []
+    if payload.recommendation_id:
+        cur.execute(
+            """select id, object_type, object_id, purpose, input_references, evidence, explanation,
+                      limitations, model_version_id, created_at
+               from public.ai_recommendations where id=%s and organization_id=%s""",
+            [payload.recommendation_id, payload.organization_id],
+        )
+        row = cur.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Recommendation not found")
+        # Do not invent a post-hoc rationale: require the recorded process and evidence to exist.
+        if not row.get("input_references") or not row.get("evidence") or not row.get("purpose"):
+            raise HTTPException(status_code=409, detail="This recommendation lacks the recorded inputs required for a faithful explanation")
+        evidence.append({"record_type": "recorded_ai_recommendation", **row})
+        refs.append({"record_type": "ai_recommendation", "id": str(row["id"]), "fields": ["purpose", "input_references", "evidence", "limitations", "model_version_id"]})
     if payload.candidate_id:
         cur.execute(
             """select id, first_name, last_name, current_title, city, region, country_code,
@@ -278,6 +294,10 @@ async def assistant(
             model = cur.fetchone()
             if not model:
                 raise HTTPException(status_code=403, detail="No approved model/provider configuration is available")
+            if payload.task == "explain_recommendation" and not payload.recommendation_id:
+                raise HTTPException(status_code=422, detail="A recorded recommendation_id is required for a faithful explanation")
+            if payload.task in {"draft_job_description", "interview_questions", "extract_job_requirements"} and not payload.job_id:
+                raise HTTPException(status_code=422, detail="This task requires a job_id")
             evidence, refs = _load_evidence(cur, payload)
             input_hash = fingerprint({"task": payload.task, "evidence": evidence, "user_request": payload.user_request})
             # Keep raw source inputs out of run history; persist only references and a fingerprint.
@@ -299,6 +319,42 @@ async def assistant(
                  json.dumps(model.get("limitations") or []), use_case["retention_days"]],
             )
             run = cur.fetchone()
+            if payload.task == "draft_job_description":
+                cur.execute(
+                    """select coalesce(max(version_number), 0) + 1 as next_version
+                       from public.ai_job_description_versions where organization_id=%s and job_id=%s""",
+                    [payload.organization_id, payload.job_id],
+                )
+                version_number = cur.fetchone()["next_version"]
+                cur.execute(
+                    """insert into public.ai_job_description_versions
+                       (organization_id, job_id, version_number, content, source_requirements,
+                        quality_findings, ai_run_id, status, created_by)
+                       values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,'draft',%s)
+                       returning id, version_number, status""",
+                    [payload.organization_id, payload.job_id, version_number, output_text,
+                     json.dumps(refs), json.dumps(["Human review required; verify salary, benefits, qualifications, working arrangements, clarity and exclusionary wording."]),
+                     run["id"], user_id],
+                )
+                output["draft_record"] = cur.fetchone()
+            elif payload.task == "interview_questions":
+                cur.execute(
+                    """select coalesce(max(version_number), 0) + 1 as next_version
+                       from public.ai_interview_kits where organization_id=%s and job_id=%s""",
+                    [payload.organization_id, payload.job_id],
+                )
+                version_number = cur.fetchone()["next_version"]
+                cur.execute(
+                    """insert into public.ai_interview_kits
+                       (organization_id, job_id, job_version_reference, version_number, competencies,
+                        questions, ai_run_id, status, created_by)
+                       values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,'draft',%s)
+                       returning id, version_number, status""",
+                    [payload.organization_id, payload.job_id, str(payload.job_id), version_number,
+                     json.dumps([]), json.dumps({"draft_text": output_text, "review_required": True}),
+                     run["id"], user_id],
+                )
+                output["draft_record"] = cur.fetchone()
             cur.execute(
                 """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
                    values (%s,%s,'ai_generation_completed','ai_run',%s,%s::jsonb)""",
