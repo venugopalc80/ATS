@@ -31,6 +31,8 @@ export default function AIWorkspacePage() {
   const [recommendationId, setRecommendationId] = useState("");
   const [userRequest, setUserRequest] = useState("");
   const [result, setResult] = useState<Output | null>(null);
+  const [editedText, setEditedText] = useState("");
+  const [savingDraft, setSavingDraft] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
   const [feedback, setFeedback] = useState("");
@@ -85,10 +87,27 @@ export default function AIWorkspacePage() {
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.detail || "AI request failed (" + response.status + ").");
-      setResult(body);
+      setResult(body); setEditedText(body.output.text);
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "AI request failed.");
     } finally { setBusy(false); }
+  }
+
+  async function saveDraft() {
+    if (!result?.output.draft_record || !API_BASE) return;
+    const path = task === "draft_job_description" ? "job-description-versions" : "interview-kits";
+    setSavingDraft(true); setMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/ai/" + path + "/" + result.output.draft_record.id, {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: organizationId, content: editedText }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Draft changes could not be saved.");
+      setResult(current => current ? { ...current, output: { ...current.output, text: editedText } } : current);
+      setMessage("Draft changes saved. The draft is still unpublished and requires review.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Draft changes could not be saved."); }
+    finally { setSavingDraft(false); }
   }
 
   async function submitFeedback(value: "helpful" | "incorrect" | "unsafe") {
@@ -217,7 +236,7 @@ export default function AIWorkspacePage() {
         <div className="card-head"><span className="card-title">Result and evidence</span></div>
         {!result ? <p className="muted-small">Generated output and source references will appear here. AI remains unavailable until an organisation administrator approves a use case and model, and provider approval is configured on the server.</p> : <>
           <div className="notice">Draft only · Human review required · Run {result.run.id}</div>
-          <div style={{ whiteSpace: "pre-wrap", lineHeight: 1.65, fontSize: 14 }}>{result.output.text}</div>
+          <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 650 }}>Editable draft / response<textarea className="filter" rows={12} value={editedText} onChange={event => setEditedText(event.target.value)} maxLength={20000} style={{ lineHeight: 1.6, fontWeight: 400, resize: "vertical" }} /></label>
           {result.output.draft_record && <p className="muted-small" style={{ marginTop: 12 }}>Saved draft version {result.output.draft_record.version_number} · {result.output.draft_record.status} · {result.output.draft_record.id}</p>}
           <div style={{ marginTop: 18 }}><strong style={{ fontSize: 13 }}>Source records</strong>
             {result.evidence_references.map(ref => <div key={ref.record_type + ref.id} className="activity-row" style={{ marginTop: 8 }}>
@@ -226,7 +245,7 @@ export default function AIWorkspacePage() {
           </div>
           <p className="muted-small" style={{ marginTop: 14 }}>Model: {result.model.provider} / {result.model.name} ({result.model.version}); prompt {result.model.prompt_version}. Retention expiry: {new Date(result.run.retention_expires_at).toLocaleString()}.</p>
           {result.limitations.map((limitation, index) => <p className="muted-small" key={index}>{limitation}</p>)}
-          <div className="actions" style={{ marginTop: 16, flexWrap: "wrap" }}>
+          <div className="actions" style={{ marginTop: 16, flexWrap: "wrap" }}>{result.output.draft_record && <button className="btn primary" type="button" disabled={savingDraft} onClick={() => void saveDraft()}>{savingDraft ? "Saving…" : "Save draft edits"}</button>}
             <button className="btn" type="button" onClick={() => void submitFeedback("helpful")}>Helpful</button>
             <button className="btn" type="button" onClick={() => void submitFeedback("incorrect")}>Incorrect</button>
             <button className="btn" type="button" onClick={() => void submitFeedback("unsafe")}>Report unsafe</button>
