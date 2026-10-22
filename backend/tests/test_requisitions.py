@@ -63,7 +63,7 @@ class RequisitionLifecycleEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_update_is_restricted_to_draft_or_rejected(self):
         rid = UUID("33333333-3333-4333-8333-333333333333")
         row = {"id": rid, "organization_id": ORG, "status": "pending_approval", "requested_by": USER}
-        with patch.object(requisitions_router, "authorised_row", return_value=row):
+        with patch.object(requisitions_router, "authorised_row", return_value=row), patch.object(requisitions_router, "get_org_role", return_value="recruiter"):
             with self.assertRaises(HTTPException) as raised:
                 await requisitions_router.update_requisition(rid, RequisitionUpdate(title="Updated"), USER)
         self.assertEqual(raised.exception.status_code, 409)
