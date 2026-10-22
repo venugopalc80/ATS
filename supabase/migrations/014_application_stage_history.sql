@@ -83,7 +83,7 @@ create trigger applications_stage_history_insert
 drop trigger if exists applications_stage_history_update on public.applications;
 create trigger applications_stage_history_update
   after update of status on public.applications
-  for each row execute function public.record_application_stage_history();
+  for each row execute function private.record_application_stage_history();
 
 -- Seed a baseline event for applications that existed before this migration.
 insert into public.application_stage_history
