@@ -238,7 +238,7 @@ create policy ai_incidents_admin_read on public.ai_incidents for select to authe
 );
 
 -- Browser clients may read through scoped RLS, but writes are API-only.
-revoke insert, update, delete on public.ai_use_cases, public.ai_model_versions, public.ai_runs,
+revoke all privileges on public.ai_use_cases, public.ai_model_versions, public.ai_runs,
  public.ai_recommendations, public.ai_job_description_versions, public.ai_interview_kits,
  public.ai_evaluation_runs, public.ai_evaluation_results, public.ai_fairness_audits, public.ai_incidents
  from anon, authenticated;
