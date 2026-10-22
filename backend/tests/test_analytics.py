@@ -276,5 +276,20 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.membership.assert_called_once()
 
 
+    async def test_export_endpoint_returns_csv_for_allowlisted_forecast_report(self):
+        response = await analytics_router.analytics_export(
+            organization_id=ORG,
+            report_type="forecast",
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        self.assertEqual(response.media_type, "text/csv")
+        self.assertIn("aqerith-forecast-report.csv", response.headers["content-disposition"])
+        chunks = [chunk async for chunk in response.body_iterator]
+        body = b"".join(chunk.encode() if isinstance(chunk, str) else chunk for chunk in chunks).decode()
+        self.assertIn("record_type", body)
+        self.assertIn("approved_headcount", body)
+        self.assertIn("expected_approved_headcount", body)
+
+
 if __name__ == "__main__":
     unittest.main()
