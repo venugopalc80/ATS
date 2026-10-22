@@ -368,6 +368,7 @@ async def preview_retention(
                     "organization_id": organization_id,
                     "as_of": preview_at,
                     "preview_only": True,
+                    "execution_enabled": False,
                     "deletion_executed": False,
                     "anonymisation_executed": False,
                     "policies_scanned": len(policies),
