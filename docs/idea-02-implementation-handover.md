@@ -34,8 +34,8 @@
 - [ ] Add/verify broader database-backed lifecycle and job status-transition tests (current regression tests mock persistence; staging/browser acceptance remains required)
 - [ ] Resolve Vercel preview build-rate limit (latest checks report deployment rate limited; retry after the limit window or use an approved build-capacity change)
 - [x] Latest backend unit-test run 39805425180 passed: 48 tests run, 4 skipped, including route ordering, job status-transition and assignment-role regression tests
-- [x] GitHub Actions run 39805425180 completed successfully on code commit `0f95b3e5c99d94e0fcbb8ea16d2d17ee2518f944`: backend tests passed (48 tests, 4 skipped), frontend typecheck passed, and production build passed
-- [ ] Re-run CI for the additional job reassignment audit metadata and test (latest code commits `38d1df5d3a5137c74dc5abdd525090673aa6561f` and `80303c5d81de39bf4419d19e5de2a210d5db0b15`)
+- [x] Latest backend suite in GitHub Actions run 39805687840 passed on code commit `80303c5d81de39bf4419d19e5de2a210d5db0b15`: 49 tests run, 4 skipped, including old/new job reassignment audit metadata
+- [x] Frontend typecheck passed in run 39805687840; production build was still running at last check
 - [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
