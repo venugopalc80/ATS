@@ -64,10 +64,10 @@ export default function InterviewKitsPage() {
       const response = await apiFetch(target, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organization_id: organizationId, job_id: null, name, description: description || null,
-          instructions: instructions || null,
-          competencies: competencies.map((item, index) => ({
+        body: JSON.stringify((() => {
+          const definition = {
+            name, description: description || null, instructions: instructions || null,
+            competencies: competencies.map((item, index) => ({
             key: item.key.trim() || ("competency_" + (index + 1)),
             name: item.name, description: item.description,
             rating_guidance: {
@@ -77,11 +77,13 @@ export default function InterviewKitsPage() {
               "4": "Strong evidence beyond the expected level",
               "5": "Exceptional, specific evidence at this level",
             },
-            questions: item.question.trim() ? [{
-              question: item.question, evaluation_guidance: item.guidance || null,
-            }] : [],
-          })),
-        }),
+              questions: item.question.trim() ? [{
+                question: item.question, evaluation_guidance: item.guidance || null,
+              }] : [],
+            })),
+          };
+          return editingKitId ? definition : { organization_id: organizationId, job_id: null, ...definition };
+        })()),
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.detail ?? "Unable to create interview kit.");
