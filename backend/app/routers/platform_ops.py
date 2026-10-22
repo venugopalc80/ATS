@@ -13,7 +13,7 @@ support_router = APIRouter(prefix="/api/support", tags=["support"])
 platform_router = APIRouter(prefix="/api/platform", tags=["platform operations"])
 
 SupportCategory = Literal["billing", "technical", "account", "security", "privacy", "other"]
-SupportScope = Literal["case_metadata", "case_messages", "subscription_metadata", "service_health"]
+SupportScope = Literal["case_metadata", "case_messages"]
 
 
 class SupportCaseCreate(BaseModel):
