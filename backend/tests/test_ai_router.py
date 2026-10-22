@@ -201,5 +201,47 @@ class HumanReviewAuditTests(unittest.TestCase):
 
 
 
+class ModelApprovalGateTests(unittest.TestCase):
+    def _call_approval(self, model_row, evaluation_row):
+        import asyncio
+        from unittest.mock import MagicMock, patch
+        from fastapi import HTTPException
+        from app.routers.ai import approve_model
+
+        organization_id = uuid4()
+        model_id = uuid4()
+        user_id = uuid4()
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [model_row, evaluation_row]
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__.return_value = cursor
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.cursor.return_value = cursor_cm
+        with patch("app.routers.ai.assert_org_admin"):
+            with patch("app.routers.ai.get_connection", return_value=connection):
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(approve_model(model_id, organization_id, user_id=user_id))
+        return caught.exception, cursor
+
+    def test_model_cannot_be_approved_without_data_processing_approval(self):
+        error, cursor = self._call_approval(
+            {"id": uuid4(), "data_processing_approved": False, "status": "draft"},
+            None,
+        )
+        self.assertEqual(error.status_code, 409)
+        self.assertIn("data-processing approval", error.detail)
+        self.assertEqual(cursor.execute.call_count, 1)
+
+    def test_model_cannot_be_approved_without_passing_evaluation(self):
+        error, cursor = self._call_approval(
+            {"id": uuid4(), "data_processing_approved": True, "status": "draft"},
+            None,
+        )
+        self.assertEqual(error.status_code, 409)
+        self.assertIn("passing evaluation", error.detail)
+        self.assertEqual(cursor.execute.call_count, 2)
+
+
 if __name__ == "__main__":
     unittest.main()
