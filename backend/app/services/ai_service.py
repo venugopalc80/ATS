@@ -56,9 +56,12 @@ def build_messages(task: str, evidence: list[dict[str, Any]], user_request: str 
     return [{"role": "system", "content": system}, {"role": "user", "content": user}]
 
 
-def generate_text(task: str, evidence: list[dict[str, Any]], user_request: str | None, model_name: str) -> str:
+def generate_text(task: str, evidence: list[dict[str, Any]], user_request: str | None, model_name: str, provider_name: str) -> str:
     if os.getenv("AI_PROVIDER_APPROVED", "").lower() != "true":
         raise RuntimeError("AI provider use is disabled pending provider/data-processing approval.")
+    configured_provider = os.getenv("AI_PROVIDER_NAME", "openai-compatible")
+    if provider_name != configured_provider:
+        raise RuntimeError("Registered model provider does not match the approved server provider configuration.")
     api_key = os.getenv("AI_PROVIDER_API_KEY")
     base_url = os.getenv("AI_PROVIDER_BASE_URL", "https://api.openai.com/v1").rstrip("/")
     if not api_key:
