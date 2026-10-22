@@ -722,7 +722,7 @@ async def analytics_forecast(
 @router.get("/export")
 async def analytics_export(
     organization_id: UUID,
-    report_type: Literal["kpis", "funnel", "workload", "sources", "forecast"] = Query(...),
+    report_type: Literal["kpis", "funnel", "workload", "sources", "forecast", "campaign_roi"] = Query(...),
     date_from: date | None = Query(default=None),
     date_to: date | None = Query(default=None),
     job_id: UUID | None = Query(default=None),
@@ -769,6 +769,12 @@ async def analytics_export(
             job_id=job_id, recruiter_id=recruiter_id, user_id=user_id,
         )
         rows = payload["sources"]
+    elif report_type == "campaign_roi":
+        payload = await analytics_campaign_roi(
+            organization_id=organization_id, date_from=date_from, date_to=date_to,
+            job_id=job_id, recruiter_id=recruiter_id, user_id=user_id,
+        )
+        rows = payload["campaign_channels"]
     else:
         payload = await analytics_forecast(
             organization_id=organization_id, recruiter_id=recruiter_id, user_id=user_id,
