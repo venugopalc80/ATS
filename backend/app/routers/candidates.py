@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id
@@ -89,7 +89,7 @@ async def list_candidate_education(
 @router.put("/{candidate_id}/education")
 async def replace_candidate_education(
     candidate_id: UUID,
-    records: list[CandidateEducationInput] = Field(max_length=30),
+    records: list[CandidateEducationInput] = Body(..., max_length=30),
     user_id: UUID = Depends(get_current_user_id),
 ):
     organization_id = _education_candidate_org(candidate_id, user_id)
