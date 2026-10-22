@@ -1,8 +1,11 @@
+import asyncio
 from datetime import datetime, timezone
 from uuid import uuid4
 
 import pytest
 from pydantic import ValidationError
+
+from app.routers import privacy as privacy_module
 
 from app.routers.privacy import (
     ProcessingRecordCreate, PrivacyRequestUpdate, RetentionPolicyCreate,
@@ -154,3 +157,88 @@ def test_retention_preview_supported_categories_have_fixed_table_mappings():
 @pytest.mark.parametrize("category", ["audit_event", "application_record", "candidates; drop table candidates"])
 def test_retention_preview_rejects_unconfigured_categories_without_sql_mapping(category):
     assert retention_category_definition(category) is None
+
+
+
+def test_retention_preview_is_non_destructive_and_audits_access(monkeypatch):
+    organization_id = uuid4()
+    policy_id = uuid4()
+    user_id = uuid4()
+    preview_at = datetime(2026, 10, 22, tzinfo=timezone.utc)
+    policy = {
+        "id": policy_id,
+        "data_category": "candidate_document",
+        "purpose": "recruitment",
+        "jurisdiction": "GB",
+        "retention_days": 365,
+        "action": "delete",
+        "version": 1,
+        "effective_at": preview_at,
+    }
+    item = {
+        "id": uuid4(),
+        "created_at": datetime(2025, 1, 1, tzinfo=timezone.utc),
+        "due_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+    }
+    cursor_state = {"fetchall_calls": 0, "queries": []}
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, query, params=None):
+            cursor_state["queries"].append((query, params))
+
+        def fetchall(self):
+            cursor_state["fetchall_calls"] += 1
+            if cursor_state["fetchall_calls"] == 1:
+                return [policy]
+            if cursor_state["fetchall_calls"] == 2:
+                return [item]
+            return []
+
+        def fetchone(self):
+            return {
+                "held_count": 2,
+                "processed_count": 1,
+                "due_count": 3,
+            }
+
+    fake_cursor = FakeCursor()
+
+    class FakeConnection:
+        def cursor(self):
+            return fake_cursor
+
+    class FakeConnectionContext:
+        def __enter__(self):
+            return FakeConnection()
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(privacy_module, "get_connection", lambda: FakeConnectionContext())
+    monkeypatch.setattr(privacy_module, "assert_org_admin", lambda user, org: None)
+
+    result = asyncio.run(privacy_module.preview_retention(
+        organization_id=organization_id,
+        policy_id=None,
+        as_of=preview_at,
+        limit=100,
+        user_id=user_id,
+    ))
+
+    assert result["preview_only"] is True
+    assert result["execution_enabled"] is False
+    assert result["deletion_executed"] is False
+    assert result["anonymisation_executed"] is False
+    assert result["policies"][0]["due_count"] == 3
+    assert result["policies"][0]["excluded_active_exception_count"] == 2
+    assert result["policies"][0]["previously_processed_count"] == 1
+    assert result["policies"][0]["items"] == [item]
+    assert any("privacy.retention_previewed" in query for query, _ in cursor_state["queries"])
+    assert any("e.target_table = 'candidates'" in query for query, _ in cursor_state["queries"])
+    assert not any(query.lstrip().lower().startswith(("delete ", "update ")) for query, _ in cursor_state["queries"])
