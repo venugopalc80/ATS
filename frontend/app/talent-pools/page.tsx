@@ -5,7 +5,7 @@ import { API_BASE, apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
 
 type Pool = { id: string; name: string; description?: string | null; visibility: "restricted" | "organisation"; member_count?: number };
-type PoolMember = { id: string; candidate_id: string; first_name: string; last_name?: string | null; current_title?: string | null; status: string; expires_at?: string | null };
+type PoolMember = { id: string; candidate_id: string; first_name: string; last_name?: string | null; current_title?: string | null; city?: string | null; region?: string | null; status: string; processing_basis?: string | null; expires_at?: string | null };
 
 export default function TalentPoolsPage() {
   const [organizationId, setOrganizationId] = useState("");
