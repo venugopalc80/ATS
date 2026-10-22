@@ -31,10 +31,6 @@ class AIRouterContractTests(unittest.TestCase):
             )
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class _NotFoundCursor:
     """Minimal cursor double: no record exists in the requested tenant."""
     def __init__(self):
@@ -105,3 +101,7 @@ class TenantScopedEvidenceTests(unittest.TestCase):
         self.assertEqual(params, [candidate_owned_by_org_b, org_a])
 
 
+
+
+if __name__ == "__main__":
+    unittest.main()
