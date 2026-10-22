@@ -6,6 +6,7 @@ alter table public.candidate_processing_records
   check (
     (
       legal_basis = 'consent'
+      and consent_status is not null
       and consent_status in ('granted', 'withdrawn')
       and consent_captured_at is not null
       and (consent_status <> 'withdrawn' or consent_withdrawn_at is not null)
