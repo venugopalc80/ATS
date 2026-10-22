@@ -39,16 +39,20 @@ export default function SupportPage() {
 
   const load = useCallback(async (orgId: string) => {
     try {
-      const [casesResponse, grantsResponse] = await Promise.all([
-        apiFetch(API_BASE + "/api/support/cases?organization_id=" + encodeURIComponent(orgId)),
-        apiFetch(API_BASE + "/api/support/access-grants?organization_id=" + encodeURIComponent(orgId)),
-      ]);
+      const casesResponse = await apiFetch(API_BASE + "/api/support/cases?organization_id=" + encodeURIComponent(orgId));
       const casesBody = await casesResponse.json().catch(() => ({}));
-      const grantsBody = await grantsResponse.json().catch(() => ({}));
       if (!casesResponse.ok) throw new Error(casesBody.detail || "Unable to load support cases.");
-      if (!grantsResponse.ok) throw new Error(grantsBody.detail || "Unable to load access requests. Owner/admin access may be required.");
       setCases(casesBody.cases ?? []);
-      setGrants(grantsBody.grants ?? []);
+
+      const grantsResponse = await apiFetch(API_BASE + "/api/support/access-grants?organization_id=" + encodeURIComponent(orgId));
+      const grantsBody = await grantsResponse.json().catch(() => ({}));
+      if (grantsResponse.ok) {
+        setGrants(grantsBody.grants ?? []);
+      } else if (grantsResponse.status === 403) {
+        setGrants([]);
+      } else {
+        throw new Error(grantsBody.detail || "Unable to load access requests.");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load support information.");
     } finally {
