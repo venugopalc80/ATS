@@ -65,10 +65,28 @@ class RequisitionService:
         assignments = ", ".join(f"{column}=%s" for column in data)
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(f"update public.job_requisitions set {assignments},updated_at=now() where id=%s returning {COLUMNS}", [*data.values(), requisition_id])
+                # Lock and read the existing row so audit history captures actual before/after values.
+                cursor.execute(
+                    f"select {COLUMNS} from public.job_requisitions where id=%s for update",
+                    [requisition_id],
+                )
+                before = cursor.fetchone()
+                if before is None:
+                    return None
+                changes = {
+                    key: {"old": str(before.get(key)) if before.get(key) is not None else None,
+                          "new": str(value) if value is not None else None}
+                    for key, value in data.items()
+                    if before.get(key) != value
+                }
+                cursor.execute(
+                    f"update public.job_requisitions set {assignments},updated_at=now() where id=%s returning {COLUMNS}",
+                    [*data.values(), requisition_id],
+                )
                 row = cursor.fetchone()
-                if row:
-                    audit(cursor, row["organization_id"], actor_id, "requisition.updated", requisition_id, {"fields": list(data)})
+                if row and changes:
+                    audit(cursor, row["organization_id"], actor_id, "requisition.updated", requisition_id,
+                          {"changes": changes})
                 return row
 
     async def submit(self, requisition_id: UUID, actor_id: UUID):
