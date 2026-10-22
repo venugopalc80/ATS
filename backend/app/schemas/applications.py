@@ -31,7 +31,15 @@ class ApplicationUpdate(BaseModel):
 
 class ApplicationTransition(BaseModel):
     status: ApplicationStatus
-    reason: str | None = Field(default=None, max_length=1000)
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("reason")
+    @classmethod
+    def reason_not_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Transition reason cannot be blank")
+        return normalized
 
 
 class ApplicationOut(BaseModel):
