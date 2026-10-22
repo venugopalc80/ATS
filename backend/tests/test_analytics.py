@@ -16,6 +16,13 @@ RECRUITER = UUID("44444444-4444-4444-8444-444444444444")
 
 
 class AnalyticsFilterTests(unittest.TestCase):
+    def test_csv_values_neutralize_spreadsheet_formula_prefixes(self):
+        for value in ("=HYPERLINK(\\\"https://example.com\\\")", " +SUM(A1:A2)", "-2+3", "@cmd"):
+            self.assertEqual(analytics_router._csv_safe_value(value), "'" + value)
+        self.assertEqual(analytics_router._csv_safe_value("Referral"), "Referral")
+        self.assertEqual(analytics_router._csv_safe_value(12.5), 12.5)
+        self.assertIsNone(analytics_router._csv_safe_value(None))
+
     def test_application_scope_is_tenant_scoped_and_uses_half_open_dates(self):
         where, params = _application_scope(
             ORG, date(2026, 10, 1), date(2026, 10, 22), JOB, RECRUITER
