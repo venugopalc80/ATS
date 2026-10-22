@@ -232,6 +232,45 @@ def _search_rows(organization_id: UUID, record_type: RecordType, criteria: Searc
             return list(cursor.fetchall())
 
 
+def _sweep_pool_memberships(cursor, organization_id: UUID, actor_user_id: UUID, pool_id: UUID | None = None) -> None:
+    pool_clause = " and m.pool_id=%s" if pool_id else ""
+    base_params: list[object] = [organization_id]
+    if pool_id:
+        base_params.append(pool_id)
+    cursor.execute("""update public.talent_pool_memberships m
+        set status='expired',removed_at=now(),updated_at=now()
+        from public.candidates c
+        where c.id=m.candidate_id and c.organization_id=m.organization_id
+          and m.organization_id=%s and m.status='active'
+          and ((m.expires_at is not null and m.expires_at <= now())
+               or (c.retention_until is not null and c.retention_until <= now()))""" + pool_clause +
+        " returning m.id,m.pool_id,m.candidate_id", base_params)
+    for item in cursor.fetchall():
+        cursor.execute("""insert into public.talent_pool_membership_events
+            (organization_id,membership_id,actor_user_id,event_type,reason)
+            values (%s,%s,%s,'expired','Membership or candidate retention expiry reached')""",
+            [organization_id,item["id"],actor_user_id])
+        cursor.execute("""insert into public.audit_events
+            (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+            values (%s,%s,'talent_pool_membership_expired','talent_pool_membership',%s,%s::jsonb)""",
+            [organization_id,actor_user_id,item["id"],json.dumps({"pool_id":str(item["pool_id"]),"reason":"expiry"})])
+    cursor.execute("""update public.talent_pool_memberships m
+        set status='withdrawn',removed_at=now(),updated_at=now()
+        from public.candidates c
+        where c.id=m.candidate_id and c.organization_id=m.organization_id
+          and m.organization_id=%s and m.status='active' and c.status='do_not_contact'""" + pool_clause +
+        " returning m.id,m.pool_id,m.candidate_id", base_params)
+    for item in cursor.fetchall():
+        cursor.execute("""insert into public.talent_pool_membership_events
+            (organization_id,membership_id,actor_user_id,event_type,reason)
+            values (%s,%s,%s,'withdrawn','Candidate marked do_not_contact')""",
+            [organization_id,item["id"],actor_user_id])
+        cursor.execute("""insert into public.audit_events
+            (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+            values (%s,%s,'talent_pool_membership_withdrawn','talent_pool_membership',%s,%s::jsonb)""",
+            [organization_id,actor_user_id,item["id"],json.dumps({"pool_id":str(item["pool_id"]),"reason":"do_not_contact"})])
+
+
 @router.get("/search")
 async def advanced_search(
     organization_id: UUID,
@@ -390,8 +429,9 @@ async def list_talent_pools(organization_id: UUID, user_id: UUID = Depends(get_c
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                _sweep_pool_memberships(cursor, organization_id, user_id)
                 cursor.execute("""select p.id,p.organization_id,p.name,p.description,p.owner_user_id,p.visibility,
-                    p.created_by,p.created_at,p.updated_at,count(m.id) filter (where m.status='active') as member_count
+                    p.created_by,p.created_at,p.updated_at,count(m.id) filter (where m.status='active' and (m.expires_at is null or m.expires_at > now())) as member_count
                     from public.talent_pools p left join public.talent_pool_memberships m
                     on m.organization_id=p.organization_id and m.pool_id=p.id
                     where p.organization_id=%s and (p.visibility='organisation' or p.owner_user_id=%s or p.created_by=%s)
@@ -440,6 +480,7 @@ async def list_talent_pool_members(pool_id: UUID, organization_id: UUID,
                     raise HTTPException(status_code=404, detail="Talent pool not found")
                 if pool["visibility"] == "restricted" and pool["owner_user_id"] != user_id and pool["created_by"] != user_id:
                     assert_org_admin(user_id, organization_id)
+                _sweep_pool_memberships(cursor, organization_id, user_id, pool_id)
                 sql = """select m.id,m.candidate_id,m.status,m.purpose,m.processing_basis,m.added_by,m.added_at,m.expires_at,m.removed_at,
                     c.first_name,c.last_name,c.current_title,c.city,c.region,c.country_code,c.status as candidate_status
                     from public.talent_pool_memberships m join public.candidates c
