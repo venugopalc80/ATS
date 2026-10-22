@@ -139,10 +139,23 @@ class CandidateService:
                 return cursor.fetchone()
 
     async def delete_candidate(self, candidate_id: UUID, organization_id: UUID) -> bool:
+        # A candidate with linked applications must remain available for recruitment
+        # history and auditability. The NOT EXISTS predicate makes the guard atomic
+        # with the delete statement instead of relying on a separate preflight query.
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "delete from public.candidates where id = %s and organization_id = %s",
+                    """
+                    delete from public.candidates as candidate
+                    where candidate.id = %s
+                      and candidate.organization_id = %s
+                      and not exists (
+                          select 1
+                          from public.applications as application
+                          where application.candidate_id = candidate.id
+                            and application.organization_id = candidate.organization_id
+                      )
+                    """,
                     [candidate_id, organization_id],
                 )
                 return cursor.rowcount > 0
