@@ -200,14 +200,24 @@ async def analytics_funnel(
                 stages = [dict(row) for row in cursor.fetchall()]
                 cursor.execute(
                     f"""select a.status, count(distinct a.id)::int as distinct_applications
-                        from public.applications a
-                        join public.jobs j on j.id=a.job_id and j.organization_id=a.organization_id
-                        where {app_where}
+                        from public.application_stage_history h
+                        join public.applications a on a.id=h.application_id
+                        join public.jobs j on j.id=a.job_id
+                        where {where}
                         group by a.status""",
-                    _application_scope(organization_id, date_from, date_to, job_id, recruiter_id)[1],
+                    params,
                 )
                 outcomes = {row["status"]: row["distinct_applications"] for row in cursor.fetchall()}
-        total = sum(stage["distinct_applications"] for stage in stages)
+                cursor.execute(
+                    f"""select count(distinct h.application_id)::int as cohort_size
+                        from public.application_stage_history h
+                        join public.applications a on a.id=h.application_id
+                        join public.jobs j on j.id=a.job_id
+                        where {where}""",
+                    params,
+                )
+                cohort_size = cursor.fetchone()["cohort_size"] or 0
+        total = cohort_size
         return {
             "filters": {
                 "organization_id": str(organization_id),
