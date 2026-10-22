@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
-from app.auth import assert_org_admin, assert_org_member, get_current_user_id
+from app.auth import assert_org_member, get_current_user_id, get_org_role
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(tags=["application forms"])
@@ -69,12 +69,17 @@ def _db_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="Application form service unavailable")
 
 
+def assert_form_manager(user_id: UUID, organization_id: UUID) -> None:
+    if get_org_role(user_id, organization_id) not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Recruiter or organisation admin access required")
+
+
 def _insert_questions(cursor, organization_id: UUID, version_id: UUID, questions: list[QuestionIn]) -> None:
     keys = [q.question_key for q in questions]
     if len(keys) != len(set(keys)):
         raise HTTPException(status_code=422, detail="Question keys must be unique within a form version")
     for question in questions:
-        if question.field_type in {"select", "radio", "checkbox", "multi_select"} and not question.options:
+        if question.field_type in {"select", "radio", "multi_select"} and not question.options:
             raise HTTPException(status_code=422, detail=f"Question '{question.question_key}' needs at least one option")
         cursor.execute(
             """insert into public.application_form_questions
@@ -124,7 +129,7 @@ async def list_forms(organization_id: UUID, user_id: UUID = Depends(get_current_
 
 @admin_router.post("", status_code=201)
 async def create_form(payload: FormCreate, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_admin(user_id, payload.organization_id)
+    assert_form_manager(user_id, payload.organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -195,7 +200,7 @@ async def create_version(template_id: UUID, user_id: UUID = Depends(get_current_
                 template = cursor.fetchone()
                 if template is None:
                     raise HTTPException(status_code=404, detail="Application form not found")
-                assert_org_admin(user_id, template["organization_id"])
+                assert_form_manager(user_id, template["organization_id"])
                 cursor.execute(
                     """select id, version_number, privacy_notice_text, privacy_notice_version
                          from public.application_form_versions
@@ -241,7 +246,7 @@ async def update_version(version_id: UUID, payload: FormVersionUpdate, user_id: 
                 version = cursor.fetchone()
                 if version is None:
                     raise HTTPException(status_code=404, detail="Form version not found")
-                assert_org_admin(user_id, version["organization_id"])
+                assert_form_manager(user_id, version["organization_id"])
                 if version["status"] != "draft":
                     raise HTTPException(status_code=409, detail="Published or archived form versions are immutable; create a new version")
                 cursor.execute(
