@@ -348,3 +348,171 @@ async def platform_health(user_id: UUID = Depends(get_current_user_id)):
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Platform health check failed") from exc
+
+
+class SupportMessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=8000)
+
+
+class PlatformSupportMessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=8000)
+    visibility: Literal["customer", "internal"] = "customer"
+
+
+@support_router.get("/cases/{case_id}/messages")
+async def list_customer_support_messages(
+    case_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.support_cases where id=%s", [case_id])
+                case_ref = cursor.fetchone()
+                if case_ref is None:
+                    raise HTTPException(status_code=404, detail="Support case not found")
+                assert_org_member(user_id, case_ref["organization_id"])
+                cursor.execute(
+                    """select id, author_user_id, body, created_at
+                       from public.support_case_messages
+                       where support_case_id=%s and visibility='customer'
+                       order by created_at""",
+                    [case_id],
+                )
+                messages = list(cursor.fetchall())
+        return {"messages": messages}
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Support messages are unavailable") from exc
+
+
+@support_router.post("/cases/{case_id}/messages", status_code=201)
+async def create_customer_support_message(
+    case_id: UUID,
+    payload: SupportMessageCreate,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.support_cases where id=%s", [case_id])
+                case_ref = cursor.fetchone()
+                if case_ref is None:
+                    raise HTTPException(status_code=404, detail="Support case not found")
+                assert_org_member(user_id, case_ref["organization_id"])
+                cursor.execute(
+                    """insert into public.support_case_messages
+                       (support_case_id, author_user_id, visibility, body)
+                       values (%s, %s, 'customer', %s)
+                       returning id, support_case_id, author_user_id, visibility, body, created_at""",
+                    [case_id, user_id, payload.body.strip()],
+                )
+                message = cursor.fetchone()
+                cursor.execute("update public.support_cases set updated_at=now() where id=%s", [case_id])
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s, %s, 'support.case.message_added', 'support_case', %s, '{}'::jsonb)""",
+                    [case_ref["organization_id"], user_id, case_id],
+                )
+        return message
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Support message could not be saved") from exc
+
+
+@platform_router.get("/support/cases/{case_id}/messages")
+async def platform_list_support_messages(
+    case_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_platform_operator(user_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.support_cases where id=%s", [case_id])
+                case_ref = cursor.fetchone()
+                if case_ref is None:
+                    raise HTTPException(status_code=404, detail="Support case not found")
+                cursor.execute(
+                    """select id, purpose, scope
+                       from public.support_access_grants
+                       where organization_id=%s and support_case_id=%s and operator_user_id=%s
+                         and approved_at is not null and revoked_at is null
+                         and expires_at > now() and scope @> array['case_messages']::text[]
+                       order by approved_at desc limit 1""",
+                    [case_ref["organization_id"], case_id, user_id],
+                )
+                grant = cursor.fetchone()
+                if grant is None:
+                    raise HTTPException(status_code=403, detail="Active organisation-approved message access is required")
+                cursor.execute(
+                    """select id, author_user_id, author_operator_id, visibility, body, created_at
+                       from public.support_case_messages
+                       where support_case_id=%s order by created_at""",
+                    [case_id],
+                )
+                messages = list(cursor.fetchall())
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s, %s, 'support.case.messages_viewed', 'support_case', %s, %s::jsonb)""",
+                    [case_ref["organization_id"], user_id, case_id,
+                     json.dumps({"grant_id": str(grant["id"]), "purpose": grant["purpose"]})],
+                )
+        return {"messages": messages}
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Platform support messages are unavailable") from exc
+
+
+@platform_router.post("/support/cases/{case_id}/messages", status_code=201)
+async def platform_create_support_message(
+    case_id: UUID,
+    payload: PlatformSupportMessageCreate,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_platform_operator(user_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.support_cases where id=%s", [case_id])
+                case_ref = cursor.fetchone()
+                if case_ref is None:
+                    raise HTTPException(status_code=404, detail="Support case not found")
+                cursor.execute(
+                    """select id, purpose
+                       from public.support_access_grants
+                       where organization_id=%s and support_case_id=%s and operator_user_id=%s
+                         and approved_at is not null and revoked_at is null
+                         and expires_at > now() and scope @> array['case_messages']::text[]
+                       order by approved_at desc limit 1""",
+                    [case_ref["organization_id"], case_id, user_id],
+                )
+                grant = cursor.fetchone()
+                if grant is None:
+                    raise HTTPException(status_code=403, detail="Active organisation-approved message access is required")
+                cursor.execute(
+                    """insert into public.support_case_messages
+                       (support_case_id, author_operator_id, visibility, body)
+                       values (%s, %s, %s, %s)
+                       returning id, support_case_id, author_operator_id, visibility, body, created_at""",
+                    [case_id, user_id, payload.visibility, payload.body.strip()],
+                )
+                message = cursor.fetchone()
+                cursor.execute("update public.support_cases set updated_at=now() where id=%s", [case_id])
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s, %s, 'support.case.operator_message_added', 'support_case', %s, %s::jsonb)""",
+                    [case_ref["organization_id"], user_id, case_id,
+                     json.dumps({"grant_id": str(grant["id"]), "visibility": payload.visibility})],
+                )
+        return message
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Platform support message could not be saved") from exc
