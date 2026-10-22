@@ -249,6 +249,7 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_workload_returns_counts_and_separates_unassigned_demand(self):
         result = await analytics_router.analytics_workload(
             organization_id=ORG,
+            recruiter_id=None,
             user_id=UUID("22222222-2222-4222-8222-222222222222"),
         )
         self.assertEqual(len(result["recruiters"]), 1)
@@ -266,6 +267,8 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
             organization_id=ORG,
             date_from=date(2026, 10, 1),
             date_to=date(2026, 10, 22),
+            job_id=None,
+            recruiter_id=None,
             user_id=UUID("22222222-2222-4222-8222-222222222222"),
         )
         self.assertEqual(result["sources"][0]["offer_acceptance_rate"], 2 / 3)
