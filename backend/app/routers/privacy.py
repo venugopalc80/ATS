@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
@@ -55,6 +55,19 @@ class ProcessingRecordCreate(BaseModel):
     consent_captured_at: datetime | None = None
     consent_withdrawn_at: datetime | None = None
     processing_preferences: dict = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_consent_fields(self):
+        if self.legal_basis == "consent":
+            if self.consent_status not in {"granted", "withdrawn"} or self.consent_captured_at is None:
+                raise ValueError("Consent basis requires an explicit status and capture timestamp")
+            if self.consent_status == "withdrawn" and self.consent_withdrawn_at is None:
+                raise ValueError("Withdrawn consent requires a withdrawal timestamp")
+        elif self.consent_status not in {None, "not_applicable"} or self.consent_captured_at is not None or self.consent_withdrawn_at is not None:
+            raise ValueError("Consent evidence must not be used for a non-consent legal basis")
+        if self.consent_withdrawn_at and self.consent_captured_at and self.consent_withdrawn_at < self.consent_captured_at:
+            raise ValueError("Consent withdrawal cannot predate consent capture")
+        return self
 
 
 def _database_error(exc: Exception) -> HTTPException:
