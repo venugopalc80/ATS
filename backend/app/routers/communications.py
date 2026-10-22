@@ -301,6 +301,14 @@ async def create_template(payload: TemplateCreate, user_id: UUID = Depends(get_c
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                # Serialize version allocation per organisation/template key. Without this
+                # transaction-scoped lock, concurrent creates can calculate the same version
+                # and one request fails on the unique (organization_id, template_key, version)
+                # constraint.
+                cursor.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    [f"{payload.organization_id}:{payload.template_key}"],
+                )
                 cursor.execute(
                     """
                     select coalesce(max(version),0)+1 as next_version
