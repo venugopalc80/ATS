@@ -601,3 +601,116 @@ async def analytics_sources(
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
+
+
+@router.get("/forecast")
+async def analytics_forecast(
+    organization_id: UUID,
+    recruiter_id: UUID | None = Query(default=None),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Provide an explainable baseline forecast from the last six complete months of approved headcount."""
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """with months as (
+                           select generate_series(
+                               date_trunc('month', current_date) - interval '6 months',
+                               date_trunc('month', current_date) - interval '1 month',
+                               interval '1 month'
+                           )::date as month_start
+                       ),
+                       approved_demand as (
+                           select date_trunc('month', jr.approved_at)::date as month_start,
+                                  sum(jr.headcount)::int as approved_headcount,
+                                  count(*)::int as approved_requisitions
+                           from public.job_requisitions jr
+                           left join public.jobs j
+                             on j.id=jr.job_id and j.organization_id=jr.organization_id
+                           where jr.organization_id=%s
+                             and jr.status in ('approved','converted')
+                             and jr.approved_at >= date_trunc('month', current_date) - interval '6 months'
+                             and jr.approved_at < date_trunc('month', current_date)
+                             and (%s::uuid is null or coalesce(jr.recruiter_id,j.recruiter_id)=%s::uuid)
+                           group by date_trunc('month', jr.approved_at)::date
+                       )
+                       select m.month_start,
+                              coalesce(d.approved_headcount,0)::int as approved_headcount,
+                              coalesce(d.approved_requisitions,0)::int as approved_requisitions
+                       from months m
+                       left join approved_demand d using (month_start)
+                       order by m.month_start""",
+                    [organization_id, recruiter_id, recruiter_id],
+                )
+                history = [
+                    {
+                        "month": row["month_start"].isoformat(),
+                        "approved_headcount": int(row["approved_headcount"] or 0),
+                        "approved_requisitions": int(row["approved_requisitions"] or 0),
+                    }
+                    for row in cursor.fetchall()
+                ]
+                cursor.execute(
+                    """select
+                           coalesce(sum(jr.headcount),0)::int as pending_headcount,
+                           count(*)::int as pending_requisitions
+                       from public.job_requisitions jr
+                       left join public.jobs j
+                         on j.id=jr.job_id and j.organization_id=jr.organization_id
+                       where jr.organization_id=%s
+                         and jr.status='pending_approval'
+                         and (%s::uuid is null or coalesce(jr.recruiter_id,j.recruiter_id)=%s::uuid)""",
+                    [organization_id, recruiter_id, recruiter_id],
+                )
+                pending = dict(cursor.fetchone())
+        nonzero_months = sum(1 for row in history if row["approved_requisitions"] > 0)
+        average = (
+            sum(row["approved_headcount"] for row in history) / len(history)
+            if history else None
+        )
+        first_half = history[:3]
+        second_half = history[3:]
+        first_average = sum(row["approved_headcount"] for row in first_half) / len(first_half) if first_half else None
+        second_average = sum(row["approved_headcount"] for row in second_half) / len(second_half) if second_half else None
+        if first_average is None or second_average is None:
+            trend = "insufficient_history"
+        elif second_average > first_average:
+            trend = "increasing"
+        elif second_average < first_average:
+            trend = "decreasing"
+        else:
+            trend = "stable"
+        if nonzero_months == 0:
+            confidence = "unavailable"
+            status = "no_historical_approved_requisitions"
+            forecast_value = None
+        else:
+            confidence = "low" if nonzero_months < 3 else "medium"
+            status = "baseline_only"
+            forecast_value = round(average, 1) if average is not None else None
+        from datetime import date as date_type
+        next_month = (date_type.today().replace(day=28) + __import__("datetime").timedelta(days=4)).replace(day=1)
+        return {
+            "organization_id": str(organization_id),
+            "history_months": 6,
+            "history": history,
+            "forecast": {
+                "month": next_month.isoformat(),
+                "expected_approved_headcount": forecast_value,
+                "pending_approval_headcount": pending["pending_headcount"],
+                "pending_approval_requisitions": pending["pending_requisitions"],
+                "trend": trend,
+                "confidence": confidence,
+                "status": status,
+            },
+            "methodology": {
+                "baseline": "Arithmetic mean of approved requisition headcount across the last six complete calendar months, including zero-activity months.",
+                "trend": "Compare average approved headcount in the first three history months with the most recent three history months.",
+                "confidence": "Low when fewer than three of the six months contain approved requisitions; medium otherwise. This is an explainable baseline, not a statistical or machine-learning forecast.",
+                "exclusions": ["Current partial month", "Rejected, cancelled and draft requisitions"],
+            },
+        }
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
