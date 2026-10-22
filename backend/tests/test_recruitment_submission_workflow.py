@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.routers import applications, public_jobs
-from app.schemas.applications import ApplicationUpdate
+from app.schemas.applications import ApplicationStageConfigUpdate, ApplicationTransition, ApplicationUpdate
 from app.services.application_service import ApplicationService
 
 
@@ -322,6 +322,49 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
                         await applications.update_application(
                             APPLICATION, ApplicationUpdate(status="screening"), USER
                         )
+
+        self.assertEqual(error.exception.status_code, 403)
+        update.assert_not_awaited()
+
+    async def test_transition_application_denies_non_member_before_transition(self):
+        row = {
+            "id": APPLICATION,
+            "organization_id": ORG,
+            "job_id": JOB,
+            "candidate_id": CANDIDATE,
+            "source": "careers_page",
+            "status": "new",
+            "match_score": None,
+            "match_explanation": None,
+            "human_reviewed": False,
+            "human_reviewed_by": None,
+            "human_reviewed_at": None,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+                with patch.object(applications.service, "transition_application", new_callable=AsyncMock) as transition:
+                    with self.assertRaises(HTTPException) as error:
+                        await applications.transition_application(
+                            APPLICATION,
+                            ApplicationTransition(status="screening", reason="CV reviewed"),
+                            USER,
+                        )
+
+        self.assertEqual(error.exception.status_code, 403)
+        transition.assert_not_awaited()
+
+    async def test_stage_config_update_requires_org_admin(self):
+        with patch.object(applications, "assert_org_admin", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+            with patch.object(applications.service, "update_stage_config", new_callable=AsyncMock) as update:
+                with self.assertRaises(HTTPException) as error:
+                    await applications.update_application_stage(
+                        "screening",
+                        ORG,
+                        ApplicationStageConfigUpdate(label="Screening"),
+                        USER,
+                    )
 
         self.assertEqual(error.exception.status_code, 403)
         update.assert_not_awaited()
