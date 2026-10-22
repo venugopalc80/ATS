@@ -32,6 +32,7 @@
 - [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
 - [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new requisition and job assignment audit metadata, invalid job status transitions, and route ordering
 - [ ] Add/verify broader database-backed lifecycle and job status-transition tests (current regression tests mock persistence; staging/browser acceptance remains required)
+- [ ] Run CI on the latest test-only addition: added requisition-list query regressions for organisation scoping, status/search filtering, and limit/offset parameterisation; not yet included in the last successful CI run
 - [ ] Resolve Vercel preview build-rate limit (latest checks report deployment rate limited; retry after the limit window or use an approved build-capacity change)
 - [x] Latest backend unit-test run 39805425180 passed: 48 tests run, 4 skipped, including route ordering, job status-transition and assignment-role regression tests
 - [x] Latest backend suite in GitHub Actions run 39805687840 passed on code commit `80303c5d81de39bf4419d19e5de2a210d5db0b15`: 49 tests run, 4 skipped, including old/new job reassignment audit metadata
