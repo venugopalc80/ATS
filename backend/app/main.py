@@ -16,22 +16,44 @@ from app.routers.job_distribution import router as job_distribution_router
 from app.routers.public_jobs import router as public_jobs_router
 from app.routers.documents import router as documents_router
 
-app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
-frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
-frontend_origins = {
+app = FastAPI(
+    title="ATS API",
+    version="0.10.0",
+    description="AI-powered Applicant Tracking System API",
+)
+
+# Support both the legacy single-origin setting and the plural setting used
+# by Vercel. Comma-separated values are accepted in either variable.
+_default_origins = (
+    "http://localhost:3000,"
+    "https://aqerith.com,"
+    "https://www.aqerith.com,"
+    "https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app,"
+    "https://aqerith-git-fix-dashboard-update-1-acceptance-the-pixel-muses.vercel.app,"
+    "https://aqerith-r5t7uzo35-the-pixel-muses.vercel.app"
+)
+_origin_values = ",".join(
+    value for value in (
+        os.getenv("FRONTEND_URL", ""),
+        os.getenv("FRONTEND_URLS", ""),
+        _default_origins,
+    ) if value
+)
+frontend_origins = sorted({
     origin.strip().rstrip("/")
-    for origin in (
-        frontend_url + ",https://aqerith.com,https://www.aqerith.com,https://aqerith-git-feat-inline-cv-preview-the-pixel-muses.vercel.app,https://aqerith-git-fix-dashboard-update-1-acceptance-the-pixel-muses.vercel.app,https://aqerith-r5t7uzo35-the-pixel-muses.vercel.app"
-    ).split(",")
+    for origin in _origin_values.split(",")
     if origin.strip()
-}
+})
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=sorted(frontend_origins),
+    allow_origins=frontend_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    max_age=600,
 )
+
 app.include_router(jobs_router)
 app.include_router(candidates_router)
 app.include_router(applications_router)
@@ -47,8 +69,12 @@ app.include_router(job_distribution_router)
 app.include_router(public_jobs_router)
 app.include_router(documents_router)
 
+
 @app.get("/")
-async def root()->dict[str,str]: return {"status":"ok","service":"ats-api","docs":"/docs"}
+async def root() -> dict[str, str]:
+    return {"status": "ok", "service": "ats-api", "docs": "/docs"}
+
 
 @app.get("/health")
-async def health()->dict[str,str]: return {"status":"ok","service":"ats-api"}
+async def health() -> dict[str, str]:
+    return {"status": "ok", "service": "ats-api"}

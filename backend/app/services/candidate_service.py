@@ -60,6 +60,20 @@ class CandidateService:
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                organization_id = data["organization_id"]
+                cursor.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    [str(organization_id)],
+                )
+                email = str(data.get("email") or "").strip().lower()
+                if email:
+                    cursor.execute(
+                        "select 1 from public.candidates where organization_id=%s "
+                        "and lower(trim(email))=%s limit 1",
+                        [organization_id, email],
+                    )
+                    if cursor.fetchone() is not None:
+                        raise ValueError("A candidate with this email already exists in this organisation")
                 cursor.execute(
                     f"""
                     insert into public.candidates ({", ".join(columns)})
@@ -72,6 +86,58 @@ class CandidateService:
                 if row is None:
                     raise RuntimeError("Candidate was not created")
                 return row
+
+    async def bulk_create_candidates(self, organization_id: UUID, candidates: list[dict[str, Any]]) -> dict[str, Any]:
+        """Insert a bounded batch in one transaction, skipping existing/in-batch email duplicates."""
+        emails = {
+            str(candidate.get("email") or "").strip().lower()
+            for candidate in candidates
+            if str(candidate.get("email") or "").strip()
+        }
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                # Serialise candidate writes within one organisation so imports and
+                # single-record creation cannot race through the duplicate check.
+                cursor.execute(
+                    "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+                    [str(organization_id)],
+                )
+                existing_emails: set[str] = set()
+                if emails:
+                    cursor.execute(
+                        "select lower(trim(email)) as email from public.candidates "
+                        "where organization_id = %s and email is not null",
+                        [organization_id],
+                    )
+                    existing_emails = {
+                        str(row["email"]).strip().lower()
+                        for row in cursor.fetchall()
+                        if row.get("email")
+                    }
+                seen_emails = set(existing_emails)
+                inserted: list[dict[str, Any]] = []
+                duplicate_rows: list[int] = []
+                for row_number, candidate in enumerate(candidates, start=1):
+                    data = dict(candidate)
+                    email = str(data.get("email") or "").strip().lower()
+                    if email and email in seen_emails:
+                        duplicate_rows.append(row_number)
+                        continue
+                    if email:
+                        seen_emails.add(email)
+                    data["organization_id"] = organization_id
+                    columns = list(data.keys())
+                    placeholders = ", ".join(["%s"] * len(columns))
+                    column_list = ", ".join(columns)
+                    cursor.execute(
+                        f"insert into public.candidates ({column_list}) "
+                        f"values ({placeholders}) returning {CANDIDATE_COLUMNS}",
+                        [data[column] for column in columns],
+                    )
+                    saved = cursor.fetchone()
+                    if saved is not None:
+                        inserted.append(saved)
+                return {"candidates": inserted, "duplicate_rows": duplicate_rows}
 
     async def get_candidate(self, candidate_id: UUID) -> dict[str, Any] | None:
         with get_connection() as connection:

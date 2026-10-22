@@ -410,19 +410,59 @@ export default function CandidatesPage() {
     if (!eligible.length) { setImportMessage("There are no valid, non-duplicate rows to import."); return; }
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setImportMessage("API or active organisation is not configured."); return; }
-    setImporting(true); let created = 0; const failures: string[] = [];
+    setImporting(true);
+    let created = 0;
+    let duplicates = 0;
+    let completed = 0;
+    const failures: string[] = [];
+    const importedCandidates: Candidate[] = [];
+    const batchSize = 100;
     try {
-      for (const row of eligible) {
-        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean) };
+      for (let offset = 0; offset < eligible.length; offset += batchSize) {
+        const batch = eligible.slice(offset, offset + batchSize);
+        const candidates = batch.map((row) => ({
+          first_name: row.first_name,
+          last_name: row.last_name || null,
+          email: row.email || null,
+          phone: row.phone || null,
+          city: row.city || null,
+          region: row.region || null,
+          country_code: row.country_code || null,
+          status: row.status,
+          current_title: row.current_title || null,
+          years_experience: row.years_experience ? Number(row.years_experience) : null,
+          skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean),
+        }));
         try {
-          const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
-          if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
-          const candidate = await response.json() as Candidate; setCandidates((current) => [candidate, ...current]); created++;
-        } catch { failures.push("Row " + row.line + ": network error"); }
+          const response = await apiFetch(API_BASE + "/api/candidates/bulk-import", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ organization_id: organizationId, candidates }),
+          });
+          const body = await response.json().catch(() => null);
+          if (!response.ok) {
+            failures.push("Rows " + batch[0].line + "–" + batch[batch.length - 1].line + ": " + (body?.detail || "API returned " + response.status));
+          } else {
+            const saved = (body?.candidates ?? []) as Candidate[];
+            importedCandidates.push(...saved);
+            created += Number(body?.imported ?? saved.length);
+            duplicates += Number(body?.duplicates ?? 0);
+          }
+        } catch {
+          failures.push("Rows " + batch[0].line + "–" + batch[batch.length - 1].line + ": network error");
+        }
+        completed += batch.length;
+        setImportMessage("Importing… " + completed + " of " + eligible.length + " valid rows processed; " + created + " created, " + duplicates + " duplicates skipped.");
       }
-      setImportMessage("Imported " + created + " candidate(s). Skipped " + (importRows.length - eligible.length) + " invalid or duplicate row(s)." + (failures.length ? " Failed: " + failures.slice(0, 5).join("; ") : ""));
-      if (created > 0) { setImportRows([]); setImportFileName(""); }
-    } finally { setImporting(false); }
+      if (importedCandidates.length) {
+        setCandidates((current) => [...importedCandidates.filter((candidate) => !current.some((item) => item.id === candidate.id)), ...current]);
+      }
+      const skipped = importRows.length - eligible.length;
+      setImportMessage("Import finished: " + created + " created, " + duplicates + " duplicates skipped, " + skipped + " invalid/already-flagged rows skipped." + (failures.length ? " Batch failures: " + failures.slice(0, 5).join("; ") : ""));
+      if (created > 0 && failures.length === 0) { setImportRows([]); setImportFileName(""); }
+    } finally {
+      setImporting(false);
+    }
   }
 
   function openCreate() {
