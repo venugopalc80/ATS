@@ -68,16 +68,16 @@ class FakeAnalyticsCursor:
             return {"decided_offers": 4, "accepted_offers": 3}
         if "as complete_requisitions" in self.sql:
             return {"median_days": 20.0, "complete_requisitions": 3}
-        if "as median_days" in self.sql:
-            self.asserted_time_to_hire_query = self.sql
-            return {"median_days": 12.5, "complete_records": 2}
-        if "as open_vacancies" in self.sql:
+        if "as open_more_than_30_days" in self.sql:
             return {
                 "open_vacancies": 2,
                 "open_more_than_30_days": 1,
                 "missing_opened_at": 1,
                 "median_days_open": 35.0,
             }
+        if "as median_days" in self.sql:
+            self.asserted_time_to_hire_query = self.sql
+            return {"median_days": 12.5, "complete_records": 2}
         if "as cohort_size" in self.sql:
             return {"cohort_size": 6}
         if "as unassigned_open_vacancies" in self.sql:
