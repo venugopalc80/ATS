@@ -20,12 +20,12 @@ Status: implementation in review; not merged or deployed.
 AI generation is intentionally unavailable unless all gates pass:
 
 1. Set server-side `AI_PROVIDER_APPROVED=true` only after vendor, privacy, security, transfer, retention and contractual reviews are complete.
-2. Set `AI_PROVIDER_API_KEY` as a server-only secret. Do not expose it through a `NEXT_PUBLIC_*` variable.
-3. Set `AI_PROVIDER_BASE_URL` only to the approved OpenAI-compatible provider endpoint (defaults to the OpenAI API endpoint).
-4. An organisation administrator must configure the use case as enabled and approved, with provider approval recorded.
-5. An organisation administrator must register the exact model/version and mark data processing approved.
-6. Run and pass a documented evaluation suite for that model version, then explicitly approve the model through the governance endpoint.
-7. Verify that the configured provider's retention, training, residency, subprocessor and deletion controls match the applicable data-processing approval.
+2. Set `AI_PROVIDER_NAME` to the exact provider identifier recorded in the model registry (defaults to `openai-compatible`). The registered provider must match this server-side value.\n3. Set `AI_PROVIDER_API_KEY` as a server-only secret. Do not expose it through a `NEXT_PUBLIC_*` variable.
+4. Set `AI_PROVIDER_BASE_URL` only to the approved OpenAI-compatible provider endpoint (defaults to the OpenAI API endpoint).
+5. An organisation administrator must configure the use case as enabled and approved, with provider approval recorded.
+6. An organisation administrator must register the exact model/version and mark data processing approved.
+7. Run and pass a documented evaluation suite for that model version, then explicitly approve the model through the governance endpoint.
+8. Verify that the configured provider's retention, training, residency, subprocessor and deletion controls match the applicable data-processing approval.
 
 Do not send real candidate data to an external provider before these gates have been reviewed and enabled.
 
