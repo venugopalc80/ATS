@@ -69,7 +69,7 @@ Do not send real candidate data to an external provider before these gates have 
 
 - Added regression tests for organisation-scoped evidence lookups for candidates, jobs, applications, interviews and recorded recommendations. Missing records outside the requested organisation must resolve to HTTP 404 and must not be sent to the provider.
 - Added role-guard tests ensuring a viewer cannot run candidate summaries or generate interview questions.
-- These tests have been committed to the feature branch; the latest test commit has not yet produced a verifiable CI run, so they are not marked passed.
+- The latest verified Section 7 workflow for commit `e35571309e70afa9025271dbbce99127925c233c` passed backend dependency installation, Python compile, backend unit tests, frontend dependency installation and TypeScript typecheck. The tenant-isolation, role-guard and human-review audit tests were included in that successful run.
 - A live staging catalogue query confirmed all ten Section 7 tables have RLS enabled and one explicit read policy each. The policies for member-readable records scope membership to the row's organisation; evaluation, fairness and incident tables are restricted to organisation owners/admins.
 - The staging security advisor also reports broader existing findings outside this Section 7 migration: eight assessment/candidate-document tables have RLS but no policies; public.is_org_member(uuid) is a callable SECURITY DEFINER helper; the vector extension is in public; and leaked-password protection is disabled. These require a separate impact review before changing shared security primitives, because the membership helper is used by existing RLS policies.
 
@@ -79,5 +79,5 @@ Do not send real candidate data to an external provider before these gates have 
 
 - Job-description and interview-kit review audit events now retain the review outcome and the reviewer's supplied override/send-back rationale.
 - Added unit tests for both review endpoints to verify that the reason is persisted in audit-event metadata.
-- Verification remains pending until the branch CI executes successfully.
+- The same verified Section 7 workflow passed the backend unit test suite, including both review-audit tests.
 
