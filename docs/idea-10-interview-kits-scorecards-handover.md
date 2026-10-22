@@ -50,6 +50,7 @@ This branch adds a first implementation increment for versioned interview kits, 
 - supabase/migrations/20261022120000_interview_kits_scorecards.sql
 - backend/app/schemas/interview_scorecards.py
 - backend/app/schemas/interview_scorecard_decisions.py
+- backend/app/schemas/interview_scorecard_decisions.py
 - backend/app/services/interview_scorecard_service.py
 - backend/app/routers/interview_scorecards.py
 - backend/app/main.py
