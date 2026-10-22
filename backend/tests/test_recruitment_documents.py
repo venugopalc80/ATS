@@ -50,7 +50,7 @@ class RecruitmentDocumentTemplateTests(unittest.TestCase):
 
     def test_accepts_docx_upload_signature(self):
         self.assertEqual(
-            _validate_recruitment_file(b"PK\\x03\\x04body", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            _validate_recruitment_file(b"PK\x03\x04body", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
             ".docx",
         )
 
