@@ -55,6 +55,7 @@ This branch adds a first implementation increment for versioned interview kits, 
 - backend/app/routers/interview_scorecards.py
 - backend/app/main.py
 - backend/tests/test_interview_scorecard_schemas.py
+- backend/tests/test_interview_scorecard_permissions.py
 - frontend/app/interview-kits/page.tsx
 - frontend/app/interviews/page.tsx
 - frontend/app/interviews/[id]/page.tsx
