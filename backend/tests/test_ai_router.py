@@ -4,7 +4,7 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.routers.ai import GenerateInput, RecommendationInput, router
+from app.routers.ai import GenerateInput, RecommendationInput, ReviewInput, router
 
 
 class AIRouterContractTests(unittest.TestCase):
@@ -143,6 +143,61 @@ class AIRoleGuardTests(unittest.TestCase):
                     asyncio.run(assistant(payload, user_id=uuid4()))
 
         self.assertEqual(caught.exception.status_code, 403)
+
+
+
+class HumanReviewAuditTests(unittest.TestCase):
+    def _assert_review_reason_is_audited(self, endpoint_name, row, entity_id):
+        import asyncio
+        import json
+        from unittest.mock import MagicMock, patch
+        from app.routers.ai import review_job_description, review_interview_kit
+
+        organization_id = uuid4()
+        user_id = uuid4()
+        reason = "Reviewer changed the draft because it included an unsupported requirement"
+        payload = ReviewInput(
+            organization_id=organization_id,
+            approved=False,
+            override_reason=reason,
+        )
+        cursor = MagicMock()
+        cursor.fetchone.return_value = row
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__.return_value = cursor
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.cursor.return_value = cursor_cm
+
+        endpoint = review_job_description if endpoint_name == "job_description" else review_interview_kit
+        endpoint_args = (entity_id, payload)
+        with patch("app.routers.ai.assert_org_member"), \\
+             patch("app.routers.ai.get_org_role", return_value="recruiter"), \\
+             patch("app.routers.ai.get_connection", return_value=connection):
+            asyncio.run(endpoint(*endpoint_args, user_id=user_id))
+
+        audit_call = cursor.execute.call_args_list[-1]
+        metadata = json.loads(audit_call.args[1][-1])
+        self.assertEqual(metadata["override_reason"], reason)
+        self.assertFalse(metadata["approved"])
+
+    def test_job_description_review_reason_is_audited(self):
+        entity_id = uuid4()
+        self._assert_review_reason_is_audited(
+            "job_description",
+            {"id": entity_id, "job_id": uuid4(), "version_number": 2, "status": "in_review",
+             "reviewed_by": uuid4(), "reviewed_at": "2026-10-22T12:00:00Z"},
+            entity_id,
+        )
+
+    def test_interview_kit_review_reason_is_audited(self):
+        entity_id = uuid4()
+        self._assert_review_reason_is_audited(
+            "interview_kit",
+            {"id": entity_id, "job_id": uuid4(), "version_number": 2, "status": "in_review",
+             "reviewed_by": uuid4(), "reviewed_at": "2026-10-22T12:00:00Z"},
+            entity_id,
+        )
 
 
 
