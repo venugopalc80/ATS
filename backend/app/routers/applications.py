@@ -4,7 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 
 from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
-from app.schemas.applications import ApplicationCreate, ApplicationOut, ApplicationUpdate
+from app.schemas.applications import (
+    ApplicationCreate, ApplicationOut, ApplicationStageHistoryOut,
+    ApplicationTransition, ApplicationUpdate,
+)
 from app.services.application_service import ApplicationService
 
 router = APIRouter(prefix="/api/applications", tags=["applications"])
@@ -75,9 +78,50 @@ async def update_application(
             raise HTTPException(status_code=404, detail="Application not found")
         assert_org_member(user_id, existing["organization_id"])
         row = await service.update_application(application_id, payload, user_id)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Application not found")
         return ApplicationOut.model_validate(row)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
+
+
+@router.post("/{application_id}/transition", response_model=ApplicationOut)
+async def transition_application(
+    application_id: UUID,
+    payload: ApplicationTransition,
+    user_id: UUID = Depends(get_current_user_id),
+) -> ApplicationOut:
+    try:
+        existing = await service.get_application(application_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Application not found")
+        assert_org_member(user_id, existing["organization_id"])
+        row = await service.transition_application(
+            application_id, payload.status, user_id, payload.reason
+        )
+        if row is None:
+            raise HTTPException(status_code=404, detail="Application not found")
+        return ApplicationOut.model_validate(row)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
+
+
+@router.get("/{application_id}/history", response_model=list[ApplicationStageHistoryOut])
+async def application_stage_history(
+    application_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[ApplicationStageHistoryOut]:
+    try:
+        existing = await service.get_application(application_id)
+        if existing is None:
+            raise HTTPException(status_code=404, detail="Application not found")
+        assert_org_member(user_id, existing["organization_id"])
+        rows = await service.list_stage_history(application_id, existing["organization_id"])
+        return [ApplicationStageHistoryOut.model_validate(row) for row in rows]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
