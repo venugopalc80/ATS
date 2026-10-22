@@ -186,3 +186,10 @@ A further read-only inspection of ATS-Staging confirmed:
 - RLS is enabled, and `anon` and `authenticated` have no direct SELECT or INSERT grants on the history table.
 - The committed migration is still not represented in the Supabase migration ledger. Treat the live staging object as manually provisioned/drifted until that history is reconciled; do not blindly reapply or mark it as tracked.
 - `application_stage_config` is absent from staging and production, so migration 015 has not been applied to either environment.
+
+
+### Latest CI and data readiness (2026-10-22)
+
+- PR #69 head `846ba70ee5eae304569cd6aa62825e1beec00662`: GitHub Actions run #539 passed backend unit tests, frontend typecheck and frontend production build. Run: https://github.com/venugopalc80/ATS/actions/runs/39807441180
+- Read-only aggregate queries returned **zero application rows in both ATS-Staging and ATS production**. Therefore no existing live application data was available to validate status compatibility, baseline history seeding, or a realistic end-to-end stage transition.
+- This is a data-readiness gap, not proof that the schema is broken. Before staging acceptance, create isolated test fixtures under a controlled test organisation or use a disposable database, then verify create → transition → history, invalid transition rejection, and cross-tenant denial.
