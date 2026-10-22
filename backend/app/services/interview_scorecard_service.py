@@ -252,6 +252,8 @@ def save_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID,
                 raise ValueError("Responses must reference competencies from the selected template")
             if submit and provided != expected:
                 raise ValueError("Complete every competency before submitting feedback")
+            if submit and any(not item.evidence.strip() for item in payload.responses):
+                raise ValueError("Every competency needs specific supporting evidence before submission")
             if feedback is None:
                 cursor.execute(
                     """insert into public.interview_feedback
