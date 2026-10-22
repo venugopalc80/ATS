@@ -41,8 +41,8 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'workflow_definitions_active_version_fk') then
     alter table public.workflow_definitions
       add constraint workflow_definitions_active_version_fk
-      foreign key (organization_id, active_version_id)
-      references public.workflow_versions(organization_id, id) on delete set null;
+      foreign key (active_version_id)
+      references public.workflow_versions(id) on delete set null;
   end if;
 end $$;
 
