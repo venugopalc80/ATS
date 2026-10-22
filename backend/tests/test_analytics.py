@@ -83,6 +83,11 @@ class FakeAnalyticsCursor:
                 {"stage": "screening", "stage_visits": 7, "distinct_applications": 6},
                 {"stage": "interview", "stage_visits": 4, "distinct_applications": 3},
             ]
+        if "as completed_intervals" in self.sql:
+            return [{
+                "stage": "screening", "completed_intervals": 4,
+                "median_days": 2.0, "p75_days": 3.0, "p90_days": 5.0,
+            }]
         if "group by a.status" in self.sql:
             return [{"status": "interview", "distinct_applications": 3}]
         if "as source" in self.sql and "completed_interviews" in self.sql:
@@ -189,8 +194,11 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(result["low_sample_size"])
         self.assertEqual(result["stages"][0]["stage_visits"], 7)
         self.assertEqual(result["stages"][0]["distinct_applications"], 6)
+        self.assertEqual(result["stage_waiting_time"][0]["median_days"], 2.0)
+        self.assertEqual(result["stage_waiting_time"][0]["p90_days"], 5.0)
         self.assertIn("h.organization_id=%s", self.cursor.queries[0][0])
-        self.assertIn("count(distinct h.application_id)", self.cursor.queries[2][0])
+        self.assertIn("count(distinct h.application_id)", self.cursor.queries[3][0])
+        self.assertIn("lead(h.created_at)", self.cursor.queries[1][0])
 
 
     async def test_workload_returns_counts_and_separates_unassigned_demand(self):
