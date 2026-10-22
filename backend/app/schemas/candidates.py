@@ -22,9 +22,6 @@ class CandidateBase(BaseModel):
     years_experience: Decimal | None = Field(default=None, ge=0, le=80)
     skills: list[str] = Field(default_factory=list)
     ai_summary: str | None = None
-    consent_recorded_at: datetime | None = None
-    consent_purpose: str | None = None
-    retention_until: datetime | None = None
 
 
 class CandidateCreate(CandidateBase):
