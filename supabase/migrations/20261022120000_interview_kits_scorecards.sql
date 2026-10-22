@@ -275,3 +275,39 @@ for each row execute function public.prevent_submitted_scorecard_response_mutati
 
 revoke all on function public.prevent_submitted_interview_feedback_mutation() from public;
 revoke all on function public.prevent_submitted_scorecard_response_mutation() from public;
+
+
+create table if not exists public.interview_scorecard_decisions (
+  id uuid primary key default gen_random_uuid(),
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  interview_id uuid not null references public.interviews(id) on delete cascade,
+  reviewer_id uuid not null references public.profiles(id) on delete restrict,
+  decision text not null check (decision in ('proceed','decline','additional_interview','hold')),
+  rationale text not null check (length(trim(rationale)) between 20 and 4000),
+  evidence_snapshot jsonb not null check (jsonb_typeof(evidence_snapshot) = 'array' and jsonb_array_length(evidence_snapshot) > 0),
+  created_at timestamptz not null default now(),
+  unique (organization_id, id)
+);
+create index if not exists interview_scorecard_decisions_interview_idx
+  on public.interview_scorecard_decisions(organization_id, interview_id, created_at desc);
+alter table public.interview_scorecard_decisions enable row level security;
+drop policy if exists interview_scorecard_decisions_member_all on public.interview_scorecard_decisions;
+create policy interview_scorecard_decisions_member_all on public.interview_scorecard_decisions
+  for all using (public.is_org_member(organization_id))
+  with check (public.is_org_member(organization_id));
+revoke all on public.interview_scorecard_decisions from anon, authenticated;
+
+create or replace function public.prevent_interview_scorecard_decision_mutation()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  raise exception 'Recorded interview decisions are immutable; create a subsequent review record';
+end;
+$$;
+drop trigger if exists interview_scorecard_decision_immutable on public.interview_scorecard_decisions;
+create trigger interview_scorecard_decision_immutable
+before update or delete on public.interview_scorecard_decisions
+for each row execute function public.prevent_interview_scorecard_decision_mutation();
+revoke all on function public.prevent_interview_scorecard_decision_mutation() from public;
