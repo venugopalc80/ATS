@@ -14,7 +14,12 @@ type Campaign = {
   referrals: number;
   qualified_referrals: number;
   hired_referrals: number;
-  budget_per_hire?: number | null;
+  qualified_applications: number;
+  interview_progressed_applications: number;
+  hired_applications: number;
+  channel_spend?: number | null;
+  channel_spend_currency?: string | null;
+  cost_per_hire?: number | null;
 };
 type Referral = {
   id: string;
@@ -38,7 +43,10 @@ export default function RecruitmentCampaignsPage() {
   const [budgetCurrency, setBudgetCurrency] = useState("GBP");
   const [channelKey, setChannelKey] = useState("employee_referral");
   const [channelLabel, setChannelLabel] = useState("");
+  const [channelSpend, setChannelSpend] = useState("");
+  const [channelSpendCurrency, setChannelSpendCurrency] = useState("GBP");
   const [candidateId, setCandidateId] = useState("");
+  const [applicationId, setApplicationId] = useState("");
   const [referrerName, setReferrerName] = useState("");
   const [referralNotes, setReferralNotes] = useState("");
   const [loading, setLoading] = useState(false);
@@ -115,11 +123,12 @@ export default function RecruitmentCampaignsPage() {
           organization_id: organizationId,
           channel_key: channelKey,
           source_label: channelLabel.trim() || null,
+          ...(channelSpend ? { spend_amount: Number(channelSpend), spend_currency: channelSpendCurrency } : {}),
         }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Could not add channel.");
-      setChannelLabel("");
+      setChannelLabel(""); setChannelSpend("");
       setMessage("Campaign channel added.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Could not add channel.");
@@ -140,13 +149,14 @@ export default function RecruitmentCampaignsPage() {
           organization_id: organizationId,
           campaign_id: selectedCampaign,
           ...(candidateId.trim() ? { candidate_id: candidateId.trim() } : {}),
+          ...(applicationId.trim() ? { application_id: applicationId.trim() } : {}),
           ...(referrerName.trim() ? { referrer_name: referrerName.trim() } : {}),
           ...(referralNotes.trim() ? { notes: referralNotes.trim() } : {}),
         }),
       });
       const body = await response.json();
       if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Could not create referral.");
-      setCandidateId(""); setReferrerName(""); setReferralNotes("");
+      setCandidateId(""); setApplicationId(""); setReferrerName(""); setReferralNotes("");
       await loadReferrals(organizationId, selectedCampaign);
       await loadCampaigns(organizationId);
       setMessage("Referral recorded.");
@@ -208,11 +218,13 @@ export default function RecruitmentCampaignsPage() {
         <div className="card-head"><span className="card-title">Campaign performance</span><span className="muted-small">{campaigns.length} campaigns</span></div>
         {campaigns.length === 0 ? <p className="muted-small">No campaigns created yet.</p> : (
           <div style={{ overflowX: "auto" }}><table className="table">
-            <thead><tr><th>Campaign</th><th>Attributed candidates</th><th>Referrals</th><th>Qualified</th><th>Hired referrals</th><th>Budget per hire</th></tr></thead>
+            <thead><tr><th>Campaign</th><th>Attributed candidates</th><th>Referrals</th><th>Qualified</th><th>Hired referrals</th><th>Qualified applications</th><th>Interview progress</th><th>Hired applications</th><th>Channel spend</th><th>Cost per hire</th></tr></thead>
             <tbody>{campaigns.map((campaign) => <tr key={campaign.id}>
               <td><button type="button" className="link" onClick={() => setSelectedCampaign(campaign.id)}>{campaign.name}</button><div className="muted-small">{campaign.status}</div></td>
               <td>{campaign.attributed_candidates ?? 0}</td><td>{campaign.referrals ?? 0}</td><td>{campaign.qualified_referrals ?? 0}</td><td>{campaign.hired_referrals ?? 0}</td>
-              <td>{campaign.budget_per_hire == null ? "—" : `${campaign.budget_currency ?? ""} ${Number(campaign.budget_per_hire).toFixed(2)}`}</td>
+              <td>{campaign.qualified_applications ?? 0}</td><td>{campaign.interview_progressed_applications ?? 0}</td><td>{campaign.hired_applications ?? 0}</td>
+              <td>{campaign.channel_spend == null ? "—" : `${campaign.channel_spend_currency ?? ""} ${Number(campaign.channel_spend).toFixed(2)}`}</td>
+              <td>{campaign.cost_per_hire == null ? "—" : `${campaign.channel_spend_currency ?? ""} ${Number(campaign.cost_per_hire).toFixed(2)}`}</td>
             </tr>)}</tbody>
           </table></div>
         )}
@@ -226,6 +238,8 @@ export default function RecruitmentCampaignsPage() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
                 <label>Channel<select value={channelKey} onChange={(event) => setChannelKey(event.target.value)}><option value="employee_referral">Employee referral</option><option value="careers_site">Careers site</option><option value="linkedin">LinkedIn</option><option value="job_board">Job board</option><option value="agency">Agency</option><option value="event">Event</option><option value="email">Email</option><option value="social">Social</option><option value="other">Other</option></select></label>
                 <label>Source label (optional)<input value={channelLabel} onChange={(event) => setChannelLabel(event.target.value)} placeholder="University careers fair" /></label>
+                <label>Recorded channel spend (optional)<input type="number" min="0" step="0.01" value={channelSpend} onChange={(event) => setChannelSpend(event.target.value)} /></label>
+                <label>Spend currency<select value={channelSpendCurrency} onChange={(event) => setChannelSpendCurrency(event.target.value)}><option>GBP</option><option>USD</option><option>INR</option><option>AUD</option></select></label>
               </div>
               <button className="btn" disabled={loading}>Add channel</button>
             </form>
@@ -236,6 +250,7 @@ export default function RecruitmentCampaignsPage() {
             <form onSubmit={createReferral}>
               <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(220px,1fr))", gap: 12 }}>
                 <label>Candidate ID (optional)<input value={candidateId} onChange={(event) => setCandidateId(event.target.value)} placeholder="Existing candidate UUID" /></label>
+                <label>Application ID (optional)<input value={applicationId} onChange={(event) => setApplicationId(event.target.value)} placeholder="Application UUID for attribution metrics" /></label>
                 <label>Referrer name (optional)<input value={referrerName} onChange={(event) => setReferrerName(event.target.value)} maxLength={160} /></label>
               </div>
               <label>Notes<textarea rows={2} maxLength={2000} value={referralNotes} onChange={(event) => setReferralNotes(event.target.value)} /></label>
