@@ -13,8 +13,8 @@
 - Separate organisation-scoped `job_requisitions` table with controlled status, salary/budget/headcount validation, approver metadata, and a unique optional job link
 - Authenticated API endpoints for list, create draft, update draft/rejected request, submit, approve, reject, and convert to job
 - Idempotent conversion: repeated conversion requests return the existing linked job
-- Requisition activity entries written to `audit_events`
-- Jobs & Requisitions page with draft creation, search/status filtering, submit/approve/reject/convert actions
+- Requisition activity entries written to `audit_events`; edit events capture old/new values for changed fields
+- Jobs & Requisitions page with draft creation/edit-resume, tenant-scoped recruiter and hiring-manager assignment controls, search/status filtering, sortable columns, visible pagination, submit/approve/reject/convert actions
 - Vacancy close action uses a soft close instead of deleting the job row, preserving application links
 - Server-side status-transition and role checks for job updates; organisation membership checks for assignment links
 
@@ -26,12 +26,13 @@
 - [x] Requisition/job audit events added for key actions
 - [x] Vacancy closure preserves existing job/application rows
 - [x] Apply migrations to ATS-Staging and verify table columns, RLS, policies, and foreign-key indexes against the live staging schema
-- [ ] Verify draft edit/resume in the UI (API supports update, current page still needs an edit/resume interaction)
-- [ ] Add table sorting and visible pagination controls to the workspace
-- [ ] Add a recruiter assignment UI and confirm reassignment history metadata contains old/new values
-- [ ] Add endpoint/unit tests for each lifecycle transition, conversion retries, tenant-link mismatch, and job status transitions
-- [ ] Confirm CI on latest feature commit `2d433a6067296f1db888f092ea6ce7293fcf53ba` (run queued at last check; previous head passed backend tests, frontend typecheck, and production build)
-- [ ] Authenticated staging browser acceptance: roles, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
+- [x] Add draft edit/resume in the UI for draft/rejected requisitions
+- [x] Add table sorting and visible pagination controls to the workspace (client-side over the API's 100-row result cap)
+- [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
+- [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, and old/new edit audit metadata
+- [ ] Add/verify broader database-backed lifecycle and job status-transition tests
+- [ ] Confirm CI on latest feature commit `59ec0284fe40f5604ed35af2dad29c5b63d92f6a` (GitHub Actions run 39800613227 was queued at last check; Vercel checks still fail due to deployment rate limiting)
+- [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
 
 ## Main implementation files
