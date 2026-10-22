@@ -894,3 +894,58 @@ async def cleanup_expired_ai_runs(organization_id: UUID, user_id: UUID = Depends
             return {"deleted_count": len(deleted_ids), "cleanup_at": datetime.now(timezone.utc)}
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_error(exc) from exc
+
+
+@router.put("/job-description-versions/{version_id}")
+async def edit_job_description_draft(
+    version_id: UUID,
+    payload: DraftEditInput,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, payload.organization_id)
+    if get_org_role(user_id, payload.organization_id) not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Job description editing permission required")
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """update public.ai_job_description_versions set content=%s
+                   where id=%s and organization_id=%s and status in ('draft','in_review')
+                   returning id, job_id, version_number, status, content""",
+                [payload.content, version_id, payload.organization_id],
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=409, detail="Only an editable draft can be changed")
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.put("/interview-kits/{kit_id}")
+async def edit_interview_kit_draft(
+    kit_id: UUID,
+    payload: DraftEditInput,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, payload.organization_id)
+    if get_org_role(user_id, payload.organization_id) not in {"owner", "admin", "recruiter", "hiring_manager"}:
+        raise HTTPException(status_code=403, detail="Interview kit editing permission required")
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """update public.ai_interview_kits set questions=%s::jsonb
+                   where id=%s and organization_id=%s and status in ('draft','in_review')
+                   returning id, job_id, version_number, status, questions""",
+                [json.dumps({"draft_text": payload.content, "review_required": True}),
+                 kit_id, payload.organization_id],
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=409, detail="Only an editable interview kit draft can be changed")
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
