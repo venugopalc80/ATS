@@ -141,7 +141,11 @@ set search_path = public, pg_temp
 as $$
 begin
   if tg_op = 'DELETE' then
-    raise exception 'Recruitment document versions cannot be deleted; revoke or supersede them';
+    -- Permit parent-organization cascades while blocking direct version deletion.
+    if pg_trigger_depth() = 1 then
+      raise exception 'Recruitment document versions cannot be deleted; revoke or supersede them';
+    end if;
+    return old;
   end if;
   if new.organization_id is distinct from old.organization_id
      or new.document_group_id is distinct from old.document_group_id
@@ -173,9 +177,13 @@ language plpgsql
 set search_path = public, pg_temp
 as $$
 begin
+  -- Permit parent-organization/template cascades while blocking direct edits/deletes.
+  if tg_op = 'DELETE' and pg_trigger_depth() > 1 then
+    return old;
+  end if;
   raise exception 'Recruitment template versions are immutable; create a new version';
 end;
-$$;
+$;
 drop trigger if exists recruitment_template_versions_immutable on public.recruitment_document_template_versions;
 create trigger recruitment_template_versions_immutable
 before update or delete on public.recruitment_document_template_versions
