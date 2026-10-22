@@ -31,17 +31,17 @@ class CandidateCreate(CandidateBase):
 
 
 class CandidateUpdate(BaseModel):
-    first_name: str | None = Field(default=None, min_length=1, max_length=100)
+    first_name: str = Field(default=None, min_length=1, max_length=100)
     last_name: str | None = Field(default=None, max_length=100)
     email: str | None = Field(default=None, max_length=320)
     phone: str | None = Field(default=None, max_length=50)
     city: str | None = Field(default=None, max_length=120)
     region: str | None = Field(default=None, max_length=120)
     country_code: CountryCode | None = None
-    status: CandidateStatus | None = None
+    status: CandidateStatus = None
     current_title: str | None = Field(default=None, max_length=200)
     years_experience: Decimal | None = Field(default=None, ge=0, le=80)
-    skills: list[str] | None = None
+    skills: list[str] = Field(default=None)
     ai_summary: str | None = None
 
     model_config = {"extra": "forbid"}
