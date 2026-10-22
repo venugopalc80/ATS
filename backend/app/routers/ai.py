@@ -696,6 +696,11 @@ async def review_job_description(version_id: UUID, payload: ReviewInput, user_id
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Editable job description draft not found")
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_job_description_reviewed','ai_job_description_version',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, row["id"], json.dumps({"status": row["status"], "version_number": row["version_number"]})],
+            )
             return row
     except HTTPException:
         raise
@@ -768,6 +773,11 @@ async def review_interview_kit(kit_id: UUID, payload: ReviewInput, user_id: UUID
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=404, detail="Interview kit draft not found")
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_interview_kit_reviewed','ai_interview_kit',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, row["id"], json.dumps({"status": row["status"], "version_number": row["version_number"]})],
+            )
             return row
     except HTTPException:
         raise
@@ -916,6 +926,11 @@ async def edit_job_description_draft(
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=409, detail="Only an editable draft can be changed")
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_job_description_draft_edited','ai_job_description_version',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, row["id"], json.dumps({"version_number": row["version_number"]})],
+            )
             return row
     except HTTPException:
         raise
@@ -944,6 +959,11 @@ async def edit_interview_kit_draft(
             row = cur.fetchone()
             if not row:
                 raise HTTPException(status_code=409, detail="Only an editable interview kit draft can be changed")
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_interview_kit_draft_edited','ai_interview_kit',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, row["id"], json.dumps({"version_number": row["version_number"]})],
+            )
             return row
     except HTTPException:
         raise
