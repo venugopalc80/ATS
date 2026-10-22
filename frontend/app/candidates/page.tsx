@@ -189,6 +189,8 @@ export default function CandidatesPage() {
           organization_id: organizationId,
           page: String(page),
           page_size: String(pageSize),
+          sort_by: sortBy,
+          sort_direction: sortDirection,
         });
         if (query.trim()) params.set("search", query.trim());
         if (status !== "all") params.set("status", status);
@@ -210,13 +212,9 @@ export default function CandidatesPage() {
 
     void load();
     return () => { cancelled = true; };
-  }, [page, pageSize, query, status, country, refreshKey]);
+  }, [page, pageSize, query, status, country, sortBy, sortDirection, refreshKey]);
 
-  const filtered = useMemo(() => candidates.slice().sort((a, b) => {
-    const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
-    const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
-    return sortDirection === "asc" ? comparison : -comparison;
-  }), [candidates, sortBy, sortDirection]);
+  const filtered = candidates;
 
   const pageCount = Math.max(1, Math.ceil(totalCandidates / pageSize));
   const visibleCandidates = filtered;
