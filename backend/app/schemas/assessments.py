@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, ConfigDict, model_validator
+from pydantic import BaseModel, Field, ConfigDict, model_validator, field_validator
 
 AssessmentType = Literal["work_sample", "technical_exercise", "written_task", "external_test"]
 TemplateStatus = Literal["draft", "published", "archived"]
@@ -71,6 +71,13 @@ class AssessmentAssignmentCreate(BaseModel):
     idempotency_key: str | None = Field(default=None, min_length=8, max_length=128)
     accommodation_requested: bool = False
     accommodation_arrangements: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("due_at")
+    @classmethod
+    def deadline_must_be_timezone_aware(cls, value):
+        if value is not None and value.tzinfo is None:
+            raise ValueError("Deadline must include a timezone")
+        return value
 
 
 class AssessmentAssignmentUpdate(BaseModel):
