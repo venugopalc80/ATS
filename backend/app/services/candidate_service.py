@@ -23,6 +23,8 @@ class CandidateService:
         country_code: str | None = None,
         page: int | None = None,
         page_size: int = 25,
+        sort_by: str = "name",
+        sort_direction: str = "asc",
     ) -> tuple[list[dict[str, Any]], int]:
         where = " where organization_id = %s"
         params: list[Any] = [organization_id]
@@ -49,7 +51,15 @@ class CandidateService:
                 total_row = cursor.fetchone()
                 total = int(total_row["total"] if total_row else 0)
                 query = f"select {CANDIDATE_COLUMNS} from public.candidates" + where
-                query += " order by created_at desc, id asc"
+                sort_columns = {
+                    "name": "lower(first_name), lower(coalesce(last_name, ''))",
+                    "title": "lower(coalesce(current_title, ''))",
+                    "location": "lower(coalesce(city, '')), lower(coalesce(region, ''))",
+                    "status": "status",
+                }
+                order_by = sort_columns.get(sort_by, sort_columns["name"])
+                direction = "DESC" if sort_direction.lower() == "desc" else "ASC"
+                query += f" order by {order_by} {direction}, id asc"
                 query_params = list(params)
                 if page is not None:
                     query += " limit %s offset %s"
