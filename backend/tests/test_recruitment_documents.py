@@ -4,7 +4,7 @@ import unittest
 
 from fastapi import HTTPException
 
-from app.routers.recruitment_documents import _template_body, verify_adapter_signature
+from app.routers.recruitment_documents import _template_body, _validate_recruitment_file, verify_adapter_signature
 
 
 class RecruitmentDocumentTemplateTests(unittest.TestCase):
@@ -43,6 +43,26 @@ class RecruitmentDocumentTemplateTests(unittest.TestCase):
 
     def test_rejects_invalid_timestamp(self):
         self.assertFalse(verify_adapter_signature(b"{}", "not-a-time", "00", "secret", now=2000))
+
+
+    def test_accepts_pdf_upload_signature(self):
+        self.assertEqual(_validate_recruitment_file(b"%PDF-1.7 body", "application/pdf"), ".pdf")
+
+    def test_accepts_docx_upload_signature(self):
+        self.assertEqual(
+            _validate_recruitment_file(b"PK\\x03\\x04body", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"),
+            ".docx",
+        )
+
+    def test_rejects_wrong_file_signature(self):
+        with self.assertRaises(HTTPException) as error:
+            _validate_recruitment_file(b"not a pdf", "application/pdf")
+        self.assertEqual(error.exception.status_code, 415)
+
+    def test_rejects_unsupported_upload_type(self):
+        with self.assertRaises(HTTPException) as error:
+            _validate_recruitment_file(b"hello", "text/plain")
+        self.assertEqual(error.exception.status_code, 415)
 
 
 if __name__ == "__main__":
