@@ -156,6 +156,11 @@ async def update_application(
         if existing is None:
             raise HTTPException(status_code=404, detail="Application not found")
         assert_org_member(user_id, existing["organization_id"])
+        if "status" in payload.model_fields_set:
+            raise HTTPException(
+                status_code=409,
+                detail="Application stage changes must use the transition endpoint with a reason",
+            )
         row = await service.update_application(application_id, payload, user_id)
         if row is None:
             raise HTTPException(status_code=404, detail="Application not found")
