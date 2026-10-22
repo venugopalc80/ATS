@@ -14,6 +14,9 @@ on:
       - "backend/app/routers/platform_ops.py"
       - "backend/tests/test_platform_ops.py"
       - "supabase/migrations/20261022160000_section9_platform_support.sql"
+      - "frontend/app/platform/ops/page.tsx"
+      - "frontend/package.json"
+      - "frontend/tsconfig.json"
       - "frontend/app/billing/page.tsx"
       - "frontend/app/settings/page.tsx"
       - "frontend/app/help/page.tsx"
@@ -62,3 +65,17 @@ jobs:
       - name: Test Stripe webhook safeguards
         working-directory: backend
         run: python -m unittest discover -s tests -p "test_billing_webhooks.py" -v
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
