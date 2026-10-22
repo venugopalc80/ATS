@@ -868,8 +868,17 @@ async def analytics_campaign_roi(
             spend = float(row["spend_amount"]) if row["spend_amount"] is not None else None
             hires = row["hires"]
             applications = row["applications"]
-            row["cost_per_application"] = spend / applications if spend is not None and applications else None
-            row["cost_per_hire"] = spend / hires if spend is not None and hires else None
+            comparable_spend_period = date_from is None and date_to is None
+            row["cost_per_application"] = (
+                spend / applications if comparable_spend_period and spend is not None and applications else None
+            )
+            row["cost_per_hire"] = (
+                spend / hires if comparable_spend_period and spend is not None and hires else None
+            )
+            row["cost_metrics_status"] = (
+                "all_time_channel_spend_snapshot" if comparable_spend_period
+                else "period_spend_history_not_available"
+            )
             row["sample_warning"] = applications < 5
             row["financial_roi"] = None
             row["financial_roi_status"] = "revenue_data_not_available"
@@ -888,6 +897,7 @@ async def analytics_campaign_roi(
             "campaign_channels": rows,
             "limitations": [
                 "Spend and budget remain in their recorded currencies; amounts across different currencies are never summed or compared.",
+                "Channel spend is stored as a current snapshot, not a dated spend ledger. Cost per application/hire is returned only for an all-time attribution cohort; period-filtered cost metrics are null.",
                 "Cost per application and cost per hire are efficiency measures, not financial ROI.",
                 "Financial ROI is unavailable until attributable placement revenue or an approved value proxy is recorded.",
                 "Only applications linked through campaign memberships are attributed; unattributed applications are not assigned to a campaign.",
