@@ -236,6 +236,24 @@ async def create_message_draft(
                     message = cursor.fetchone()
                     if message is None:
                         raise HTTPException(status_code=409, detail="Idempotency key conflict")
+                    cursor.execute(
+                        """
+                        select recipient_address from public.message_recipients
+                        where organization_id=%s and message_id=%s and recipient_type='to'
+                        order by created_at asc limit 1
+                        """,
+                        [organization_id, message["id"]],
+                    )
+                    existing_recipient = cursor.fetchone()
+                    same_request = (
+                        message["body_text"] == payload.body_text.strip()
+                        and message["subject"] == payload.subject
+                        and message["channel"] == payload.channel
+                        and existing_recipient is not None
+                        and existing_recipient["recipient_address"] == payload.recipient_address.strip()
+                    )
+                    if not same_request:
+                        raise HTTPException(status_code=409, detail="Idempotency key was already used for a different message")
                     return message
                 cursor.execute(
                     """
