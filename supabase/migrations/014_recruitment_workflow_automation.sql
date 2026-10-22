@@ -5,6 +5,7 @@ create table if not exists public.workflow_definitions (
   organization_id uuid not null references public.organizations(id) on delete cascade,
   name text not null check (length(trim(name)) between 1 and 120),
   description text,
+  draft_definition jsonb not null default '{}'::jsonb check (jsonb_typeof(draft_definition) = 'object'),
   status text not null default 'draft' check (status in ('draft','published','disabled')),
   created_by uuid references public.profiles(id) on delete set null,
   updated_by uuid references public.profiles(id) on delete set null,
