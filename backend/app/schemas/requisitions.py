@@ -74,6 +74,16 @@ class RequisitionUpdate(BaseModel):
     target_start_date: date | None = None
     target_close_date: date | None = None
 
+    @field_validator("title", "justification")
+    @classmethod
+    def trim_optional_required_text(cls, value: str | None) -> str | None:
+        if value is None:
+            return value
+        value = value.strip()
+        if not value:
+            raise ValueError("This field cannot be blank")
+        return value
+
     @model_validator(mode="after")
     def validate_ranges(self):
         values = self.model_dump(exclude_unset=True)
