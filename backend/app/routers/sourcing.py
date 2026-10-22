@@ -51,6 +51,13 @@ class SavedSearchUpdate(BaseModel):
     alerts_enabled: bool | None = None
 
 
+class CandidateTagCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    organization_id: UUID
+    name: str = Field(min_length=1, max_length=60)
+    colour: str = Field(default="#64748b", pattern=r"^#[0-9A-Fa-f]{6}$")
+
+
 class PoolCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     organization_id: UUID
@@ -795,6 +802,107 @@ async def list_candidate_import_batches(organization_id: UUID, user_id: UUID = D
                     from public.import_batches where organization_id=%s order by created_at desc limit 100""",
                     [organization_id])
                 return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.get("/candidate-tags")
+async def list_candidate_tags(organization_id: UUID, candidate_id: UUID | None = None,
+                              user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                if candidate_id:
+                    cursor.execute("select id from public.candidates where id=%s and organization_id=%s",
+                                   [candidate_id,organization_id])
+                    if cursor.fetchone() is None:
+                        raise HTTPException(status_code=404, detail="Candidate not found")
+                    cursor.execute("""select t.id,t.organization_id,t.name,t.colour,t.created_by,t.created_at,
+                        (a.candidate_id is not null) as assigned
+                        from public.candidate_tags t left join public.candidate_tag_assignments a
+                        on a.organization_id=t.organization_id and a.tag_id=t.id and a.candidate_id=%s
+                        where t.organization_id=%s order by t.name""", [candidate_id,organization_id])
+                else:
+                    cursor.execute("""select id,organization_id,name,colour,created_by,created_at
+                        from public.candidate_tags where organization_id=%s order by name""", [organization_id])
+                return list(cursor.fetchall())
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/candidate-tags", status_code=201)
+async def create_candidate_tag(payload: CandidateTagCreate, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_admin(user_id, payload.organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""insert into public.candidate_tags (organization_id,name,colour,created_by)
+                    values (%s,%s,%s,%s) returning id,organization_id,name,colour,created_by,created_at""",
+                    [payload.organization_id,payload.name.strip(),payload.colour,user_id])
+                return cursor.fetchone()
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+    except Exception as exc:
+        if "unique" in str(exc).lower():
+            raise HTTPException(status_code=409, detail="A tag with this name already exists") from exc
+        raise
+
+
+@router.put("/candidate-tags/{tag_id}/candidates/{candidate_id}")
+async def assign_candidate_tag(tag_id: UUID, candidate_id: UUID, organization_id: UUID,
+                               user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""insert into public.candidate_tag_assignments
+                    (organization_id,candidate_id,tag_id,assigned_by) select %s,c.id,t.id,%s
+                    from public.candidates c join public.candidate_tags t
+                      on t.id=%s and t.organization_id=c.organization_id
+                    where c.id=%s and c.organization_id=%s
+                    on conflict (organization_id,candidate_id,tag_id) do nothing
+                    returning organization_id,candidate_id,tag_id,assigned_by,created_at""",
+                    [organization_id,user_id,tag_id,candidate_id,organization_id])
+                row = cursor.fetchone()
+                if row is None:
+                    cursor.execute("""select 1 from public.candidate_tag_assignments
+                        where organization_id=%s and candidate_id=%s and tag_id=%s""",
+                        [organization_id,candidate_id,tag_id])
+                    if cursor.fetchone():
+                        raise HTTPException(status_code=409, detail="Tag is already assigned to this candidate")
+                    raise HTTPException(status_code=404, detail="Candidate or tag not found")
+                cursor.execute("""insert into public.audit_events
+                    (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+                    values (%s,%s,'candidate_tag_assigned','candidate',%s,%s::jsonb)""",
+                    [organization_id,user_id,candidate_id,json.dumps({"tag_id":str(tag_id)})])
+                return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.delete("/candidate-tags/{tag_id}/candidates/{candidate_id}", status_code=204)
+async def unassign_candidate_tag(tag_id: UUID, candidate_id: UUID, organization_id: UUID,
+                                 user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""delete from public.candidate_tag_assignments
+                    where organization_id=%s and candidate_id=%s and tag_id=%s""",
+                    [organization_id,candidate_id,tag_id])
+                if cursor.rowcount == 0:
+                    raise HTTPException(status_code=404, detail="Tag assignment not found")
+                cursor.execute("""insert into public.audit_events
+                    (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+                    values (%s,%s,'candidate_tag_unassigned','candidate',%s,%s::jsonb)""",
+                    [organization_id,user_id,candidate_id,json.dumps({"tag_id":str(tag_id)})])
+    except HTTPException:
+        raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_error(exc) from exc
 
