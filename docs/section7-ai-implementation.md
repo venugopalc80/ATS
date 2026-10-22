@@ -63,3 +63,13 @@ Do not send real candidate data to an external provider before these gates have 
 - [ ] Verify human approval is required before publishing a job description or using an interview kit.
 - [ ] Verify retention cleanup deletes only expired records in the selected organisation.
 - [ ] Verify a staging/preview session in an authenticated browser before production release.
+
+
+## Security verification work in progress (2026-10-22)
+
+- Added regression tests for organisation-scoped evidence lookups for candidates, jobs, applications, interviews and recorded recommendations. Missing records outside the requested organisation must resolve to HTTP 404 and must not be sent to the provider.
+- Added role-guard tests ensuring a viewer cannot run candidate summaries or generate interview questions.
+- These tests have been committed to the feature branch; the latest test commit has not yet produced a verifiable CI run, so they are not marked passed.
+- A live staging catalogue query confirmed all ten Section 7 tables have RLS enabled and one explicit read policy each. The policies for member-readable records scope membership to the row's organisation; evaluation, fairness and incident tables are restricted to organisation owners/admins.
+- The staging security advisor also reports broader existing findings outside this Section 7 migration: eight assessment/candidate-document tables have RLS but no policies; public.is_org_member(uuid) is a callable SECURITY DEFINER helper; the vector extension is in public; and leaked-password protection is disabled. These require a separate impact review before changing shared security primitives, because the membership helper is used by existing RLS policies.
+
