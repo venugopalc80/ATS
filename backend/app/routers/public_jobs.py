@@ -172,9 +172,10 @@ async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn, organ
 
                 if payload.idempotency_key:
                     cursor.execute(
-                        """select application_id from public.application_submission_events
-                            where organization_id=%s and idempotency_key=%s limit 1""",
-                        [organization_id, payload.idempotency_key],
+                        """select e.application_id from public.application_submission_events e
+                            join public.applications a on a.id=e.application_id and a.organization_id=e.organization_id
+                            where e.organization_id=%s and e.idempotency_key=%s and a.job_id=%s limit 1""",
+                        [organization_id, payload.idempotency_key, job_id],
                     )
                     previous_submission = cursor.fetchone()
                     if previous_submission:
