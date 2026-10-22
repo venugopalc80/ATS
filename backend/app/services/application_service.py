@@ -4,14 +4,6 @@ from uuid import UUID
 from app.db import get_connection
 from app.schemas.applications import ApplicationCreate, ApplicationUpdate
 
-ALLOWED_APPLICATION_TRANSITIONS = {
-    "new": {"screening", "rejected", "withdrawn"},
-    "screening": {"submitted", "rejected", "withdrawn"},
-    "submitted": {"interview", "rejected", "withdrawn"},
-    "interview": {"offer", "rejected", "withdrawn"},
-    "offer": {"hired", "rejected", "withdrawn"},
-    "hired": set(), "rejected": set(), "withdrawn": set(),
-}
 APPLICATION_COLUMNS = "id, organization_id, job_id, candidate_id, source, status, match_score, match_explanation, human_reviewed, human_reviewed_by, human_reviewed_at, created_at, updated_at"
 STAGE_HISTORY_COLUMNS = "id, organization_id, application_id, previous_stage, new_stage, actor_user_id, reason, created_at"
 

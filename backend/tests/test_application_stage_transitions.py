@@ -144,6 +144,12 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
             await ApplicationService().transition_application(APPLICATION, "screening", USER, "Stage disabled")
         self.assertFalse(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
 
+    async def test_missing_stage_configuration_fails_closed(self):
+        self.cursor.stage_config = []
+        with self.assertRaisesRegex(ValueError, "Application stage configuration is missing"):
+            await ApplicationService().transition_application(APPLICATION, "screening", USER, "Missing config")
+        self.assertFalse(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
+
 
 if __name__ == "__main__":
     unittest.main()
