@@ -46,14 +46,14 @@ Do not send real candidate data to an external provider before these gates have 
 - Interview-kit output is stored as a draft payload and must be reviewed and structured by an authorised interviewer before use.
 - The current AI workspace does not yet provide a full graphical workflow for every governance operation. API controls remain available for evaluation completion, incident remediation and retention cleanup.
 - The backend uses a server-side database connection. API endpoints perform explicit membership/role and organisation-scoped record checks; continue to test these checks with users from two organisations. RLS remains defence in depth for browser-visible tables.
-- Staging migration application and schema verification are still required. Do not apply the migration to production until PR review, CI, staging validation, provider/privacy approval and release acceptance are complete.
+- The two migrations were applied to `ATS-Staging`. Verified all 10 AI tables exist with RLS enabled, the expected scoped SELECT policies exist, and browser roles have only explicit authenticated SELECT grants (no `anon` grants or browser write/TRUNCATE privileges). Functional cross-tenant/RLS request tests are still required. Production has not been migrated.
 
 ## Verification checklist
 
 - [ ] GitHub Actions Python compile check passes on the latest PR head.
 - [ ] Backend unit tests pass on the latest PR head.
 - [ ] Frontend TypeScript check passes on the latest PR head.
-- [ ] Apply migration to a disposable/staging database and verify all constraints, indexes, policies and grants.
+- [x] Apply migrations to `ATS-Staging`; verify AI tables, RLS policies and browser grants.\n- [ ] Verify migration replay/upgrade behaviour from a clean disposable database.
 - [ ] Verify cross-tenant reads/writes fail for all AI endpoints.
 - [ ] Verify non-admins cannot configure use cases/models, inspect governance data, approve models, create fairness audits, remediate incidents or run retention cleanup.
 - [ ] Verify a model cannot be approved without documented data-processing approval and a passing evaluation.
