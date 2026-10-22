@@ -1,6 +1,10 @@
 -- Idea 05: versioned application forms, questions, answers and submission audit events.
 -- This migration is intentionally additive; existing candidate/application records remain the source of truth.
 
+-- Composite keys make tenant ownership enforceable at the database boundary.
+create unique index if not exists jobs_id_org_uidx on public.jobs (id, organization_id);
+create unique index if not exists applications_id_org_uidx on public.applications (id, organization_id);
+
 create table if not exists public.application_form_templates (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -52,12 +56,13 @@ create table if not exists public.application_form_questions (
 create table if not exists public.job_application_forms (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
-  job_id uuid not null references public.jobs(id) on delete cascade,
+  job_id uuid not null,
   form_version_id uuid not null,
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (organization_id, job_id),
+  foreign key (job_id, organization_id) references public.jobs(id, organization_id) on delete cascade,
   foreign key (form_version_id, organization_id)
     references public.application_form_versions(id, organization_id) on delete restrict
 );
@@ -65,13 +70,14 @@ create table if not exists public.job_application_forms (
 create table if not exists public.application_answers (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
-  application_id uuid not null references public.applications(id) on delete cascade,
+  application_id uuid not null,
   form_version_id uuid not null,
   question_id uuid not null,
   answer jsonb not null,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   unique (application_id, question_id),
+  foreign key (application_id, organization_id) references public.applications(id, organization_id) on delete cascade,
   foreign key (form_version_id, organization_id)
     references public.application_form_versions(id, organization_id) on delete restrict,
   foreign key (question_id, form_version_id, organization_id)
@@ -90,6 +96,7 @@ create table if not exists public.application_submission_events (
   idempotency_key text,
   metadata jsonb not null default '{}'::jsonb check (jsonb_typeof(metadata) = 'object'),
   created_at timestamptz not null default now(),
+  foreign key (application_id, organization_id) references public.applications(id, organization_id) on delete cascade,
   foreign key (form_version_id, organization_id)
     references public.application_form_versions(id, organization_id) on delete restrict
 );
