@@ -147,3 +147,31 @@ Until the complete 49-idea criteria inventory is reconciled, each update should 
 3. **Product-wide completion** as *not yet verified*, rather than inventing a precise percentage from PR counts.
 
 Current roadmap evidence coverage: detailed acceptance criteria located for Ideas 04–08 (**5/49 = 10.2%** of the idea IDs). This is documentation coverage, not implementation completion.
+
+
+## Idea 04 follow-up: API hardening and live database-state check (2026-10-22)
+
+### Code and CI
+
+- PR #69 now blocks status changes through generic `PATCH /api/applications/{id}` and directs callers to the dedicated transition endpoint. This closes the path that could change a stage without supplying the transition reason.
+- The transition API schema now requires a non-blank reason (1–1,000 characters) and trims surrounding whitespace.
+- Regression tests cover direct-PATCH rejection, required reason, and blank reason validation.
+- GitHub Actions run #533 passed on head `7801d9c983113426ab07f9fa6f5c4e74c3c9171c`: backend unit tests, frontend TypeScript typecheck, and frontend production build. Run: https://github.com/venugopalc80/ATS/actions/runs/39807051098
+- Vercel preview checks remain failed due to the team's build-rate-limit status, so no preview UX verification is claimed.
+
+### Read-only database evidence
+
+- **ATS-Staging** project `riauyrhfnlsxmtgipuxi`: `public.application_stage_history` exists; `public.application_stage_config` does not. The Supabase migration ledger has no application-stage migration entry. The history table was therefore created outside the committed migration ledger and must be reconciled before release.
+- **ATS** production project `olsziyaepfesjtkceuzo`: neither `public.application_stage_history` nor `public.application_stage_config` exists in the inspected schema. Its migration ledger has no application-stage migration.
+- These were read-only metadata/schema checks. No migration was applied to either database and no production data was changed.
+
+### Current Idea 04 score
+
+The acceptance score remains **2.5/6 = 41.7% evidenced**, with **58.3% not passed or not verified**. The API/CI gates have improved, but do not inflate the score while tenant-isolation API tests, migration reconciliation/application testing, bulk-operation partial-failure handling, candidate-vs-internal status separation, and full pipeline/SLA behaviour remain unverified or incomplete.
+
+### Next safe action
+
+1. Review the committed migrations against the existing staging history table and confirm migration filename/version conventions.
+2. Test migrations 014 and 015 in a disposable PostgreSQL database, including fresh install, re-run/partial-state behaviour, triggers, RLS and organisation seeding.
+3. Add authenticated API tests for cross-tenant access and admin-only stage configuration changes.
+4. Only after those pass, apply through the tracked migration mechanism to **ATS-Staging**, then run authenticated preview QA. Do not touch production until staging acceptance and release approval are complete.
