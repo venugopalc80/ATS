@@ -278,6 +278,7 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_forecast_uses_six_month_baseline_and_exposes_pending_demand(self):
         result = await analytics_router.analytics_forecast(
             organization_id=ORG,
+            recruiter_id=None,
             user_id=UUID("22222222-2222-4222-8222-222222222222"),
         )
         forecast = result["forecast"]
@@ -296,6 +297,10 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         response = await analytics_router.analytics_export(
             organization_id=ORG,
             report_type="forecast",
+            date_from=None,
+            date_to=None,
+            job_id=None,
+            recruiter_id=None,
             user_id=UUID("22222222-2222-4222-8222-222222222222"),
         )
         self.assertEqual(response.media_type, "text/csv")
@@ -312,6 +317,8 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
             organization_id=ORG,
             date_from=date(2026, 10, 1),
             date_to=date(2026, 10, 22),
+            job_id=None,
+            recruiter_id=None,
             user_id=UUID("22222222-2222-4222-8222-222222222222"),
         )
         row = result["campaign_channels"][0]
