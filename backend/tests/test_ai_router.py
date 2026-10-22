@@ -117,10 +117,10 @@ class AIRoleGuardTests(unittest.TestCase):
             task="summarize_candidate",
             candidate_id=uuid4(),
         )
-        with patch("app.routers.ai.assert_org_member") as member_check, \\
-             patch("app.routers.ai.get_org_role", return_value="viewer"):
-            with self.assertRaises(HTTPException) as caught:
-                asyncio.run(assistant(payload, user_id=user_id))
+        with patch("app.routers.ai.assert_org_member") as member_check:
+            with patch("app.routers.ai.get_org_role", return_value="viewer"):
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(assistant(payload, user_id=user_id))
 
         self.assertEqual(caught.exception.status_code, 403)
         member_check.assert_called_once_with(user_id, organization_id)
@@ -137,10 +137,10 @@ class AIRoleGuardTests(unittest.TestCase):
             task="interview_questions",
             job_id=uuid4(),
         )
-        with patch("app.routers.ai.assert_org_member"), \\
-             patch("app.routers.ai.get_org_role", return_value="viewer"):
-            with self.assertRaises(HTTPException) as caught:
-                asyncio.run(assistant(payload, user_id=uuid4()))
+        with patch("app.routers.ai.assert_org_member"):
+            with patch("app.routers.ai.get_org_role", return_value="viewer"):
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(assistant(payload, user_id=uuid4()))
 
         self.assertEqual(caught.exception.status_code, 403)
 
