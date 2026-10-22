@@ -17,11 +17,17 @@ def validate_org_links(organization_id: UUID, client_id, hiring_manager_id, recr
                 cursor.execute("select 1 from public.clients where id=%s and organization_id=%s", [client_id, organization_id])
                 if cursor.fetchone() is None:
                     raise HTTPException(status_code=422, detail="Client must belong to the same organisation")
-            for label, assigned_user in (("Hiring manager", hiring_manager_id), ("Recruiter", recruiter_id)):
+            for label, assigned_user, allowed_roles in (
+                ("Hiring manager", hiring_manager_id, {"owner", "admin", "hiring_manager"}),
+                ("Recruiter", recruiter_id, {"owner", "admin", "recruiter"}),
+            ):
                 if assigned_user is not None:
-                    cursor.execute("select 1 from public.organization_members where organization_id=%s and user_id=%s", [organization_id, assigned_user])
-                    if cursor.fetchone() is None:
+                    cursor.execute("select role from public.organization_members where organization_id=%s and user_id=%s", [organization_id, assigned_user])
+                    member = cursor.fetchone()
+                    if member is None:
                         raise HTTPException(status_code=422, detail=label + " must belong to the same organisation")
+                    if member["role"] not in allowed_roles:
+                        raise HTTPException(status_code=422, detail=label + " must have an eligible organisation role")
 
 def db_unavailable(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="Database operation failed")
