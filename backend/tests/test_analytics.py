@@ -73,6 +73,8 @@ class FakeAnalyticsCursor:
             return {"open_vacancies": 2}
         if "as cohort_size" in self.sql:
             return {"cohort_size": 6}
+        if "as unassigned_open_vacancies" in self.sql:
+            return {"unassigned_open_vacancies": 2, "unassigned_open_tasks": 3}
         raise AssertionError(f"Unexpected fetchone query: {self.sql}")
 
     def fetchall(self):
@@ -83,6 +85,18 @@ class FakeAnalyticsCursor:
             ]
         if "group by a.status" in self.sql:
             return [{"status": "interview", "distinct_applications": 3}]
+        if "from member_scope ms" in self.sql:
+            return [{
+                "user_id": UUID("22222222-2222-4222-8222-222222222222"),
+                "role": "recruiter",
+                "name": "Example Recruiter",
+                "open_vacancies": 2,
+                "on_hold_vacancies": 1,
+                "active_applications": 5,
+                "upcoming_interviews": 3,
+                "open_tasks": 4,
+                "overdue_tasks": 1,
+            }]
         raise AssertionError(f"Unexpected fetchall query: {self.sql}")
 
 
@@ -157,6 +171,21 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["stages"][0]["distinct_applications"], 6)
         self.assertIn("h.organization_id=%s", self.cursor.queries[0][0])
         self.assertIn("count(distinct h.application_id)", self.cursor.queries[2][0])
+
+
+    async def test_workload_returns_counts_and_separates_unassigned_demand(self):
+        result = await analytics_router.analytics_workload(
+            organization_id=ORG,
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        self.assertEqual(len(result["recruiters"]), 1)
+        self.assertEqual(result["recruiters"][0]["open_vacancies"], 2)
+        self.assertEqual(result["recruiters"][0]["overdue_tasks"], 1)
+        self.assertEqual(result["unassigned"]["unassigned_open_vacancies"], 2)
+        self.assertEqual(result["unassigned"]["unassigned_open_tasks"], 3)
+        self.assertIsNone(result["definitions"]["capacity_score"])
+        self.assertIn("organization_id=%s", self.cursor.queries[0][0])
+        self.membership.assert_called_once()
 
 
 if __name__ == "__main__":
