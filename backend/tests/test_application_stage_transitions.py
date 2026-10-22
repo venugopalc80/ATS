@@ -4,7 +4,6 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 from uuid import UUID
 
-from app.schemas.applications import ApplicationTransition
 from app.services.application_service import ApplicationService
 
 
@@ -15,10 +14,24 @@ APPLICATION = UUID("77777777-7777-4777-8777-777777777777")
 USER = UUID("22222222-2222-4222-8222-222222222222")
 NOW = datetime(2026, 10, 22, 11, tzinfo=timezone.utc)
 
+DEFAULT_CONFIG = [
+    {"stage_key": "new", "enabled": True, "allowed_next_stages": ["screening", "rejected", "withdrawn"]},
+    {"stage_key": "screening", "enabled": True, "allowed_next_stages": ["shortlisted", "submitted", "interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "shortlisted", "enabled": True, "allowed_next_stages": ["interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "submitted", "enabled": True, "allowed_next_stages": ["interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "interview", "enabled": True, "allowed_next_stages": ["assessment", "offer", "rejected", "withdrawn"]},
+    {"stage_key": "assessment", "enabled": True, "allowed_next_stages": ["interview", "offer", "rejected", "withdrawn"]},
+    {"stage_key": "offer", "enabled": True, "allowed_next_stages": ["hired", "rejected", "withdrawn"]},
+    {"stage_key": "hired", "enabled": True, "allowed_next_stages": []},
+    {"stage_key": "rejected", "enabled": True, "allowed_next_stages": []},
+    {"stage_key": "withdrawn", "enabled": True, "allowed_next_stages": []},
+]
+
 
 class StateCursor:
-    def __init__(self, state):
+    def __init__(self, state, stage_config=None):
         self.state = state
+        self.stage_config = list(stage_config if stage_config is not None else DEFAULT_CONFIG)
         self.sql = ""
         self.params = []
         self.executed = []
@@ -38,8 +51,8 @@ class StateCursor:
             self.state["updated_at"] = NOW
 
     def fetchone(self):
-        if "select status from public.applications" in self.sql:
-            return {"status": self.state["status"]}
+        if "select status, organization_id from public.applications" in self.sql:
+            return {"status": self.state["status"], "organization_id": self.state["organization_id"]}
         if "from public.applications where id=%s" in self.sql:
             return dict(self.state)
         if self.sql.startswith("update public.applications set status="):
@@ -47,6 +60,8 @@ class StateCursor:
         raise AssertionError(f"Unexpected fetchone query: {self.sql}")
 
     def fetchall(self):
+        if "from public.application_stage_config" in self.sql:
+            return list(self.stage_config)
         return []
 
 
@@ -93,33 +108,40 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.connection_patch.stop)
 
     async def test_valid_transition_sets_actor_and_reason(self):
-        result = await ApplicationService().transition_application(
-            APPLICATION, "screening", USER, "CV reviewed"
-        )
+        result = await ApplicationService().transition_application(APPLICATION, "screening", USER, "CV reviewed")
         self.assertEqual(result["status"], "screening")
-        self.assertIn(
-            ("select set_config('app.actor_user_id', %s, true)", [str(USER)]),
-            self.cursor.executed,
-        )
-        self.assertIn(
-            ("select set_config('app.transition_reason', %s, true)", ["CV reviewed"]),
-            self.cursor.executed,
-        )
+        self.assertIn(("select set_config('app.actor_user_id', %s, true)", [str(USER)]), self.cursor.executed)
+        self.assertIn(("select set_config('app.transition_reason', %s, true)", ["CV reviewed"]), self.cursor.executed)
         self.assertTrue(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
+        self.assertTrue(any("from public.application_stage_config" in sql for sql, _ in self.cursor.executed))
 
     async def test_invalid_transition_is_rejected_without_update(self):
         with self.assertRaisesRegex(ValueError, "Invalid application stage transition"):
-            await ApplicationService().transition_application(
-                APPLICATION, "hired", USER, "Skip stages"
-            )
+            await ApplicationService().transition_application(APPLICATION, "hired", USER, "Skip stages")
         self.assertFalse(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
 
     async def test_same_stage_is_idempotent_and_does_not_write(self):
         self.state["status"] = "screening"
-        result = await ApplicationService().transition_application(
-            APPLICATION, "screening", USER, "No-op"
-        )
+        result = await ApplicationService().transition_application(APPLICATION, "screening", USER, "No-op")
         self.assertEqual(result["status"], "screening")
+        self.assertFalse(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
+
+    async def test_custom_stage_configuration_is_respected(self):
+        self.cursor.stage_config = [
+            {"stage_key": "new", "enabled": True, "allowed_next_stages": ["interview"]},
+            {"stage_key": "interview", "enabled": True, "allowed_next_stages": ["hired"]},
+            {"stage_key": "hired", "enabled": True, "allowed_next_stages": []},
+        ]
+        result = await ApplicationService().transition_application(APPLICATION, "interview", USER, "Urgent review")
+        self.assertEqual(result["status"], "interview")
+
+    async def test_disabled_target_stage_is_rejected(self):
+        self.cursor.stage_config = [
+            {"stage_key": "new", "enabled": True, "allowed_next_stages": ["screening"]},
+            {"stage_key": "screening", "enabled": False, "allowed_next_stages": []},
+        ]
+        with self.assertRaisesRegex(ValueError, "Target application stage is disabled"):
+            await ApplicationService().transition_application(APPLICATION, "screening", USER, "Stage disabled")
         self.assertFalse(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
 
 

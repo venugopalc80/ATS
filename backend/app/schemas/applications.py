@@ -6,7 +6,8 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 ApplicationStatus = Literal[
-    "new", "screening", "submitted", "interview", "offer", "hired", "rejected", "withdrawn"
+    "new", "screening", "shortlisted", "submitted", "interview", "assessment",
+    "offer", "hired", "rejected", "withdrawn"
 ]
 
 
