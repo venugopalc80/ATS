@@ -169,7 +169,7 @@ create index if not exists import_row_results_batch_status_idx
 -- Preserve source and import provenance on the canonical candidate row.
 alter table public.candidates add column if not exists source_id uuid;
 alter table public.candidates add column if not exists import_batch_id uuid;
-do $
+do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'candidates_source_org_fkey') then
     alter table public.candidates add constraint candidates_source_org_fkey
@@ -181,7 +181,7 @@ begin
       foreign key (organization_id, import_batch_id)
       references public.import_batches(organization_id, id) on delete restrict;
   end if;
-end $;
+end $$;
 create index if not exists candidates_source_idx
   on public.candidates (organization_id, source_id, created_at desc)
   where source_id is not null;
