@@ -1,5 +1,7 @@
+import asyncio
 import unittest
 
+from fastapi import HTTPException
 from uuid import UUID
 
 from pydantic import ValidationError
@@ -11,7 +13,7 @@ from app.schemas.communications import (
     TemplateCreate,
     ThreadCreate,
 )
-from app.routers.notifications import ESSENTIAL_TYPES, PreferenceUpdate
+from app.routers.notifications import ESSENTIAL_TYPES, PreferenceUpdate, update_preference
 
 
 class CommunicationSchemaTests(unittest.TestCase):
@@ -63,6 +65,34 @@ class CommunicationSchemaTests(unittest.TestCase):
     def test_essential_notification_types_are_explicit(self):
         self.assertIn("account_security", ESSENTIAL_TYPES)
         self.assertIn("password_reset", ESSENTIAL_TYPES)
+
+    def test_essential_notification_preferences_cannot_be_disabled(self):
+        payload = PreferenceUpdate(
+            organization_id="11111111-1111-4111-8111-111111111111",
+            notification_type="account_security",
+            channel="email",
+            enabled=False,
+        )
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(update_preference(
+                payload,
+                user_id=UUID("22222222-2222-4222-8222-222222222222"),
+            ))
+        self.assertEqual(raised.exception.status_code, 422)
+
+    def test_security_namespace_preferences_cannot_be_disabled(self):
+        payload = PreferenceUpdate(
+            organization_id="11111111-1111-4111-8111-111111111111",
+            notification_type="security.session_expiring",
+            channel="in_app",
+            enabled=False,
+        )
+        with self.assertRaises(HTTPException) as raised:
+            asyncio.run(update_preference(
+                payload,
+                user_id=UUID("22222222-2222-4222-8222-222222222222"),
+            ))
+        self.assertEqual(raised.exception.status_code, 422)
 
     def test_idempotent_retry_requires_same_thread_and_template(self):
         thread_id = UUID("11111111-1111-4111-8111-111111111111")
