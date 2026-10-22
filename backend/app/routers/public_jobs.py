@@ -138,7 +138,7 @@ async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn, organ
                         raise HTTPException(status_code=422, detail="This application form is no longer available")
                     notice_version = version["privacy_notice_version"]
                     cursor.execute(
-                        """select id, question_key, field_type, required, options
+                        """select id, question_key, field_type, required, options, validation
                              from public.application_form_questions
                             where form_version_id=%s and organization_id=%s order by position, id""",
                         [payload.form_version_id, organization_id],
