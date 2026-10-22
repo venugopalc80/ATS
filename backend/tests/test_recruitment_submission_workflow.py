@@ -326,6 +326,34 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
         self.assertEqual(error.exception.status_code, 403)
         update.assert_not_awaited()
 
+    async def test_update_application_requires_transition_endpoint_for_status_changes(self):
+        row = {
+            "id": APPLICATION,
+            "organization_id": ORG,
+            "job_id": JOB,
+            "candidate_id": CANDIDATE,
+            "source": "careers_page",
+            "status": "new",
+            "match_score": None,
+            "match_explanation": None,
+            "human_reviewed": False,
+            "human_reviewed_by": None,
+            "human_reviewed_at": None,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+            with patch.object(applications, "assert_org_member"):
+                with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
+                    with self.assertRaises(HTTPException) as error:
+                        await applications.update_application(
+                            APPLICATION, ApplicationUpdate(status="screening"), USER
+                        )
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("transition endpoint", error.exception.detail)
+        update.assert_not_awaited()
+
 
 if __name__ == "__main__":
     unittest.main()
