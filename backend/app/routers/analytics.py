@@ -352,3 +352,79 @@ async def analytics_workload(
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
+
+
+@router.get("/sources")
+async def analytics_sources(
+    organization_id: UUID,
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    job_id: UUID | None = Query(default=None),
+    recruiter_id: UUID | None = Query(default=None),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Compare application sources using raw attribution labels and distinct recruitment records."""
+    assert_org_member(user_id, organization_id)
+    _validate_dates(date_from, date_to)
+    app_where, app_params = _application_scope(
+        organization_id, date_from, date_to, job_id, recruiter_id
+    )
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""select coalesce(nullif(btrim(a.source), ''), 'Unknown') as source,
+                               count(distinct a.id)::int as applications,
+                               count(distinct a.id) filter (
+                                   where a.status in ('submitted','interview','offer','hired')
+                               )::int as qualified_applications,
+                               count(distinct i.id) filter (
+                                   where i.status='completed'
+                               )::int as completed_interviews,
+                               count(distinct o.id)::int as offers,
+                               count(distinct o.id) filter (
+                                   where o.status='accepted'
+                               )::int as accepted_offers,
+                               count(distinct a.id) filter (
+                                   where a.status='hired'
+                               )::int as hires
+                        from public.applications a
+                        join public.jobs j on j.id=a.job_id and j.organization_id=a.organization_id
+                        left join public.interviews i
+                          on i.application_id=a.id and i.organization_id=a.organization_id
+                        left join public.offers o
+                          on o.application_id=a.id and o.organization_id=a.organization_id
+                        where {app_where}
+                        group by coalesce(nullif(btrim(a.source), ''), 'Unknown')
+                        order by applications desc, source asc""",
+                    app_params,
+                )
+                rows = [dict(row) for row in cursor.fetchall()]
+        for row in rows:
+            row["offer_acceptance_rate"] = (
+                row["accepted_offers"] / row["offers"] if row["offers"] else None
+            )
+            row["conversion_rate"] = (
+                row["hires"] / row["applications"] if row["applications"] else None
+            )
+            row["sample_warning"] = row["applications"] < 5
+        return {
+            "definitions_version": "1.0",
+            "filters": {
+                "organization_id": str(organization_id),
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "job_id": str(job_id) if job_id else None,
+                "recruiter_id": str(recruiter_id) if recruiter_id else None,
+                "cohort": "application_created_at",
+            },
+            "sources": rows,
+            "limitations": [
+                "Source is the raw applications.source value; blank and missing values are grouped as Unknown.",
+                "Qualified application means current status submitted, interview, offer or hired.",
+                "Source association is descriptive and does not establish causation.",
+                "Campaign spend and ROI are not included because campaign attribution and currency comparability need separate validation.",
+            ],
+        }
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
