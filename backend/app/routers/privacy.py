@@ -53,6 +53,17 @@ class NoticeCreate(BaseModel):
     effective_at: datetime
 
 
+class RetentionPolicyCreate(BaseModel):
+    organization_id: UUID
+    data_category: str = Field(min_length=1, max_length=120)
+    purpose: str = Field(min_length=1, max_length=120)
+    jurisdiction: Literal["GB", "US", "IN", "AU", "GLOBAL"]
+    retention_days: int = Field(ge=0, le=36500)
+    action: Literal["review", "delete", "anonymise"]
+    version: int = Field(ge=1)
+    effective_at: datetime
+
+
 class ProcessingRecordCreate(BaseModel):
     organization_id: UUID
     candidate_id: UUID
@@ -129,6 +140,65 @@ async def create_notice(
                        values (%s, %s, 'privacy.notice_created', 'privacy_notice', %s, %s::jsonb)""",
                     [payload.organization_id, user_id, row["id"],
                      json.dumps({"version": payload.version, "purpose": payload.purpose})],
+                )
+                return row
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+
+
+@router.get("/retention-policies")
+async def list_retention_policies(
+    organization_id: UUID,
+    enabled: bool | None = None,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_admin(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select id, organization_id, data_category, purpose, jurisdiction,
+                              retention_days, action, version, enabled, effective_at, created_at
+                       from public.retention_policies
+                       where organization_id = %s and (%s is null or enabled = %s)
+                       order by data_category, purpose, jurisdiction, version desc""",
+                    [organization_id, enabled, enabled],
+                )
+                return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+
+
+@router.post("/retention-policies", status_code=201)
+async def create_retention_policy(
+    payload: RetentionPolicyCreate,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_admin(user_id, payload.organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """insert into public.retention_policies
+                       (organization_id, data_category, purpose, jurisdiction,
+                        retention_days, action, version, effective_at, created_by)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       returning id, organization_id, data_category, purpose, jurisdiction,
+                                 retention_days, action, version, enabled, effective_at, created_at""",
+                    [payload.organization_id, payload.data_category, payload.purpose,
+                     payload.jurisdiction, payload.retention_days, payload.action,
+                     payload.version, payload.effective_at, user_id],
+                )
+                row = cursor.fetchone()
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s, %s, 'privacy.retention_policy_created',
+                               'retention_policy', %s, %s::jsonb)""",
+                    [payload.organization_id, user_id, row["id"],
+                     json.dumps({"data_category": payload.data_category, "purpose": payload.purpose,
+                                 "jurisdiction": payload.jurisdiction, "version": payload.version,
+                                 "action": payload.action, "retention_days": payload.retention_days})],
                 )
                 return row
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
