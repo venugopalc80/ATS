@@ -171,10 +171,10 @@ class HumanReviewAuditTests(unittest.TestCase):
 
         endpoint = review_job_description if endpoint_name == "job_description" else review_interview_kit
         endpoint_args = (entity_id, payload)
-        with patch("app.routers.ai.assert_org_member"), \\
-             patch("app.routers.ai.get_org_role", return_value="recruiter"), \\
-             patch("app.routers.ai.get_connection", return_value=connection):
-            asyncio.run(endpoint(*endpoint_args, user_id=user_id))
+        with patch("app.routers.ai.assert_org_member"):
+            with patch("app.routers.ai.get_org_role", return_value="recruiter"):
+                with patch("app.routers.ai.get_connection", return_value=connection):
+                    asyncio.run(endpoint(*endpoint_args, user_id=user_id))
 
         audit_call = cursor.execute.call_args_list[-1]
         metadata = json.loads(audit_call.args[1][-1])
