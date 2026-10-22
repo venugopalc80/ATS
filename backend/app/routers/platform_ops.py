@@ -25,6 +25,7 @@ class SupportCaseCreate(BaseModel):
 
 class SupportAccessRequest(BaseModel):
     organization_id: UUID
+    support_case_id: UUID
     purpose: str = Field(min_length=10, max_length=1000)
     scope: list[SupportScope] = Field(min_length=1, max_length=4)
     duration_minutes: int = Field(default=30, ge=5, le=60)
@@ -117,11 +118,17 @@ async def request_support_access(
                 if cursor.fetchone() is None:
                     raise HTTPException(status_code=404, detail="Organisation not found")
                 cursor.execute(
+                    "select id from public.support_cases where id=%s and organization_id=%s",
+                    [payload.support_case_id, payload.organization_id],
+                )
+                if cursor.fetchone() is None:
+                    raise HTTPException(status_code=404, detail="Support case not found for this organisation")
+                cursor.execute(
                     """insert into public.support_access_grants
-                       (organization_id, operator_user_id, purpose, scope, expires_at)
-                       values (%s, %s, %s, %s, now() + (%s * interval '1 minute'))
-                       returning id, organization_id, purpose, scope, requested_at, expires_at""",
-                    [payload.organization_id, user_id, payload.purpose.strip(),
+                       (organization_id, support_case_id, operator_user_id, purpose, scope, expires_at)
+                       values (%s, %s, %s, %s, %s, now() + (%s * interval '1 minute'))
+                       returning id, organization_id, support_case_id, purpose, scope, requested_at, expires_at""",
+                    [payload.organization_id, payload.support_case_id, user_id, payload.purpose.strip(),
                      list(dict.fromkeys(payload.scope)), payload.duration_minutes],
                 )
                 grant = cursor.fetchone()
@@ -153,7 +160,7 @@ async def list_support_access_grants(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select id, operator_user_id, purpose, scope, requested_at,
+                    """select id, support_case_id, operator_user_id, purpose, scope, requested_at,
                               approved_by_org_user_id, approved_at, expires_at, revoked_at
                        from public.support_access_grants
                        where organization_id=%s
@@ -288,11 +295,11 @@ async def platform_get_support_case(
                 cursor.execute(
                     """select id, purpose, scope, approved_by_org_user_id, expires_at
                        from public.support_access_grants
-                       where organization_id=%s and operator_user_id=%s
+                       where organization_id=%s and support_case_id=%s and operator_user_id=%s
                          and approved_at is not null and revoked_at is null
                          and expires_at > now() and scope @> array['case_metadata']::text[]
                        order by approved_at desc limit 1""",
-                    [case_ref["organization_id"], user_id],
+                    [case_ref["organization_id"], case_id, user_id],
                 )
                 grant = cursor.fetchone()
                 if grant is None:
