@@ -203,7 +203,7 @@ def save_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID,
     with get_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                """select i.id, i.application_id, i.interviewer_ids, a.job_id
+                """select i.id, i.application_id, i.interviewer_ids, i.status as interview_status, a.job_id
                    from public.interviews i
                    join public.applications a on a.id=i.application_id
                    where i.organization_id=%s and i.id=%s for update of i""",
@@ -214,6 +214,8 @@ def save_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID,
                 raise LookupError("Interview not found")
             if user_id not in {UUID(str(value)) for value in (interview["interviewer_ids"] or [])}:
                 raise PermissionError("Only an assigned interviewer can submit this scorecard")
+            if submit and interview["interview_status"] != "completed":
+                raise ValueError("Complete the interview before submitting the scorecard")
             cursor.execute(
                 """select t.id, t.kit_id from public.scorecard_templates t
                    join public.interview_kits k on k.organization_id=t.organization_id and k.id=t.kit_id
@@ -323,7 +325,7 @@ def review_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID, ca
                      on r.organization_id=f.organization_id and r.feedback_id=f.id
                    left join public.competencies c
                      on c.organization_id=r.organization_id and c.id=r.competency_id
-                   where f.organization_id=%s and f.interview_id=%s
+                   where f.organization_id=%s and f.interview_id=%s and f.status='submitted'
                    order by f.submitted_at, f.interviewer_id, c.display_order""",
                 [organization_id, interview_id],
             )
