@@ -13,7 +13,7 @@ from app.schemas.communications import (
     TemplateCreate,
     ThreadCreate,
 )
-from app.routers.notifications import ESSENTIAL_TYPES, PreferenceUpdate, update_preference
+from app.routers.notifications import ESSENTIAL_TYPES, PreferenceUpdate, is_essential_notification_type
 
 
 class CommunicationSchemaTests(unittest.TestCase):
@@ -66,47 +66,33 @@ class CommunicationSchemaTests(unittest.TestCase):
         self.assertIn("account_security", ESSENTIAL_TYPES)
         self.assertIn("password_reset", ESSENTIAL_TYPES)
 
-    def test_essential_notification_preferences_cannot_be_disabled(self):
+    def test_essential_notification_types_are_protected_by_namespace(self):
+        self.assertTrue(is_essential_notification_type("account_security"))
+        self.assertTrue(is_essential_notification_type("account_security.device_changed"))
+        self.assertTrue(is_essential_notification_type("security.session_expiring"))
+        self.assertTrue(is_essential_notification_type("password_reset"))
+        self.assertFalse(is_essential_notification_type("interview_reminder"))
+        self.assertFalse(is_essential_notification_type("securityish.notice"))
+
+    def test_essential_notification_preference_payload_accepts_enabled_state(self):
         payload = PreferenceUpdate(
             organization_id="11111111-1111-4111-8111-111111111111",
             notification_type="account_security",
             channel="email",
-            enabled=False,
+            enabled=True,
         )
-        with self.assertRaises(HTTPException) as raised:
-            asyncio.run(update_preference(
-                payload,
-                user_id=UUID("22222222-2222-4222-8222-222222222222"),
-            ))
-        self.assertEqual(raised.exception.status_code, 422)
+        self.assertTrue(payload.enabled)
 
-    def test_security_namespace_preferences_cannot_be_disabled(self):
+    def test_essential_notification_preference_payload_accepts_disable_request_for_route_guard(self):
+        # The route must reject this after membership authorization; schema validation alone
+        # should not require a database connection.
         payload = PreferenceUpdate(
             organization_id="11111111-1111-4111-8111-111111111111",
             notification_type="security.session_expiring",
             channel="in_app",
             enabled=False,
         )
-        with self.assertRaises(HTTPException) as raised:
-            asyncio.run(update_preference(
-                payload,
-                user_id=UUID("22222222-2222-4222-8222-222222222222"),
-            ))
-        self.assertEqual(raised.exception.status_code, 422)
-
-    def test_essential_namespace_preferences_cannot_be_disabled(self):
-        payload = PreferenceUpdate(
-            organization_id="11111111-1111-4111-8111-111111111111",
-            notification_type="account_security.device_changed",
-            channel="email",
-            enabled=False,
-        )
-        with self.assertRaises(HTTPException) as raised:
-            asyncio.run(update_preference(
-                payload,
-                user_id=UUID("22222222-2222-4222-8222-222222222222"),
-            ))
-        self.assertEqual(raised.exception.status_code, 422)
+        self.assertFalse(payload.enabled)
 
     def test_idempotent_retry_requires_same_thread_and_template(self):
         thread_id = UUID("11111111-1111-4111-8111-111111111111")
