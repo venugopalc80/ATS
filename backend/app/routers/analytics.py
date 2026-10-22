@@ -340,6 +340,53 @@ async def analytics_funnel(
                     params,
                 )
                 cohort_size = cursor.fetchone()["cohort_size"] or 0
+                cursor.execute(
+                    f"""with stage_map(stage, next_stage) as (
+                            values ('new','screening'),
+                                   ('screening','submitted'),
+                                   ('submitted','interview'),
+                                   ('interview','offer'),
+                                   ('offer','hired')
+                        ),
+                        entries as (
+                            select h.application_id, h.new_stage as stage,
+                                   min(h.created_at) as entered_at
+                            from public.application_stage_history h
+                            join public.applications a on a.id=h.application_id
+                            join public.jobs j on j.id=a.job_id
+                            where {where}
+                            group by h.application_id, h.new_stage
+                        ),
+                        conversion_flags as (
+                            select e.application_id, e.stage, m.next_stage,
+                                   exists (
+                                       select 1
+                                       from public.application_stage_history h2
+                                       where h2.organization_id=%s
+                                         and h2.application_id=e.application_id
+                                         and h2.new_stage=m.next_stage
+                                         and h2.created_at >= e.entered_at
+                                   ) as reached_next
+                            from entries e
+                            join stage_map m on m.stage=e.stage
+                        )
+                        select stage, next_stage,
+                               count(distinct application_id)::int as entered_applications,
+                               count(distinct application_id) filter (
+                                   where reached_next
+                               )::int as reached_next_applications,
+                               count(distinct application_id) filter (
+                                   where reached_next
+                               )::float / nullif(count(distinct application_id),0) as conversion_rate
+                        from conversion_flags
+                        group by stage, next_stage
+                        order by case stage
+                            when 'new' then 1 when 'screening' then 2
+                            when 'submitted' then 3 when 'interview' then 4
+                            when 'offer' then 5 else 99 end""",
+                    [*params, organization_id],
+                )
+                stage_conversions = [dict(row) for row in cursor.fetchall()]
         total = cohort_size
         return {
             "filters": {
@@ -354,10 +401,12 @@ async def analytics_funnel(
             "low_sample_size": total < 5,
             "stages": stages,
             "stage_waiting_time": waiting_time,
+            "stage_conversions": stage_conversions,
             "outcomes": outcomes,
             "limitations": [
                 "Stage-entry events are counted from recorded history; applications with no history event are not represented in stage counts.",
                 "Distinct application counts by stage are not mutually exclusive and must not be summed as a total funnel population.",
+                "Stage conversion uses the documented sequence new → screening → submitted → interview → offer → hired; it measures whether an application later reached the next named stage.",
                 "Waiting time uses the next recorded stage-history timestamp; open intervals with no later event are excluded.",
                 "Timestamps tied to the same instant are ordered by event ID because the source schema has no explicit transition sequence.",
             ],
