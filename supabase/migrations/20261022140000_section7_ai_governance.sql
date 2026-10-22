@@ -199,7 +199,11 @@ alter table public.ai_incidents enable row level security;
 drop policy if exists ai_use_cases_member_read on public.ai_use_cases;
 create policy ai_use_cases_member_read on public.ai_use_cases for select to authenticated using (public.is_org_member(organization_id));
 drop policy if exists ai_models_admin_read on public.ai_model_versions;
-create policy ai_models_admin_read on public.ai_model_versions for select to authenticated using (public.is_org_admin(organization_id));
+create policy ai_models_admin_read on public.ai_model_versions for select to authenticated using (
+  exists (select 1 from public.organization_members m
+          where m.organization_id = ai_model_versions.organization_id
+            and m.user_id = (select auth.uid()) and m.role in ('owner','admin'))
+);
 drop policy if exists ai_runs_member_read on public.ai_runs;
 create policy ai_runs_member_read on public.ai_runs for select to authenticated using (public.is_org_member(organization_id));
 drop policy if exists ai_recommendations_member_read on public.ai_recommendations;
@@ -209,13 +213,29 @@ create policy ai_jd_versions_member_read on public.ai_job_description_versions f
 drop policy if exists ai_interview_kits_member_read on public.ai_interview_kits;
 create policy ai_interview_kits_member_read on public.ai_interview_kits for select to authenticated using (public.is_org_member(organization_id));
 drop policy if exists ai_eval_runs_admin_read on public.ai_evaluation_runs;
-create policy ai_eval_runs_admin_read on public.ai_evaluation_runs for select to authenticated using (public.is_org_admin(organization_id));
+create policy ai_eval_runs_admin_read on public.ai_evaluation_runs for select to authenticated using (
+  exists (select 1 from public.organization_members m
+          where m.organization_id = ai_evaluation_runs.organization_id
+            and m.user_id = (select auth.uid()) and m.role in ('owner','admin'))
+);
 drop policy if exists ai_eval_results_admin_read on public.ai_evaluation_results;
-create policy ai_eval_results_admin_read on public.ai_evaluation_results for select to authenticated using (public.is_org_admin(organization_id));
+create policy ai_eval_results_admin_read on public.ai_evaluation_results for select to authenticated using (
+  exists (select 1 from public.organization_members m
+          where m.organization_id = ai_evaluation_results.organization_id
+            and m.user_id = (select auth.uid()) and m.role in ('owner','admin'))
+);
 drop policy if exists ai_fairness_audits_admin_read on public.ai_fairness_audits;
-create policy ai_fairness_audits_admin_read on public.ai_fairness_audits for select to authenticated using (public.is_org_admin(organization_id));
+create policy ai_fairness_audits_admin_read on public.ai_fairness_audits for select to authenticated using (
+  exists (select 1 from public.organization_members m
+          where m.organization_id = ai_fairness_audits.organization_id
+            and m.user_id = (select auth.uid()) and m.role in ('owner','admin'))
+);
 drop policy if exists ai_incidents_admin_read on public.ai_incidents;
-create policy ai_incidents_admin_read on public.ai_incidents for select to authenticated using (public.is_org_admin(organization_id));
+create policy ai_incidents_admin_read on public.ai_incidents for select to authenticated using (
+  exists (select 1 from public.organization_members m
+          where m.organization_id = ai_incidents.organization_id
+            and m.user_id = (select auth.uid()) and m.role in ('owner','admin'))
+);
 
 -- Browser clients may read through scoped RLS, but writes are API-only.
 revoke insert, update, delete on public.ai_use_cases, public.ai_model_versions, public.ai_runs,
