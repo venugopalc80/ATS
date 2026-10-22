@@ -4,7 +4,7 @@ from uuid import uuid4
 import pytest
 from pydantic import ValidationError
 
-from app.routers.privacy import (ProcessingRecordCreate, PrivacyRequestUpdate, RetentionPolicyCreate,\n                                 retention_category_definition)
+from app.routers.privacy import (\n    ProcessingRecordCreate, PrivacyRequestUpdate, RetentionPolicyCreate,\n    retention_category_definition,\n)
 
 
 def base_processing_record(**overrides):
