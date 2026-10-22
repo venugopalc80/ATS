@@ -70,9 +70,14 @@ begin
 end;
 $$;
 
-drop trigger if exists applications_stage_history on public.applications;
-create trigger applications_stage_history
-  after insert or update of status on public.applications
+drop trigger if exists applications_stage_history_insert on public.applications;
+create trigger applications_stage_history_insert
+  after insert on public.applications
+  for each row execute function public.record_application_stage_history();
+
+drop trigger if exists applications_stage_history_update on public.applications;
+create trigger applications_stage_history_update
+  after update of status on public.applications
   for each row execute function public.record_application_stage_history();
 
 -- Seed a baseline event for applications that existed before this migration.
