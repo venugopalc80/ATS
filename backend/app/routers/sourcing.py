@@ -98,6 +98,13 @@ class CampaignCreate(BaseModel):
     attribution_window_days: int = Field(default=30, ge=1, le=365)
 
 
+class CampaignStatusUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    organization_id: UUID
+    status: Literal["draft", "scheduled", "active", "paused", "completed", "cancelled"]
+    reason: str = Field(min_length=1, max_length=500)
+
+
 class CampaignChannelCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     organization_id: UUID
@@ -1097,6 +1104,42 @@ async def create_campaign(payload: CampaignCreate, user_id: UUID = Depends(get_c
         raise _db_error(exc) from exc
     except Exception as exc:
         raise HTTPException(status_code=422, detail="Campaign could not be created; check the target job and supplied fields") from exc
+
+
+@router.patch("/campaigns/{campaign_id}/status")
+async def update_campaign_status(campaign_id: UUID, payload: CampaignStatusUpdate,
+                                 user_id: UUID = Depends(get_current_user_id)):
+    _assert_sourcing_manager(user_id, payload.organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""select id,status from public.recruitment_campaigns
+                    where id=%s and organization_id=%s for update""", [campaign_id,payload.organization_id])
+                previous = cursor.fetchone()
+                if previous is None:
+                    raise HTTPException(status_code=404, detail="Campaign not found")
+                if previous["status"] == payload.status:
+                    return {"id": campaign_id, "status": payload.status, "changed": False}
+                cursor.execute("""update public.recruitment_campaigns set status=%s,updated_at=now()
+                    where id=%s and organization_id=%s returning id,status,updated_at""",
+                    [payload.status,campaign_id,payload.organization_id])
+                updated = cursor.fetchone()
+                event_type = payload.status if payload.status in {"activated", "paused", "completed"} else "updated"
+                cursor.execute("""insert into public.campaign_events
+                    (organization_id,campaign_id,actor_user_id,event_type,previous_value,new_value,reason)
+                    values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)""",
+                    [payload.organization_id,campaign_id,user_id,event_type,
+                     json.dumps({"status":previous["status"]}),json.dumps({"status":payload.status}),payload.reason.strip()])
+                cursor.execute("""insert into public.audit_events
+                    (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+                    values (%s,%s,'campaign_status_changed','recruitment_campaign',%s,%s::jsonb)""",
+                    [payload.organization_id,user_id,campaign_id,
+                     json.dumps({"previous_status":previous["status"],"new_status":payload.status,"reason":payload.reason.strip()})])
+                return updated
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
 
 
 @router.get("/campaigns/{campaign_id}/channels")
