@@ -87,6 +87,13 @@ class AssessmentAssignmentUpdate(BaseModel):
     accommodation_arrangements: str | None = Field(default=None, max_length=2000)
     status: Literal["cancelled", "expired"] | None = None
 
+    @field_validator("due_at")
+    @classmethod
+    def extension_deadline_must_be_timezone_aware(cls, value):
+        if value is not None and value.tzinfo is None:
+            raise ValueError("Deadline must include a timezone")
+        return value
+
 
 class AssessmentAssignmentOut(BaseModel):
     id: UUID
