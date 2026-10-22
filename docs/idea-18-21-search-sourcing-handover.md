@@ -60,8 +60,11 @@ A rollback-transaction SQL smoke test created temporary tenant A/B records and c
 - [x] Staging schema migrations applied.
 - [x] Staging table/RLS/index/grant checks completed.
 - [x] Cross-tenant link-integrity smoke test passed in a rolled-back transaction.
-- [ ] Python unit tests executed. Tests are committed, but no test runner was available through the connected workflow.
-- [ ] Frontend typecheck/build and authenticated browser acceptance.
+- [x] Backend unit tests: 27 passed, 4 skipped on the latest validated PR snapshot.
+- [x] Focused sourcing unit tests: 7 passed.
+- [x] Frontend TypeScript typecheck passed.
+- [x] Frontend production build passed in GitHub Actions.
+- [ ] Authenticated browser acceptance and end-to-end API integration tests.
 - [ ] Full API integration tests for role checks, import replay, saved-search ownership and pool expiry.
 - [ ] Record-level permission model integrated. Current code restricts broad sourcing APIs to recruiter/admin roles and applies pool ownership checks, but does not yet implement per-record ACLs for every search result.
 - [ ] Background queue for large imports and saved-search notification delivery.
@@ -71,6 +74,12 @@ A rollback-transaction SQL smoke test created temporary tenant A/B records and c
 
 ## CI and deployment
 
-The PR's current Vercel status checks failed with the platform's build-rate-limit/upgrade message. They did not provide a successful application build result. The new focused GitHub Actions workflow is included in the branch, but it has not run on this draft PR. A local checkout was attempted for running Python/Node suites, but GitHub could not be reached from the connected runtime.
+GitHub Actions passed on the latest validated snapshot:
+- Backend suite: 27 passed, 4 skipped.
+- Focused sourcing suite: 7 passed.
+- Frontend TypeScript typecheck: passed.
+- Frontend production build: passed.
 
-**Release decision:** keep PR #72 in draft. Do not merge or deploy to production until tests, build, record-level permissions, import handling and frontend acceptance checks pass.
+The Vercel status checks for `ats-staging-api`, `aqerith` and `ats` still fail with the platform's build-rate-limit/upgrade message. The successful GitHub Actions build is not a Vercel deployment and does not establish that a preview or production deployment succeeded. Temporary CI-only PRs #74 and #75 were closed without merging.
+
+**Release decision:** keep PR #72 in draft. Do not merge or deploy to production until record-level permissions, import handling, full API integration and authenticated browser acceptance are complete.
