@@ -275,7 +275,7 @@ async def preview_retention(
                             "version": policy["version"],
                             "status": "unsupported_category",
                             "clock_start": None,
-                            "eligible_count": 0,
+                            "due_count": 0,
                             "excluded_active_exception_count": 0,
                             "previously_processed_count": 0,
                             "items": [],
@@ -303,7 +303,7 @@ async def preview_retention(
                         f"""select
                               count(*) filter (where has_active_exception) as held_count,
                               count(*) filter (where previously_processed) as processed_count,
-                              count(*) filter (where not has_active_exception and not previously_processed) as eligible_count
+                              count(*) filter (where not has_active_exception and not previously_processed) as due_count
                             from (
                               select r.id,
                                 exists (select 1 from public.retention_exceptions e where {common_exception}) as has_active_exception,
@@ -346,7 +346,7 @@ async def preview_retention(
                         "version": policy["version"],
                         "status": "preview_ready",
                         "clock_start": config["clock_start"],
-                        "eligible_count": counts["eligible_count"],
+                        "due_count": counts["due_count"],
                         "excluded_active_exception_count": counts["held_count"],
                         "previously_processed_count": counts["processed_count"],
                         "items": items,
@@ -360,7 +360,7 @@ async def preview_retention(
                     [organization_id, user_id, json.dumps({
                         "as_of": preview_at.isoformat(),
                         "policies_scanned": len(policies),
-                        "eligible_count": sum(item.get("eligible_count", 0) for item in previews),
+                        "due_count": sum(item.get("due_count", 0) for item in previews),
                         "unsupported_category_count": sum(item.get("status") == "unsupported_category" for item in previews),
                     })],
                 )
@@ -369,6 +369,7 @@ async def preview_retention(
                     "as_of": preview_at,
                     "preview_only": True,
                     "execution_enabled": False,
+                    "requires_final_safety_checks": True,
                     "deletion_executed": False,
                     "anonymisation_executed": False,
                     "policies_scanned": len(policies),
