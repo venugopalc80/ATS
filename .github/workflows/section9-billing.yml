@@ -11,6 +11,9 @@ on:
       - "backend/tests/test_organization_settings.py"
       - "backend/app/routers/help_onboarding.py"
       - "backend/tests/test_help_onboarding.py"
+      - "backend/app/routers/platform_ops.py"
+      - "backend/tests/test_platform_ops.py"
+      - "supabase/migrations/20261022160000_section9_platform_support.sql"
       - "frontend/app/billing/page.tsx"
       - "frontend/app/settings/page.tsx"
       - "frontend/app/help/page.tsx"
@@ -53,6 +56,9 @@ jobs:
       - name: Test onboarding payload validation
         working-directory: backend
         run: python -m unittest discover -s tests -p "test_help_onboarding.py" -v
+      - name: Test platform support validation
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_platform_ops.py" -v
       - name: Test Stripe webhook safeguards
         working-directory: backend
         run: python -m unittest discover -s tests -p "test_billing_webhooks.py" -v
