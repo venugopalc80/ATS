@@ -154,6 +154,10 @@ export default function Dashboard() {
           ["Onboarding", "/onboarding", "✓"],
           ["Offers", "/offers", "＄"],
           ["Placements", "/placements", "◈"],
+          ["Advanced Search", "/search", "⌕"],
+          ["Talent Pools", "/talent-pools", "♧"],
+          ["Candidate Imports", "/imports", "⇧"],
+          ["Campaigns", "/campaigns", "◎"],
         ].map(([label, href, symbol]) => (
           <Link key={label} href={href} className={"nav-item" + (label === "Dashboard" ? " active" : "")}>
             <span aria-hidden="true">{symbol}</span><span>{label}</span>
