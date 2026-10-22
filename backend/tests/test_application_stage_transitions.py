@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 from uuid import UUID
 
-from app.schemas.applications import ApplicationStageConfigUpdate
+from pydantic import ValidationError
+
+from app.schemas.applications import ApplicationStageConfigUpdate, ApplicationTransition
 from app.services.application_service import ApplicationService
 
 
@@ -158,6 +160,14 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
     def test_stage_config_update_rejects_blank_label(self):
         with self.assertRaisesRegex(ValueError, "Stage label cannot be blank"):
             ApplicationStageConfigUpdate(label="   ")
+
+    def test_transition_requires_a_reason(self):
+        with self.assertRaises(ValidationError):
+            ApplicationTransition(status="screening")
+
+    def test_transition_rejects_blank_reason(self):
+        with self.assertRaisesRegex(ValidationError, "Transition reason cannot be blank"):
+            ApplicationTransition(status="screening", reason="   ")
 
 
 if __name__ == "__main__":
