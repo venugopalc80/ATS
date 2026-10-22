@@ -24,6 +24,7 @@ const emptyCompetency = (): Competency => ({
 
 export default function InterviewKitsPage() {
   const [kits, setKits] = useState<Kit[]>([]);
+  const [editingKitId, setEditingKitId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [instructions, setInstructions] = useState("");
@@ -57,7 +58,10 @@ export default function InterviewKitsPage() {
     setSaving(true);
     setMessage("");
     try {
-      const response = await apiFetch(API_BASE + "/api/interview-kits", {
+      const target = editingKitId
+        ? API_BASE + "/api/interview-kits/" + editingKitId + "/versions?organization_id=" + encodeURIComponent(organizationId)
+        : API_BASE + "/api/interview-kits";
+      const response = await apiFetch(target, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -81,8 +85,8 @@ export default function InterviewKitsPage() {
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.detail ?? "Unable to create interview kit.");
-      setMessage("Draft kit created. Review the criteria, then publish the version when it is ready.");
-      setName(""); setDescription(""); setInstructions(""); setCompetencies([emptyCompetency()]);
+      setMessage(editingKitId ? "New draft version created. Review it, then publish when ready." : "Draft kit created. Review the criteria, then publish the version when it is ready.");
+      setEditingKitId(null); setName(""); setDescription(""); setInstructions(""); setCompetencies([emptyCompetency()]);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to create interview kit.");
@@ -165,8 +169,9 @@ export default function InterviewKitsPage() {
             ))}
           </div>
           <div className="flex flex-wrap gap-3">
+            {editingKitId && <button type="button" className="btn" onClick={() => { setEditingKitId(null); setName(""); setDescription(""); setInstructions(""); setCompetencies([emptyCompetency()]); }}>Cancel version</button>}
             <button type="button" className="btn" disabled={competencies.length >= 30} onClick={() => setCompetencies((current) => [...current, { ...emptyCompetency(), key: "competency_" + (current.length + 1) }])}>+ Add competency</button>
-            <button type="submit" className="btn primary" disabled={saving}>{saving ? "Saving…" : "Save draft kit"}</button>
+            <button type="submit" className="btn primary" disabled={saving}>{saving ? "Saving…" : editingKitId ? "Save new version" : "Save draft kit"}</button>
           </div>
         </form>
       </section>
@@ -183,7 +188,7 @@ export default function InterviewKitsPage() {
                     <p className="mt-1 text-sm text-gray-500">{kit.description || "No description provided."}</p>
                     <p className="mt-2 text-xs uppercase tracking-wide">{kit.status}{kit.version_number ? " · version " + kit.version_number : " · draft"}</p>
                   </div>
-                  {kit.draft_template_id && <button className="btn primary" disabled={saving} onClick={() => void publish(kit)}>Publish draft</button>}
+                  <div className="flex flex-wrap gap-2">{kit.draft_template_id && <button className="btn primary" disabled={saving} onClick={() => void publish(kit)}>Publish draft</button>}{kit.status === "published" && !kit.draft_template_id && <button className="btn" disabled={saving} onClick={() => { setEditingKitId(kit.id); setName(kit.name); setDescription(kit.description ?? ""); setInstructions(""); setCompetencies([emptyCompetency()]); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Create new version</button>}</div>
                 </div>
               </article>
             ))}
