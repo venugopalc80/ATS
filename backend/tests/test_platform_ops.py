@@ -26,7 +26,7 @@ class SupportOperationsValidationTests(unittest.TestCase):
             organization_id="11111111-1111-4111-8111-111111111111",
             support_case_id="44444444-4444-4444-8444-444444444444",
             purpose="Investigate the reported billing screen error",
-            scope=["case_metadata", "subscription_metadata"],
+            scope=["case_metadata", "case_messages"],
             duration_minutes=30,
         )
         self.assertLessEqual(request.duration_minutes, 60)
