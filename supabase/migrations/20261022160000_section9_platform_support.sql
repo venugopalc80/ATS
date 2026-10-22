@@ -65,6 +65,7 @@ grant select on public.support_case_messages to authenticated;
 create table if not exists public.support_access_grants (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
+  support_case_id uuid references public.support_cases(id) on delete cascade,
   operator_user_id uuid not null references public.platform_operators(user_id) on delete restrict,
   purpose text not null check (length(trim(purpose)) between 10 and 1000),
   scope text[] not null check (cardinality(scope) between 1 and 10),
@@ -75,10 +76,13 @@ create table if not exists public.support_access_grants (
   revoked_at timestamptz,
   check (expires_at > requested_at),
   check (scope <@ array['case_metadata','case_messages','subscription_metadata','service_health']::text[]),
+  check (not (scope && array['case_metadata','case_messages']::text[]) or support_case_id is not null),
   check ((approved_at is null) = (approved_by_org_user_id is null))
 );
 create index if not exists support_access_grants_org_expiry_idx
   on public.support_access_grants(organization_id, expires_at desc);
+create index if not exists support_access_grants_case_expiry_idx
+  on public.support_access_grants(support_case_id, expires_at desc);
 alter table public.support_access_grants enable row level security;
 create policy support_access_grants_org_admin_read
   on public.support_access_grants for select to authenticated
