@@ -8,9 +8,7 @@ from app.schemas.candidates import CandidateCreate, CandidateUpdate
 CANDIDATE_COLUMNS = """
     id, organization_id, first_name, last_name, email, phone,
     city, region, country_code, status, current_title,
-    years_experience, skills, resume_path, resume_text,
-    ai_summary, consent_recorded_at, consent_purpose,
-    retention_until, created_at, updated_at
+    years_experience, skills, ai_summary, created_at, updated_at
 """
 
 
