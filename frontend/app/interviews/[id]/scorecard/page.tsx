@@ -4,8 +4,10 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
+const DEFAULT_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 type Competency = {
   id: string; name: string; description: string;
@@ -20,7 +22,8 @@ type ResponseDraft = { competency_id: string; rating: number; evidence: string; 
 type Review = {
   assigned_interviewer_count: number; submitted_feedback_count: number;
   missing_interviewer_ids: string[];
-  feedback: { interviewer_id: string; competency_name?: string | null; rating?: number | null; evidence?: string | null; notes?: string | null; overall_summary?: string | null; strengths?: string | null; concerns?: string | null }[];
+  feedback: { response_id?: string | null; interviewer_id: string; competency_name?: string | null; rating?: number | null; evidence?: string | null; notes?: string | null; overall_summary?: string | null; strengths?: string | null; concerns?: string | null }[];
+  decisions?: { id: string; reviewer_id: string; decision: string; rationale: string; evidence_snapshot: unknown[]; created_at: string }[];
   note: string;
 };
 
@@ -41,6 +44,9 @@ export default function InterviewScorecardPage() {
   const [concerns, setConcerns] = useState("");
   const [review, setReview] = useState<Review | null>(null);
   const [submitted, setSubmitted] = useState(false);
+  const [decisionValue, setDecisionValue] = useState("hold");
+  const [decisionRationale, setDecisionRationale] = useState("");
+  const [selectedEvidence, setSelectedEvidence] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
@@ -128,6 +134,32 @@ export default function InterviewScorecardPage() {
       }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to save scorecard.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+
+  async function saveDecision() {
+    const organizationId = getActiveOrganizationId(DEFAULT_ORG);
+    if (decisionRationale.trim().length < 20 || selectedEvidence.length === 0) {
+      setMessage("Provide a rationale of at least 20 characters and select at least one evidence item.");
+      return;
+    }
+    setSaving(true); setMessage("");
+    try {
+      const query = new URLSearchParams({ organization_id: organizationId });
+      const response = await apiFetch(API_BASE + "/api/interviews/" + id + "/scorecard-decision?" + query, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ decision: decisionValue, rationale: decisionRationale, evidence_response_ids: selectedEvidence }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.detail ?? "Unable to record review decision. Only organisation owners/admins can do this.");
+      setMessage("Review decision recorded with an immutable evidence snapshot.");
+      setDecisionRationale(""); setSelectedEvidence([]);
+      await loadReview();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to record review decision.");
     } finally {
       setSaving(false);
     }
@@ -228,9 +260,22 @@ export default function InterviewScorecardPage() {
                 {entry.overall_summary && <p className="mt-2 text-sm">{entry.overall_summary}</p>}
                 {entry.strengths && <p className="mt-2 text-sm"><strong>Strengths:</strong> {entry.strengths}</p>}
                 {entry.concerns && <p className="mt-2 text-sm"><strong>Concerns:</strong> {entry.concerns}</p>}
+                {entry.response_id && <label className="mt-3 flex items-center gap-2 text-sm"><input type="checkbox" checked={selectedEvidence.includes(entry.response_id)} onChange={(event) => setSelectedEvidence((current) => event.target.checked ? [...current, entry.response_id!] : current.filter((value) => value !== entry.response_id))} />Use this evidence in a formal review decision</label>}
               </article>
             ))}
           </div>
+          {review.decisions && review.decisions.length > 0 && <div className="mt-6 space-y-3"><h3 className="font-semibold">Recorded review decisions</h3>{review.decisions.map((item) => <article className="card" key={item.id}><p className="font-semibold">{item.decision.replaceAll("_", " ")}</p><p className="mt-2 text-sm">{item.rationale}</p><p className="mt-2 text-xs text-gray-500">Reviewer {item.reviewer_id.slice(0, 8)} · {new Date(item.created_at).toLocaleString()} · {item.evidence_snapshot.length} evidence items captured</p></article>)}</div>}
+          <section className="card mt-6 space-y-4">
+            <h3 className="text-lg font-semibold">Record a human review decision</h3>
+            <p className="text-sm text-gray-600">Organisation owners/admins only. Every assigned interviewer must submit first, and the decision must cite specific submitted evidence.</p>
+            <label className="block text-sm">Decision
+              <select className="input mt-1 w-full" value={decisionValue} onChange={(event) => setDecisionValue(event.target.value)}><option value="proceed">Proceed</option><option value="decline">Decline</option><option value="additional_interview">Additional interview</option><option value="hold">Hold</option></select>
+            </label>
+            <label className="block text-sm">Decision rationale
+              <textarea className="input mt-1 w-full" rows={3} minLength={20} maxLength={4000} value={decisionRationale} onChange={(event) => setDecisionRationale(event.target.value)} placeholder="Explain how the cited evidence supports this decision." />
+            </label>
+            <button className="btn primary" disabled={saving || selectedEvidence.length === 0 || decisionRationale.trim().length < 20} onClick={() => void saveDecision()}>Record evidence-linked decision</button>
+          </section>
         </section>
       )}
     </main>
