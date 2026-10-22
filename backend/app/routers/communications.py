@@ -18,6 +18,31 @@ def _db_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="Database operation failed")
 
 
+def _same_draft_request(
+    message: dict,
+    existing_recipient: dict | None,
+    *,
+    thread_id: UUID,
+    body_text: str,
+    subject: str | None,
+    channel: str,
+    template_id: UUID | None,
+    template_version: int | None,
+    recipient_address: str,
+) -> bool:
+    """Only treat an idempotency retry as identical when all material fields match."""
+    return (
+        message["thread_id"] == thread_id
+        and message["body_text"] == body_text.strip()
+        and message["subject"] == subject
+        and message["channel"] == channel
+        and message["template_id"] == template_id
+        and message["template_version"] == template_version
+        and existing_recipient is not None
+        and existing_recipient["recipient_address"] == recipient_address.strip()
+    )
+
+
 @router.get("/threads")
 async def list_threads(
     organization_id: UUID,
@@ -245,15 +270,16 @@ async def create_message_draft(
                         [organization_id, message["id"]],
                     )
                     existing_recipient = cursor.fetchone()
-                    same_request = (
-                        message["thread_id"] == thread_id
-                        and message["body_text"] == payload.body_text.strip()
-                        and message["subject"] == payload.subject
-                        and message["channel"] == payload.channel
-                        and message["template_id"] == payload.template_id
-                        and message["template_version"] == template_version
-                        and existing_recipient is not None
-                        and existing_recipient["recipient_address"] == payload.recipient_address.strip()
+                    same_request = _same_draft_request(
+                        message,
+                        existing_recipient,
+                        thread_id=thread_id,
+                        body_text=payload.body_text,
+                        subject=payload.subject,
+                        channel=payload.channel,
+                        template_id=payload.template_id,
+                        template_version=template_version,
+                        recipient_address=payload.recipient_address,
                     )
                     if not same_request:
                         raise HTTPException(status_code=409, detail="Idempotency key was already used for a different message")
