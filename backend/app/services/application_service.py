@@ -160,9 +160,16 @@ class ApplicationService:
         application_id: UUID,
         status: str,
         actor_user_id: UUID,
-        reason: str | None = None,
+        reason: str,
     ) -> dict[str, Any] | None:
         """Apply a permitted stage transition atomically; the DB trigger records its history."""
+        if not isinstance(reason, str):
+            raise ValueError("Transition reason is required")
+        reason = reason.strip()
+        if not reason:
+            raise ValueError("Transition reason cannot be blank")
+        if len(reason) > 1000:
+            raise ValueError("Transition reason cannot exceed 1,000 characters")
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -182,7 +189,7 @@ class ApplicationService:
                 stage_config = _load_stage_config(cursor, existing["organization_id"])
                 _validate_configured_transition(stage_config, current_status, status)
                 cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
-                cursor.execute("select set_config('app.transition_reason', %s, true)", [reason or ""])
+                cursor.execute("select set_config('app.transition_reason', %s, true)", [reason])
                 cursor.execute(
                     "update public.applications set status=%s, updated_at=now() where id=%s returning " + APPLICATION_COLUMNS,
                     [status, application_id],
