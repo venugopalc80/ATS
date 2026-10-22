@@ -72,6 +72,7 @@ class PoolMembershipCreate(BaseModel):
     organization_id: UUID
     candidate_id: UUID
     purpose: str = Field(min_length=1, max_length=500)
+    processing_basis: Literal["notice_and_consent", "legitimate_interests", "contractual_necessity", "legal_obligation", "public_task", "other_authorised_basis"]
     expires_at: datetime | None = None
 
 
@@ -439,7 +440,7 @@ async def list_talent_pool_members(pool_id: UUID, organization_id: UUID,
                     raise HTTPException(status_code=404, detail="Talent pool not found")
                 if pool["visibility"] == "restricted" and pool["owner_user_id"] != user_id and pool["created_by"] != user_id:
                     assert_org_admin(user_id, organization_id)
-                sql = """select m.id,m.candidate_id,m.status,m.purpose,m.added_by,m.added_at,m.expires_at,m.removed_at,
+                sql = """select m.id,m.candidate_id,m.status,m.purpose,m.processing_basis,m.added_by,m.added_at,m.expires_at,m.removed_at,
                     c.first_name,c.last_name,c.current_title,c.city,c.region,c.country_code,c.status as candidate_status
                     from public.talent_pool_memberships m join public.candidates c
                     on c.id=m.candidate_id and c.organization_id=m.organization_id
@@ -482,11 +483,11 @@ async def add_talent_pool_member(pool_id: UUID, payload: PoolMembershipCreate,
                 if candidate["retention_until"] and candidate["retention_until"] <= datetime.now(timezone.utc):
                     raise HTTPException(status_code=409, detail="Candidate retention period has expired")
                 cursor.execute("""insert into public.talent_pool_memberships
-                    (organization_id,pool_id,candidate_id,added_by,purpose,expires_at,status)
-                    values (%s,%s,%s,%s,%s,%s,'active')
+                    (organization_id,pool_id,candidate_id,added_by,purpose,processing_basis,expires_at,status)
+                    values (%s,%s,%s,%s,%s,%s,%s,'active')
                     on conflict do nothing
-                    returning id,organization_id,pool_id,candidate_id,status,added_by,purpose,added_at,expires_at""",
-                    [payload.organization_id,pool_id,payload.candidate_id,user_id,payload.purpose.strip(),payload.expires_at])
+                    returning id,organization_id,pool_id,candidate_id,status,added_by,purpose,processing_basis,added_at,expires_at""",
+                    [payload.organization_id,pool_id,payload.candidate_id,user_id,payload.purpose.strip(),payload.processing_basis,payload.expires_at])
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=409, detail="Candidate is already an active member of this pool")
