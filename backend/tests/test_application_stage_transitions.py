@@ -111,12 +111,22 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
         self.addCleanup(self.connection_patch.stop)
 
     async def test_valid_transition_sets_actor_and_reason(self):
-        result = await ApplicationService().transition_application(APPLICATION, "screening", USER, "CV reviewed")
+        result = await ApplicationService().transition_application(APPLICATION, "screening", USER, "  CV reviewed  ")
         self.assertEqual(result["status"], "screening")
         self.assertIn(("select set_config('app.actor_user_id', %s, true)", [str(USER)]), self.cursor.executed)
         self.assertIn(("select set_config('app.transition_reason', %s, true)", ["CV reviewed"]), self.cursor.executed)
         self.assertTrue(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
         self.assertTrue(any("from public.application_stage_config" in sql for sql, _ in self.cursor.executed))
+
+    async def test_service_rejects_blank_transition_reason(self):
+        with self.assertRaisesRegex(ValueError, "Transition reason cannot be blank"):
+            await ApplicationService().transition_application(APPLICATION, "screening", USER, "   ")
+        self.assertEqual(self.cursor.executed, [])
+
+    async def test_service_rejects_overlong_transition_reason(self):
+        with self.assertRaisesRegex(ValueError, "cannot exceed 1,000 characters"):
+            await ApplicationService().transition_application(APPLICATION, "screening", USER, "x" * 1001)
+        self.assertEqual(self.cursor.executed, [])
 
     async def test_invalid_transition_is_rejected_without_update(self):
         with self.assertRaisesRegex(ValueError, "Invalid application stage transition"):
