@@ -62,4 +62,6 @@ class JobStatusTransitionTests(unittest.IsolatedAsyncioTestCase):
 class RequisitionRouteOrderTests(unittest.TestCase):
     def test_static_assignee_route_precedes_dynamic_id_route(self):
         paths = [route.path for route in requisitions_router.router.routes]
-        self.assertLess(paths.index("/assignees"), paths.index("/{requisition_id}"))
+        assignee_index = next(i for i, path in enumerate(paths) if path.endswith("/assignees"))
+        dynamic_index = next(i for i, path in enumerate(paths) if path.endswith("/{requisition_id}"))
+        self.assertLess(assignee_index, dynamic_index)
