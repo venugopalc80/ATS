@@ -170,7 +170,8 @@ async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn, organ
                 if cursor.fetchone() is None:
                     raise HTTPException(status_code=404, detail="Job not found or no longer accepting applications")
 
-                if payload.idempotency_key:
+                if payload.idempotency_key and payload.form_version_id is not None:
+                    cursor.execute("select pg_advisory_xact_lock(hashtext(%s), hashtext(%s))", [str(organization_id), payload.idempotency_key])
                     cursor.execute(
                         """select e.application_id from public.application_submission_events e
                             join public.applications a on a.id=e.application_id and a.organization_id=e.organization_id
