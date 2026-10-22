@@ -2,11 +2,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.applications import (
     ApplicationCreate,
     ApplicationOut,
+    ApplicationStageConfigOut,
+    ApplicationStageConfigUpdate,
     ApplicationStageHistoryOut,
     ApplicationTransition,
     ApplicationUpdate,
@@ -92,6 +94,38 @@ async def get_application_history(
         assert_org_member(user_id, existing["organization_id"])
         rows = await service.list_stage_history(existing["organization_id"], application_id)
         return [ApplicationStageHistoryOut.model_validate(row) for row in rows]
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
+
+
+@router.get("/stages", response_model=list[ApplicationStageConfigOut])
+async def list_application_stages(
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[ApplicationStageConfigOut]:
+    assert_org_member(user_id, organization_id)
+    try:
+        rows = await service.list_stage_config(organization_id)
+        return [ApplicationStageConfigOut.model_validate(row) for row in rows]
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
+
+
+@router.patch("/stages/{stage_key}", response_model=ApplicationStageConfigOut)
+async def update_application_stage(
+    stage_key: str,
+    organization_id: UUID,
+    payload: ApplicationStageConfigUpdate,
+    user_id: UUID = Depends(get_current_user_id),
+) -> ApplicationStageConfigOut:
+    assert_org_admin(user_id, organization_id)
+    try:
+        row = await service.update_stage_config(organization_id, stage_key, payload)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Application stage not found")
+        return ApplicationStageConfigOut.model_validate(row)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 

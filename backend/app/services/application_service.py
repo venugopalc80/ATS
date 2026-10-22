@@ -2,7 +2,7 @@ from typing import Any
 from uuid import UUID
 
 from app.db import get_connection
-from app.schemas.applications import ApplicationCreate, ApplicationUpdate
+from app.schemas.applications import ApplicationCreate, ApplicationStageConfigUpdate, ApplicationUpdate
 
 APPLICATION_COLUMNS = "id, organization_id, job_id, candidate_id, source, status, match_score, match_explanation, human_reviewed, human_reviewed_by, human_reviewed_at, created_at, updated_at"
 STAGE_HISTORY_COLUMNS = "id, organization_id, application_id, previous_stage, new_stage, actor_user_id, reason, created_at"

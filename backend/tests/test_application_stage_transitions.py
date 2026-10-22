@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch
 from uuid import UUID
 
+from app.schemas.applications import ApplicationStageConfigUpdate
 from app.services.application_service import ApplicationService
 
 
@@ -149,6 +150,14 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(ValueError, "Application stage configuration is missing"):
             await ApplicationService().transition_application(APPLICATION, "screening", USER, "Missing config")
         self.assertFalse(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
+
+    def test_stage_config_update_rejects_duplicate_next_stages(self):
+        with self.assertRaisesRegex(ValueError, "Allowed next stages must be unique"):
+            ApplicationStageConfigUpdate(allowed_next_stages=["screening", "screening"])
+
+    def test_stage_config_update_rejects_blank_label(self):
+        with self.assertRaisesRegex(ValueError, "Stage label cannot be blank"):
+            ApplicationStageConfigUpdate(label="   ")
 
 
 if __name__ == "__main__":
