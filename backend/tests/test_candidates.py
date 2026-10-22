@@ -132,6 +132,19 @@ class CandidateServiceTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     CandidateUpdate.model_validate({"first_name": "Alex", field: value})
 
+    def test_permanent_delete_is_blocked_when_candidate_has_applications(self):
+        candidate_id = uuid4()
+        self.cursor.rowcount = 0
+        with patch("app.services.candidate_service.get_connection", return_value=self.connection):
+            deleted = asyncio.run(self.service.delete_candidate(candidate_id, self.organization_id))
+
+        query, params = self.cursor.calls[0]
+        self.assertIn("not exists", query.lower())
+        self.assertIn("public.applications", query)
+        self.assertIn("application.candidate_id = candidate.id", query)
+        self.assertEqual(params, [candidate_id, self.organization_id])
+        self.assertFalse(deleted)
+
 
 if __name__ == "__main__":
     unittest.main()
