@@ -36,6 +36,14 @@ class PrivacyRequestUpdate(BaseModel):
     exception_details: str | None = Field(default=None, max_length=4000)
     retention_justification: str | None = Field(default=None, max_length=4000)
 
+    @model_validator(mode="after")
+    def validate_exceptions(self):
+        if self.status in {"partially_completed", "declined"} and not (
+            self.exception_details or self.retention_justification
+        ):
+            raise ValueError("Partial completion or decline requires a documented exception or retention justification")
+        return self
+
 
 class NoticeCreate(BaseModel):
     organization_id: UUID
