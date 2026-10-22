@@ -462,7 +462,7 @@ def _document_for_extraction(document_id: UUID, organization_id: UUID) -> dict:
 
 def _structured_cv_fields(text: str, filename: str) -> tuple[dict, dict, dict]:
     fields = cv_candidate_fields(text, filename)
-    lines = [re.sub(r"\\s+", " ", line).strip(" \\t|•-") for line in text.splitlines()]
+    lines = [re.sub(r"\s+", " ", line).strip(" \\t|•-") for line in text.splitlines()]
     lines = [line for line in lines if line]
     sections = {"work_history": [], "education": [], "qualifications": []}
     current = None
@@ -644,7 +644,7 @@ async def confirm_document_extraction(
         raise HTTPException(status_code=422, detail="First name cannot be empty")
     if "email" in fields and fields["email"] is not None:
         email = str(fields["email"]).strip().lower()
-        if email and not re.fullmatch(r"[^\\s@]+@[^\\s@]+\\.[^\\s@]+", email):
+        if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
             raise HTTPException(status_code=422, detail="Email address is invalid")
         fields["email"] = email or None
     if "skills" in fields and not isinstance(fields["skills"], list):
