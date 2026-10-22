@@ -83,3 +83,25 @@ For every idea, maintain:
 - **Verified delivery percentage:** Not yet verified.
 - **Evidence coverage percentage:** Not yet calculated; the canonical 49-row register is incomplete.
 - **Production release claims:** Must be independently checked against the current deployed commit and runtime before marking any idea Released.
+
+
+## Roadmap source reconciliation — first pass
+
+A project Library source titled **Pasted markdown.md** contains detailed feature briefs for Ideas 04–08. This is source evidence for the idea titles and requirements below; it is not proof that the requirements have been implemented.
+
+| Idea | Canonical title from source | Main acceptance themes from source | Evidence-based repository status |
+|---|---|---|---|
+| 04 | Applications & Recruitment Pipeline | Candidate/application separation; controlled stage transitions; audit history; tenant isolation; safe bulk actions; candidate-facing status separated from internal data | Draft PRs #69 and #70 overlap; consolidation and full acceptance tests still required |
+| 05 | Application Forms & Candidate Self-Service | Versioned forms; server-side validation; candidate review before submission; private uploads; accessible mobile flow; privacy notice separate from marketing permission | Draft PR #62; secure CV upload, staging migration verification, accessibility and abuse tests remain |
+| 06 | CV Parsing & Document Intelligence | Preserve originals; recruiter correction of extraction; confidence/provenance; duplicate detection; safe retries; logged access/processing | Exact repository implementation and acceptance evidence not reconciled in this pass |
+| 07 | Candidate Matching & Job Fit Intelligence | Evidence-linked explanations; missing data not treated as negative; auditable criteria/scoring; recruiter override with reason; quality and fairness evaluation | Exact repository implementation and acceptance evidence not reconciled in this pass |
+| 08 | Recruitment Workflow Automation | Draft/test/publish/disable lifecycle; traceable runs; idempotent retries; runtime permission checks; recovery; logged communications | Draft PR #63 describes a workflow foundation, not a complete execution engine; event producers, workers, execution-time permissions, idempotent side effects and recovery remain |
+
+**Source limitation:** The retrieved source segment contains Ideas 04–08 only. It does not by itself establish the complete authoritative list of all 49 ideas. The remaining titles must be retrieved from the source material before this register can be considered canonical.
+
+## Updated progress snapshot — 2026-10-22
+
+- **Tracker task completion:** 100% for the initial tracker creation; further reconciliation is still in progress.
+- **Roadmap title coverage:** 5 of 49 titles have now been confirmed against the source segment (10.2%). This is title coverage only, not implementation completion.
+- **Verified product delivery:** Not yet calculable; the canonical 49-row acceptance register and production deployment evidence are incomplete.
+- **Pending:** Retrieve the remaining source sections; map each idea to main/PRs/migrations/tests; verify current deployed commit; then calculate verified delivery and evidence coverage.
