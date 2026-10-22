@@ -831,6 +831,11 @@ async def create_recorded_recommendation(
         raise _db_error(exc) from exc
 
 
+class DraftEditInput(BaseModel):
+    organization_id: UUID
+    content: str = Field(min_length=1, max_length=20000)
+
+
 class IncidentUpdateInput(BaseModel):
     organization_id: UUID
     status: Literal["open", "investigating", "mitigated", "closed"]
