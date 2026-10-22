@@ -111,6 +111,28 @@ export default function RecruitmentCampaignsPage() {
     }
   }
 
+  async function changeCampaignStatus(campaign: Campaign, status: string) {
+    if (status === campaign.status) return;
+    const reason = window.prompt("Record the reason for this campaign status change:");
+    if (!reason?.trim()) return;
+    setLoading(true); setMessage("");
+    try {
+      const response = await apiFetch(`${API_BASE}/api/campaigns/${campaign.id}/status`, {
+        method: "PATCH",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ organization_id: organizationId, status, reason: reason.trim() }),
+      });
+      const body = await response.json();
+      if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "Could not update campaign.");
+      await loadCampaigns(organizationId);
+      setMessage("Campaign status updated with an audit reason.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Could not update campaign.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function createChannel(event: FormEvent) {
     event.preventDefault();
     if (!selectedCampaign) return;
@@ -220,7 +242,7 @@ export default function RecruitmentCampaignsPage() {
           <div style={{ overflowX: "auto" }}><table className="table">
             <thead><tr><th>Campaign</th><th>Attributed candidates</th><th>Referrals</th><th>Qualified</th><th>Hired referrals</th><th>Qualified applications</th><th>Interview progress</th><th>Hired applications</th><th>Channel spend</th><th>Cost per hire</th></tr></thead>
             <tbody>{campaigns.map((campaign) => <tr key={campaign.id}>
-              <td><button type="button" className="link" onClick={() => setSelectedCampaign(campaign.id)}>{campaign.name}</button><div className="muted-small">{campaign.status}</div></td>
+              <td><button type="button" className="link" onClick={() => setSelectedCampaign(campaign.id)}>{campaign.name}</button><div><select aria-label={"Campaign status " + campaign.id} disabled={loading} value={campaign.status} onChange={(event) => void changeCampaignStatus(campaign, event.target.value)}><option value="draft">Draft</option><option value="scheduled">Scheduled</option><option value="active">Active</option><option value="paused">Paused</option><option value="completed">Completed</option><option value="cancelled">Cancelled</option></select></div></td>
               <td>{campaign.attributed_candidates ?? 0}</td><td>{campaign.referrals ?? 0}</td><td>{campaign.qualified_referrals ?? 0}</td><td>{campaign.hired_referrals ?? 0}</td>
               <td>{campaign.qualified_applications ?? 0}</td><td>{campaign.interview_progressed_applications ?? 0}</td><td>{campaign.hired_applications ?? 0}</td>
               <td>{campaign.channel_spend == null ? "—" : `${campaign.channel_spend_currency ?? ""} ${Number(campaign.channel_spend).toFixed(2)}`}</td>
