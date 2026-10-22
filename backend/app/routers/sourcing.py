@@ -1074,6 +1074,8 @@ async def create_campaign(payload: CampaignCreate, user_id: UUID = Depends(get_c
                     values (%s,%s,%s,'created',%s::jsonb)""",
                     [payload.organization_id,row["id"],user_id,json.dumps({"name":payload.name.strip()})])
                 return row
+    except HTTPException:
+        raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_error(exc) from exc
     except Exception as exc:
