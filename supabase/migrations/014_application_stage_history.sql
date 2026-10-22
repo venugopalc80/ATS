@@ -19,7 +19,7 @@ create index if not exists application_stage_history_org_application_created_idx
 
 alter table public.application_stage_history enable row level security;
 -- This history is read through the authenticated backend API, not the browser Data API.
-revoke all on public.application_stage_history from anon, authenticated;
+revoke all on public.application_stage_history from public, anon, authenticated;
 
 drop policy if exists application_stage_history_member_read on public.application_stage_history;
 create policy application_stage_history_member_read
