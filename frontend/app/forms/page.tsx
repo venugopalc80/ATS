@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import "./forms.css";
 import { apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
 
