@@ -1,6 +1,10 @@
 -- AQERITH Idea 11: candidate assessments and skills testing.
 -- Additive migration. Review and apply to ATS-Staging only after code review; never apply to production as part of this change.
 
+-- Composite unique indexes allow tenant-safe foreign keys to existing records.
+create unique index if not exists jobs_organization_id_id_uidx on public.jobs(organization_id, id);
+create unique index if not exists applications_organization_id_id_uidx on public.applications(organization_id, id);
+
 create table if not exists public.assessment_templates (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
