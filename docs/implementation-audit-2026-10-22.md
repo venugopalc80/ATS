@@ -79,3 +79,26 @@ Report both:
 - **Evidence coverage** = criteria with a reviewed result / all required criteria.
 
 Do not assign an overall percentage until the canonical list and criteria for all 49 ideas are reconciled.
+
+
+## Live repository queue snapshot (checked 2026-10-22)
+
+The latest GitHub query returned **42 open pull requests**, of which **34 are drafts**. **6 target a base branch other than `main`**, so they cannot be treated as standalone changes ready to land. This is a repository-queue count, not a feature-completion count.
+
+### Immediate blockers to orderly delivery
+
+1. **Consolidate duplicate application-stage work.** PRs #69 and #70 both cover Idea 04. Pick one canonical path and close/supersede the duplicate only after checking the unique changes.
+2. **Resolve branch dependencies before acceptance.** Several PRs target feature branches, including #58, #59 and #64. Rebase or sequence them deliberately; do not merge a dependent PR ahead of its base.
+3. **Do not treat open PRs as completed roadmap items.** Drafts for Ideas 01–14 and Sections 4, 5, 7 and 8 are implementation candidates. Each needs its own acceptance evidence and a deliberate integration order.
+4. **Finish the canonical 49-idea inventory.** The project notes and repository evidence currently do not establish one complete, version-controlled source containing all 49 titles and acceptance criteria. Until it is found, the overall percentage remains unverified.
+5. **Check live deployment separately.** Vercel READY preview deployments exist for some feature branches, but that does not establish that `aqerith.com` is running those commits or that their migrations are applied in production.
+
+### Execution order
+
+- **P0 — establish a release baseline:** identify the deployed production commit and current migration state; keep production unchanged during audit.
+- **P1 — reduce integration ambiguity:** choose the canonical Idea 04 PR, map chained PR bases, and pin the roadmap source.
+- **P2 — close the current high-risk implementation gates:** tenant/resource permissions, secure imports, workflow transition tests, and privacy/AI safety gates.
+- **P3 — accept features in dependency order:** require CI, migration review, tenant-isolation tests and authenticated preview QA for each integration.
+- **P4 — calculate the score:** score all 49 ideas against their acceptance criteria and publish both verified completion and evidence coverage.
+
+No PR was merged or closed by this audit update, and no production migration or deployment was performed.
