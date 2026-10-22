@@ -2,7 +2,7 @@
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class KitQuestionInput(BaseModel):
@@ -46,6 +46,13 @@ class ScorecardResponseInput(BaseModel):
     rating: int = Field(ge=1, le=5)
     evidence: str = Field(min_length=1, max_length=4000)
     notes: str | None = Field(default=None, max_length=4000)
+
+    @field_validator("evidence")
+    @classmethod
+    def evidence_must_contain_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Evidence must contain job-related observations")
+        return value.strip()
 
 
 class InterviewFeedbackDraft(BaseModel):
