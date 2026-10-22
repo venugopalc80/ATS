@@ -19,6 +19,12 @@ type Funnel = {
 type Workload = { recruiters: Array<{ user_id: string; name: string; role: string; open_vacancies: number; on_hold_vacancies: number; active_applications: number; upcoming_interviews: number; open_tasks: number; overdue_tasks: number }>; unassigned: { unassigned_open_vacancies: number; unassigned_open_tasks: number }; definitions: { note: string } };
 type Source = { source: string; applications: number; qualified_applications: number; completed_interviews: number; offers: number; decided_offers: number; accepted_offers: number; hires: number; offer_acceptance_rate: number | null; conversion_rate: number | null; sample_warning: boolean };
 type Sources = { sources: Source[]; limitations: string[] };
+type Forecast = {
+  history_months: number;
+  history: Array<{ month: string; approved_headcount: number; approved_requisitions: number }>;
+  forecast: { month: string; expected_approved_headcount: number | null; pending_approval_headcount: number; pending_approval_requisitions: number; trend: string; confidence: string; status: string };
+  methodology: { baseline: string; trend: string; confidence: string; exclusions: string[] };
+};
 
 function isoDate(daysAgo = 0) {
   const d = new Date();
@@ -43,6 +49,7 @@ export default function AnalyticsPage() {
   const [funnel, setFunnel] = useState<Funnel | null>(null);
   const [workload, setWorkload] = useState<Workload | null>(null);
   const [sources, setSources] = useState<Sources | null>(null);
+  const [forecast, setForecast] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -69,6 +76,7 @@ export default function AnalyticsPage() {
         "/api/analytics/funnel?" + params.toString(),
         "/api/analytics/workload?organization_id=" + encodeURIComponent(organizationId),
         "/api/analytics/sources?" + params.toString(),
+        "/api/analytics/forecast?organization_id=" + encodeURIComponent(organizationId),
       ];
       const responses = await Promise.all(paths.map((path) => apiFetch(API_BASE + path)));
       const failed = responses.find((response) => !response.ok);
@@ -78,11 +86,12 @@ export default function AnalyticsPage() {
         if (failed.status === 503) throw new Error("Analytics data is temporarily unavailable. Please retry.");
         throw new Error("Analytics could not be loaded (HTTP " + failed.status + ").");
       }
-      const [k, f, w, s] = await Promise.all(responses.map((response) => response.json()));
+      const [k, f, w, s, forecastData] = await Promise.all(responses.map((response) => response.json()));
       setKpis(k);
       setFunnel(f);
       setWorkload(w);
       setSources(s);
+      setForecast(forecastData);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load analytics.");
     } finally {
@@ -158,6 +167,25 @@ export default function AnalyticsPage() {
           {loading && !kpis ? <div className="analytics-kpi-grid">{Array.from({ length: 7 }).map((_, index) => <div className="card" key={index}><span className="dashboard-skeleton" /><div className="dashboard-loading-lines"><span /><span /></div></div>)}</div> : null}
           {kpis && <section className="analytics-kpi-grid" aria-label="Recruitment KPIs">
             {cards.map((card) => <article className="card analytics-kpi" key={card.key}><div className="metric-title">{card.label}</div><div className="metric-value">{loading ? "…" : card.value}</div><div className="metric-foot analytics-foot">{card.note}</div></article>)}
+          </section>}
+          {forecast && <section className="card analytics-forecast-card">
+            <div className="card-head">
+              <div><div className="card-title">Hiring demand forecast</div><div className="muted-small">Next calendar month · transparent baseline, not an AI prediction</div></div>
+              <span className={"badge " + (forecast.forecast.confidence === "unavailable" ? "amber" : "blue")}>{nice(forecast.forecast.confidence)} confidence</span>
+            </div>
+            <div className="analytics-forecast-summary">
+              <div><div className="metric-title">Expected approved headcount</div><div className="metric-value">{forecast.forecast.expected_approved_headcount == null ? "—" : number(forecast.forecast.expected_approved_headcount, 1)}</div><div className="muted-small">{forecast.forecast.status === "no_historical_approved_requisitions" ? "Not enough historical approved requisitions to estimate demand." : "Six-month average including zero-activity months."}</div></div>
+              <div><div className="metric-title">Pending approval</div><div className="metric-value">{number(forecast.forecast.pending_approval_headcount)}</div><div className="muted-small">{number(forecast.forecast.pending_approval_requisitions)} requisitions awaiting a decision</div></div>
+              <div><div className="metric-title">Historical trend</div><div className="metric-value analytics-trend">{nice(forecast.forecast.trend)}</div><div className="muted-small">First three months compared with latest three</div></div>
+            </div>
+            <div className="analytics-history-bars">
+              {forecast.history.map((month) => {
+                const maximum = Math.max(1, ...forecast.history.map((item) => item.approved_headcount));
+                const monthLabel = new Intl.DateTimeFormat(undefined, { month: "short", year: "2-digit" }).format(new Date(month.month + "T12:00:00"));
+                return <div className="analytics-history-item" key={month.month}><div className="analytics-history-value">{number(month.approved_headcount)}</div><div className="analytics-history-track"><div className="analytics-history-fill" style={{ height: Math.max(3, month.approved_headcount / maximum * 100) + "%" }} /></div><div className="analytics-history-label">{monthLabel}</div></div>;
+              })}
+            </div>
+            <details className="analytics-details"><summary>How this forecast is calculated</summary><p>{forecast.methodology.baseline}</p><p>{forecast.methodology.trend}</p><p>{forecast.methodology.confidence}</p><p>Excluded: {forecast.methodology.exclusions.join(", ")}.</p></details>
           </section>}
           <div className="analytics-two-col">
             <section className="card">
