@@ -1,17 +1,11 @@
 from contextlib import contextmanager
-from uuid import UUID
+from unittest import TestCase
 from unittest.mock import patch
+from uuid import UUID
 
-import pytest
 from pydantic import ValidationError
 
-from app.routers.sourcing import (
-    SavedSearchCreate,
-    SearchCriteria,
-    _escape_like,
-    _search_rows,
-)
-
+from app.routers.sourcing import SavedSearchCreate, SearchCriteria, _escape_like, _search_rows
 
 ORG_ID = UUID("11111111-1111-1111-1111-111111111111")
 
@@ -44,68 +38,65 @@ class FakeConnection:
         yield self.cursor_instance
 
 
-def test_search_terms_escape_like_wildcards():
-    assert _escape_like("100%_safe!\\") == "100!%!_!!\\"
+class SourcingSearchTests(TestCase):
+    def test_search_terms_escape_like_wildcards(self):
+        self.assertEqual(_escape_like("100%_safe!"), "100!%!_safe!!")
 
+    def test_saved_search_rejects_unknown_criteria(self):
+        with self.assertRaises(ValidationError):
+            SearchCriteria.model_validate({"q": "python", "sql": "drop table candidates"})
 
-def test_saved_search_rejects_executable_or_unknown_criteria():
-    with pytest.raises(ValidationError):
-        SearchCriteria.model_validate({"q": "python", "sql": "drop table candidates"})
+    def test_saved_search_validates_record_type_and_criteria(self):
+        payload = SavedSearchCreate.model_validate({
+            "organization_id": str(ORG_ID),
+            "name": "Python candidates",
+            "record_type": "candidates",
+            "criteria": {"q": "python", "skills": ["Python"]},
+        })
+        self.assertEqual(payload.record_type, "candidates")
+        self.assertEqual(payload.criteria.skills, ["Python"])
 
+    def test_search_is_tenant_scoped_and_uses_bound_search_values(self):
+        connection = FakeConnection()
 
-def test_saved_search_validates_record_type_and_criteria():
-    payload = SavedSearchCreate.model_validate({
-        "organization_id": str(ORG_ID),
-        "name": "Python candidates",
-        "record_type": "candidates",
-        "criteria": {"q": "python", "skills": ["Python"]},
-    })
-    assert payload.record_type == "candidates"
-    assert payload.criteria.skills == ["Python"]
+        @contextmanager
+        def fake_connection():
+            yield connection
 
+        with patch("app.routers.sourcing.get_connection", fake_connection):
+            rows = _search_rows(
+                ORG_ID,
+                "candidates",
+                SearchCriteria(q="100%_safe", skills=["Python"]),
+                limit=10,
+                offset=0,
+            )
 
-def test_search_is_tenant_scoped_and_uses_bound_search_values():
-    connection = FakeConnection()
+        self.assertEqual(rows, [{"id": "candidate-1"}])
+        self.assertIn("base.organization_id = %s", connection.cursor_instance.query)
+        self.assertNotIn("drop table", connection.cursor_instance.query.lower())
+        self.assertEqual(str(ORG_ID), str(connection.cursor_instance.params[0]))
+        self.assertIn("%100!%!_safe%", connection.cursor_instance.params)
+        self.assertIn(["Python"], connection.cursor_instance.params)
 
-    @contextmanager
-    def fake_connection():
-        yield connection
+    def test_application_search_joins_candidate_and_job_with_same_organisation(self):
+        connection = FakeConnection()
 
-    with patch("app.routers.sourcing.get_connection", fake_connection):
-        rows = _search_rows(
-            ORG_ID,
-            "candidates",
-            SearchCriteria(q="100%_safe", skills=["Python"]),
-            limit=10,
-            offset=0,
-        )
+        @contextmanager
+        def fake_connection():
+            yield connection
 
-    assert rows == [{"id": "candidate-1"}]
-    assert "base.organization_id = %s" in connection.cursor_instance.query
-    assert "drop table" not in connection.cursor_instance.query.lower()
-    assert str(ORG_ID) == str(connection.cursor_instance.params[0])
-    assert "%100!%!_safe%" in connection.cursor_instance.params
-    assert ["Python"] in connection.cursor_instance.params
+        with patch("app.routers.sourcing.get_connection", fake_connection):
+            _search_rows(
+                ORG_ID,
+                "applications",
+                SearchCriteria(q="developer", status="interview"),
+                limit=10,
+                offset=0,
+            )
 
-
-def test_application_search_joins_candidate_and_job_with_same_organisation():
-    connection = FakeConnection()
-
-    @contextmanager
-    def fake_connection():
-        yield connection
-
-    with patch("app.routers.sourcing.get_connection", fake_connection):
-        _search_rows(
-            ORG_ID,
-            "applications",
-            SearchCriteria(q="developer", status="interview"),
-            limit=10,
-            offset=0,
-        )
-
-    sql = connection.cursor_instance.query
-    assert "c.organization_id=base.organization_id" in sql
-    assert "j.organization_id=base.organization_id" in sql
-    assert "base.organization_id = %s" in sql
-    assert "base.status = %s" in sql
+        sql = connection.cursor_instance.query
+        self.assertIn("c.organization_id=base.organization_id", sql)
+        self.assertIn("j.organization_id=base.organization_id", sql)
+        self.assertIn("base.organization_id = %s", sql)
+        self.assertIn("base.status = %s", sql)
