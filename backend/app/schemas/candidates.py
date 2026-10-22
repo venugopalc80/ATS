@@ -1,10 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints
-from typing import Annotated
 
 CandidateStatus = Literal["active", "inactive", "placed", "do_not_contact"]
 CountryCode = Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}$")]
@@ -22,8 +21,6 @@ class CandidateBase(BaseModel):
     current_title: str | None = Field(default=None, max_length=200)
     years_experience: Decimal | None = Field(default=None, ge=0, le=80)
     skills: list[str] = Field(default_factory=list)
-    resume_path: str | None = None
-    resume_text: str | None = None
     ai_summary: str | None = None
     consent_recorded_at: datetime | None = None
     consent_purpose: str | None = None
@@ -46,17 +43,27 @@ class CandidateUpdate(BaseModel):
     current_title: str | None = Field(default=None, max_length=200)
     years_experience: Decimal | None = Field(default=None, ge=0, le=80)
     skills: list[str] | None = None
-    resume_path: str | None = None
-    resume_text: str | None = None
     ai_summary: str | None = None
     consent_recorded_at: datetime | None = None
     consent_purpose: str | None = None
     retention_until: datetime | None = None
 
 
-class CandidateOut(CandidateBase):
+class CandidateOut(BaseModel):
     id: UUID
     organization_id: UUID
+    first_name: str
+    last_name: str | None = None
+    email: str | None = None
+    phone: str | None = None
+    city: str | None = None
+    region: str | None = None
+    country_code: str | None = None
+    status: CandidateStatus
+    current_title: str | None = None
+    years_experience: Decimal | None = None
+    skills: list[str] = Field(default_factory=list)
+    ai_summary: str | None = None
     created_at: datetime
     updated_at: datetime
 
