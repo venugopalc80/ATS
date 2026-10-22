@@ -654,8 +654,17 @@ async def confirm_document_extraction(
     if invalid:
         raise HTTPException(status_code=422, detail="Unsupported candidate fields: " + ", ".join(sorted(invalid)))
     fields = payload.fields
+    for name_field in ("first_name", "last_name", "phone", "current_title"):
+        if name_field in fields and fields[name_field] is not None:
+            if not isinstance(fields[name_field], str):
+                raise HTTPException(status_code=422, detail=f"{name_field} must be text")
+            if len(fields[name_field]) > 200:
+                raise HTTPException(status_code=422, detail=f"{name_field} must be 200 characters or fewer")
     if "first_name" in fields and (not isinstance(fields["first_name"], str) or not fields["first_name"].strip()):
         raise HTTPException(status_code=422, detail="First name cannot be empty")
+    if "skills" in fields:
+        if not isinstance(fields["skills"], list) or len(fields["skills"]) > 100 or any(not isinstance(skill, str) or len(skill) > 100 for skill in fields["skills"]):
+            raise HTTPException(status_code=422, detail="Skills must be a list of up to 100 text values, each 100 characters or fewer")
     if "email" in fields and fields["email"] is not None:
         email = str(fields["email"]).strip().lower()
         if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
@@ -682,6 +691,9 @@ async def confirm_document_extraction(
             extraction = cursor.fetchone()
             if extraction is None or extraction["status"] not in {"review_required", "confirmed"}:
                 raise HTTPException(status_code=409, detail="Extraction must finish successfully before confirmation")
+            existing_data = extraction["extraction_data"] or {}
+            if extraction["status"] == "confirmed" and all(existing_data.get(key) == value for key, value in fields.items()):
+                return {"document_id": str(document_id), "candidate_id": str(doc["candidate_id"]), "status": "confirmed", "unchanged": True}
             assignments = []
             values = []
             for key, value in fields.items():
