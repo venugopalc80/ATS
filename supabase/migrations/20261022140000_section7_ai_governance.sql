@@ -73,6 +73,7 @@ create table if not exists public.ai_recommendations (
   model_version_id uuid references public.ai_model_versions(id) on delete set null,
   human_reviewed_by uuid references public.profiles(id) on delete set null,
   human_reviewed_at timestamptz,
+  review_outcome text check (review_outcome is null or review_outcome in ('accepted','overridden','needs_correction')),
   override_reason text,
   created_at timestamptz not null default now()
 );
