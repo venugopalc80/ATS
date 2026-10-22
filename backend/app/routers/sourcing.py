@@ -842,6 +842,24 @@ async def commit_candidate_csv_import(
                     if not should_import:
                         continue
                     data = item["mapped_data"]
+                    email = data.get("email")
+                    if email:
+                        cursor.execute("select pg_advisory_xact_lock(hashtext(%s),hashtext(%s))",
+                                       [str(organization_id),str(email).casefold()])
+                        if duplicate_policy != "allow":
+                            cursor.execute("""select id from public.candidates
+                                where organization_id=%s and lower(email)=lower(%s) limit 1""",
+                                [organization_id,email])
+                            existing = cursor.fetchone()
+                            if existing:
+                                cursor.execute("""update public.import_row_results
+                                    set status='duplicate',duplicate_candidate_id=%s,
+                                        errors=errors || jsonb_build_array('Duplicate appeared after preview'),
+                                        processed_at=now()
+                                    where id=%s and organization_id=%s""",
+                                    [existing["id"],item["id"],organization_id])
+                                duplicates += 1
+                                continue
                     cursor.execute("""insert into public.candidates
                         (organization_id,first_name,last_name,email,phone,city,region,country_code,status,
                          current_title,years_experience,skills,source_id,import_batch_id,created_at,updated_at)
