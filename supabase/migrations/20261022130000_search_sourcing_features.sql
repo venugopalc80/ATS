@@ -28,7 +28,28 @@ create table if not exists public.candidate_tags (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   name text not null check (length(trim(name)) between 1 and 60),
-  colour text not null default '#64748b' check (colour ~ '^#[0-9A-Fa-f]{6}
+  colour text not null default '#64748b' check (colour ~ '^#[0-9A-Fa-f]{6}$'),
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  unique (organization_id, id),
+  unique (organization_id, name)
+);
+create table if not exists public.candidate_tag_assignments (
+  organization_id uuid not null references public.organizations(id) on delete cascade,
+  candidate_id uuid not null references public.candidates(id) on delete cascade,
+  tag_id uuid not null,
+  assigned_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now(),
+  primary key (organization_id, candidate_id, tag_id),
+  foreign key (organization_id, tag_id) references public.candidate_tags(organization_id, id) on delete cascade
+);
+create index if not exists candidate_tag_assignments_tag_idx
+  on public.candidate_tag_assignments (organization_id, tag_id, candidate_id);
+create index if not exists candidate_tag_assignments_candidate_idx
+  on public.candidate_tag_assignments (organization_id, candidate_id, created_at desc);
+
+create table if not exists public.talent_pools (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   name text not null check (length(trim(name)) between 1 and 120),
