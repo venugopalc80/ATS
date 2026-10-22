@@ -3,16 +3,19 @@ import hmac
 import json
 import os
 import re
+from pathlib import Path
+from uuid import uuid4
 import time
 from datetime import datetime, timezone
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Request, UploadFile, status
 from pydantic import BaseModel, Field, ValidationError
+from supabase import create_client
 
 from app.auth import assert_org_member, get_current_user_id
-from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
+from app.db import get_connection
 
 router = APIRouter(tags=["recruitment documents"])
 TEMPLATE_PLACEHOLDERS = {
@@ -305,3 +308,258 @@ async def receive_normalized_signature_event(
         )
         connection.commit()
         return {"accepted": True, "event_id": event.event_id}
+
+
+RECRUITMENT_BUCKET = "recruitment-documents"
+MAX_RECRUITMENT_DOCUMENT_BYTES = 20 * 1024 * 1024
+RECRUITMENT_FILE_TYPES = {
+    "application/pdf": (".pdf", b"%PDF-"),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": (".docx", b"PK\\x03\\x04"),
+}
+
+
+def _recruitment_storage_client():
+    url = os.getenv("SUPABASE_URL")
+    key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
+    if not url or not key:
+        raise HTTPException(status_code=503, detail="Private recruitment document storage is not configured")
+    return create_client(url, key)
+
+
+def _validate_recruitment_file(data: bytes, mime: str) -> str:
+    if mime not in RECRUITMENT_FILE_TYPES:
+        raise HTTPException(status_code=415, detail="Only PDF and DOCX recruitment documents are supported")
+    if not data:
+        raise HTTPException(status_code=422, detail="The uploaded document is empty")
+    if len(data) > MAX_RECRUITMENT_DOCUMENT_BYTES:
+        raise HTTPException(status_code=413, detail="Recruitment documents must be 20 MB or smaller")
+    extension, signature = RECRUITMENT_FILE_TYPES[mime]
+    if not data.startswith(signature):
+        raise HTTPException(status_code=415, detail="File contents do not match the selected file type")
+    return extension
+
+
+def _safe_recruitment_filename(filename: str | None, extension: str) -> str:
+    raw = Path(filename or ("document" + extension)).name
+    cleaned = re.sub(r"[^A-Za-z0-9._ -]", "_", raw).strip(" .")
+    if not cleaned:
+        cleaned = "document" + extension
+    if not cleaned.lower().endswith(extension):
+        cleaned = Path(cleaned).stem + extension
+    return cleaned[:180]
+
+
+def _verify_document_parents(
+    organization_id: UUID,
+    candidate_id: UUID | None,
+    application_id: UUID | None,
+    offer_id: UUID | None,
+):
+    with get_connection() as connection, connection.cursor() as cursor:
+        if candidate_id:
+            cursor.execute(
+                "select id from public.candidates where id=%s and organization_id=%s",
+                [candidate_id, organization_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Candidate not found")
+        if application_id:
+            cursor.execute(
+                "select id, candidate_id from public.applications where id=%s and organization_id=%s",
+                [application_id, organization_id],
+            )
+            application = cursor.fetchone()
+            if application is None:
+                raise HTTPException(status_code=404, detail="Application not found")
+            if candidate_id and application["candidate_id"] != candidate_id:
+                raise HTTPException(status_code=422, detail="Application does not belong to the selected candidate")
+        if offer_id:
+            cursor.execute(
+                "select id, application_id from public.offers where id=%s and organization_id=%s",
+                [offer_id, organization_id],
+            )
+            offer = cursor.fetchone()
+            if offer is None:
+                raise HTTPException(status_code=404, detail="Offer not found")
+            if application_id and offer["application_id"] != application_id:
+                raise HTTPException(status_code=422, detail="Offer does not belong to the selected application")
+            if candidate_id and not application_id:
+                cursor.execute(
+                    "select candidate_id from public.applications where id=%s and organization_id=%s",
+                    [offer["application_id"], organization_id],
+                )
+                linked = cursor.fetchone()
+                if linked is None or linked["candidate_id"] != candidate_id:
+                    raise HTTPException(status_code=422, detail="Offer does not belong to the selected candidate")
+
+
+@router.get("/api/recruitment-documents")
+def list_recruitment_documents(
+    organization_id: UUID,
+    candidate_id: UUID | None = None,
+    application_id: UUID | None = None,
+    offer_id: UUID | None = None,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, organization_id)
+    _verify_document_parents(organization_id, candidate_id, application_id, offer_id)
+    filters = ["organization_id=%s"]
+    values: list[object] = [organization_id]
+    for column, value in (("candidate_id", candidate_id), ("application_id", application_id), ("offer_id", offer_id)):
+        if value is not None:
+            filters.append(f"{column}=%s")
+            values.append(value)
+    with get_connection() as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """select id, organization_id, document_group_id, version, template_version_id,
+                      candidate_id, application_id, offer_id, document_type, jurisdiction_code,
+                      status, file_name, content_type, file_size_bytes, content_sha256,
+                      generated_from_template_version, sent_at, viewed_at, signed_at,
+                      declined_at, expires_at, revoked_at, created_by, created_at, updated_at
+               from public.recruitment_documents where """ + " and ".join(filters) + " order by created_at desc",
+            values,
+        )
+        return list(cursor.fetchall())
+
+
+@router.post("/api/recruitment-documents", status_code=status.HTTP_201_CREATED)
+async def store_recruitment_document(
+    organization_id: UUID,
+    document_type: Literal["offer_letter", "acknowledgement", "policy", "other"],
+    jurisdiction_code: Literal["GB", "US", "IN", "AU", "GLOBAL"],
+    file: UploadFile = File(...),
+    candidate_id: UUID | None = Query(default=None),
+    application_id: UUID | None = Query(default=None),
+    offer_id: UUID | None = Query(default=None),
+    template_version_id: UUID | None = Query(default=None),
+    document_group_id: UUID | None = Query(default=None),
+    generated_from_template_version: int | None = Query(default=None, ge=1),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Store a generated or approved recruitment document as a new immutable version.
+
+    This endpoint stores supplied PDF/DOCX bytes; it does not itself render template
+    placeholders into a PDF. The rendering pipeline must pass its generated artifact here.
+    """
+    assert_org_member(user_id, organization_id)
+    if not any((candidate_id, application_id, offer_id)):
+        raise HTTPException(status_code=422, detail="A candidate, application, or offer must be linked")
+    _verify_document_parents(organization_id, candidate_id, application_id, offer_id)
+
+    if template_version_id:
+        with get_connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """select id from public.recruitment_document_template_versions
+                   where id=%s and organization_id=%s""",
+                [template_version_id, organization_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Template version not found")
+
+    mime = (file.content_type or "").lower()
+    data = await file.read(MAX_RECRUITMENT_DOCUMENT_BYTES + 1)
+    extension = _validate_recruitment_file(data, mime)
+    digest = hashlib.sha256(data).hexdigest()
+    document_id = uuid4()
+    group_id = document_group_id or uuid4()
+    filename = _safe_recruitment_filename(file.filename, extension)
+    version = 1
+
+    with get_connection() as connection, connection.cursor() as cursor:
+        if document_group_id:
+            cursor.execute(
+                """select version, candidate_id, application_id, offer_id, document_type, jurisdiction_code
+                   from public.recruitment_documents
+                   where document_group_id=%s and organization_id=%s
+                   order by version desc limit 1""",
+                [document_group_id, organization_id],
+            )
+            latest = cursor.fetchone()
+            if latest is None:
+                raise HTTPException(status_code=404, detail="Document version group not found")
+            if (latest["candidate_id"], latest["application_id"], latest["offer_id"], latest["document_type"], latest["jurisdiction_code"]) != (candidate_id, application_id, offer_id, document_type, jurisdiction_code):
+                raise HTTPException(status_code=422, detail="A new version must preserve the original document's parent records and classification")
+            version = int(latest["version"]) + 1
+
+    storage_path = f"{organization_id}/{group_id}/v{version}/{document_id}{extension}"
+    storage = _recruitment_storage_client()
+    try:
+        storage.storage.from_(RECRUITMENT_BUCKET).upload(
+            storage_path, data,
+            {"content-type": mime, "upsert": "false", "cache-control": "0"},
+        )
+        with get_connection() as connection, connection.cursor() as cursor:
+            cursor.execute(
+                """insert into public.recruitment_documents
+                     (id,organization_id,document_group_id,version,template_version_id,
+                      candidate_id,application_id,offer_id,document_type,jurisdiction_code,status,
+                      storage_bucket,storage_path,file_name,content_type,file_size_bytes,content_sha256,
+                      generated_from_template_version,created_by)
+                   values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'generated',%s,%s,%s,%s,%s,%s,%s,%s)
+                   returning id, organization_id, document_group_id, version, status, file_name,
+                             content_type, file_size_bytes, content_sha256, created_at""",
+                [document_id, organization_id, group_id, version, template_version_id,
+                 candidate_id, application_id, offer_id, document_type, jurisdiction_code,
+                 RECRUITMENT_BUCKET, storage_path, filename, mime, len(data), digest,
+                 generated_from_template_version, user_id],
+            )
+            row = cursor.fetchone()
+            cursor.execute(
+                """insert into public.audit_events
+                     (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+                   values (%s,%s,'recruitment_document_version_created','recruitment_document',%s,%s::jsonb)""",
+                [organization_id, user_id, document_id,
+                 json.dumps({"document_group_id": str(group_id), "version": version, "content_sha256": digest})],
+            )
+            connection.commit()
+            return row
+    except Exception as exc:
+        try:
+            storage.storage.from_(RECRUITMENT_BUCKET).remove([storage_path])
+        except Exception:
+            pass
+        if isinstance(exc, HTTPException):
+            raise
+        if getattr(exc, "sqlstate", None) == "23505":
+            raise HTTPException(status_code=409, detail="A concurrent version was created; retry with the latest version") from exc
+        raise HTTPException(status_code=503, detail="Unable to store the recruitment document") from exc
+
+
+@router.post("/api/recruitment-documents/{document_id}/download")
+def create_recruitment_document_download(
+    document_id: UUID,
+    organization_id: UUID,
+    preview: bool = Query(default=False),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, organization_id)
+    with get_connection() as connection, connection.cursor() as cursor:
+        cursor.execute(
+            """select storage_bucket, storage_path, file_name, status
+               from public.recruitment_documents
+               where id=%s and organization_id=%s""",
+            [document_id, organization_id],
+        )
+        document = cursor.fetchone()
+        if document is None:
+            raise HTTPException(status_code=404, detail="Document not found")
+        if document["status"] in {"expired", "revoked", "void"}:
+            raise HTTPException(status_code=410, detail="This document is no longer available")
+        action = "preview" if preview else "download"
+        cursor.execute(
+            """insert into public.recruitment_document_access_events
+                 (organization_id,document_id,actor_user_id,action,metadata)
+               values (%s,%s,%s,%s,%s::jsonb)""",
+            [organization_id, document_id, user_id, action, json.dumps({"source": "authenticated_api"})],
+        )
+        connection.commit()
+    try:
+        result = _recruitment_storage_client().storage.from_(document["storage_bucket"]).create_signed_url(
+            document["storage_path"], 60
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Unable to create a short-lived document link") from exc
+    signed_url = result.get("signedURL") or result.get("signedUrl")
+    if not signed_url:
+        raise HTTPException(status_code=503, detail="Storage did not return a document link")
+    return {"url": signed_url, "expires_in_seconds": 60, "file_name": document["file_name"], "preview": preview}
