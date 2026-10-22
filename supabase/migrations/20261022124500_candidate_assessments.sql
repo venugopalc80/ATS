@@ -164,11 +164,7 @@ create or replace function public.prevent_assessment_event_mutation()
 returns trigger
 language plpgsql
 set search_path = ''
-as $
-begin
-  raise exception 'assessment assignment events are append-only';
-end;
-$;
+as 'BEGIN RAISE EXCEPTION ''assessment assignment events are append-only''; END;';
 
 drop trigger if exists assessment_assignment_events_append_only on public.assessment_assignment_events;
 create trigger assessment_assignment_events_append_only
