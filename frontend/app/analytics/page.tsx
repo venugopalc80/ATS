@@ -51,6 +51,8 @@ export default function AnalyticsPage() {
   const [sources, setSources] = useState<Sources | null>(null);
   const [forecast, setForecast] = useState<Forecast | null>(null);
   const [loading, setLoading] = useState(true);
+  const [reportType, setReportType] = useState("kpis");
+  const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
 
   const load = useCallback(async () => {
@@ -100,6 +102,34 @@ export default function AnalyticsPage() {
   }, [dateFrom, dateTo]);
 
   useEffect(() => { void load(); }, [load]);
+
+  async function exportReport() {
+    const organizationId = getActiveOrganizationId();
+    if (!API_BASE || !organizationId) {
+      setError("Analytics configuration is missing. Select an organisation and confirm the API URL.");
+      return;
+    }
+    setExporting(true);
+    setError("");
+    try {
+      const params = new URLSearchParams({ organization_id: organizationId, report_type: reportType });
+      if (dateFrom) params.set("date_from", dateFrom);
+      if (dateTo) params.set("date_to", dateTo);
+      const response = await apiFetch(API_BASE + "/api/analytics/export?" + params.toString());
+      if (!response.ok) throw new Error("Report export failed (HTTP " + response.status + ").");
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = "aqerith-" + reportType + "-report.csv";
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Unable to export report.");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   function exportSources() {
     if (!sources?.sources.length) return;
@@ -153,7 +183,13 @@ export default function AnalyticsPage() {
         <main className="content analytics-content">
           <div className="header-row analytics-header">
             <div><div className="eyebrow">Reporting</div><h1>Recruitment analytics</h1><p className="subtitle">A measurable view of hiring performance, with explicit cohorts and honest gaps.</p></div>
-            <div className="actions"><button className="btn" onClick={() => void load()} disabled={loading}>{loading ? "Refreshing…" : "Refresh data"}</button></div>
+            <div className="actions analytics-header-actions">
+              <select className="filter" aria-label="Report to export" value={reportType} onChange={(event) => setReportType(event.target.value)}>
+                <option value="kpis">KPI report</option><option value="funnel">Funnel report</option><option value="workload">Workload report</option><option value="sources">Source report</option><option value="forecast">Forecast report</option>
+              </select>
+              <button className="btn" onClick={() => void exportReport()} disabled={exporting}>{exporting ? "Exporting…" : "Export CSV"}</button>
+              <button className="btn" onClick={() => void load()} disabled={loading}>{loading ? "Refreshing…" : "Refresh data"}</button>
+            </div>
           </div>
           <section className="card analytics-filter-card">
             <div className="analytics-filter-copy"><strong>Reporting period</strong><span className="muted-small">Application and stage-event cohorts use the selected dates. Vacancy and workload figures are current snapshots.</span></div>
