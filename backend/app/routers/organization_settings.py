@@ -129,7 +129,7 @@ async def update_organization_settings(
                 try:
                     validated = OrganizationSettings.model_validate(current_settings)
                 except ValidationError as exc:
-                    raise HTTPException(status_code=422, detail=exc.errors(include_input=False)) from exc
+                    raise HTTPException(status_code=422, detail=[{"loc": list(error["loc"]), "msg": error["msg"], "type": error["type"]} for error in exc.errors()]) from exc
 
                 new_settings = validated.model_dump()
                 cursor.execute(
