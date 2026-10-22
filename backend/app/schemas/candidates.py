@@ -41,9 +41,8 @@ class CandidateUpdate(BaseModel):
     years_experience: Decimal | None = Field(default=None, ge=0, le=80)
     skills: list[str] | None = None
     ai_summary: str | None = None
-    consent_recorded_at: datetime | None = None
-    consent_purpose: str | None = None
-    retention_until: datetime | None = None
+
+    model_config = {"extra": "forbid"}
 
 
 class CandidateOut(BaseModel):
