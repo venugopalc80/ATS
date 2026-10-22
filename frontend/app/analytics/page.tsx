@@ -142,7 +142,7 @@ export default function AnalyticsPage() {
     const rows = sources.sources.map((s) => [s.source, s.applications, s.qualified_applications, s.completed_interviews, s.offers, s.decided_offers, s.accepted_offers, s.hires, s.offer_acceptance_rate ?? "", s.conversion_rate ?? ""]);
     const csv = [headers, ...rows].map((row) => row.map((cell) => {
       const text = String(cell);
-      const safe = typeof cell === "string" && /^\\s*[=+\\-@]/.test(text) ? "'" + text : text;
+      const safe = typeof cell === "string" && /^\s*[=+\-@]/.test(text) ? "'" + text : text;
       return '"' + safe.replaceAll('"', '""') + '"';
     }).join(",")).join("\r\n");
     const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
