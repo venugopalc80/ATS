@@ -135,7 +135,7 @@ export default function ApplicationFormsPage() {
                 {q.field_type === "textarea" ? <textarea disabled rows={3} /> :
                   ["select", "radio"].includes(q.field_type) ? <select disabled defaultValue=""><option value="">Choose an answer</option>{q.options.map(o => <option key={o}>{o}</option>)}</select> :
                   q.field_type === "boolean" ? <select disabled defaultValue=""><option value="">Choose yes or no</option><option>Yes</option><option>No</option></select> :
-                  q.field_type === "multi_select" || q.field_type === "checkbox" ? <div>{q.options.map(o => <span className="preview-option" key={o}>{o}</span>)}</div> :
+                  q.field_type === "checkbox" ? <input disabled type="checkbox" /> : q.field_type === "multi_select" ? <div>{q.options.map(o => <span className="preview-option" key={o}>{o}</span>)}</div> :
                   <input disabled type={q.field_type === "number" ? "number" : q.field_type === "date" ? "date" : q.field_type === "email" ? "email" : "text"} />}
                 {q.is_eligibility ? <small>Eligibility question</small> : null}
               </label>)}
@@ -156,7 +156,7 @@ export default function ApplicationFormsPage() {
                     {["text","textarea","email","phone","number","date","select","radio","checkbox","multi_select","boolean"].map(type => <option key={type} value={type}>{type.replace("_", " ")}</option>)}
                   </select></label>
                 </div>
-                {["select","radio","checkbox","multi_select"].includes(q.field_type) ? <label>Options (one per line)<textarea rows={3} value={q.options.join("\n")} onChange={e => patchQuestion(q.id, { options: e.target.value.split("\n").map(v => v.trim()).filter(Boolean) })} required /></label> : null}
+                {["select","radio","multi_select"].includes(q.field_type) ? <label>Options (one per line)<textarea rows={3} value={q.options.join("\n")} onChange={e => patchQuestion(q.id, { options: e.target.value.split("\n").map(v => v.trim()).filter(Boolean) })} required /></label> : null}
                 <label>Help text (optional)<input value={q.help_text ?? ""} onChange={e => patchQuestion(q.id, { help_text: e.target.value })} maxLength={2000} /></label>
                 <div className="question-flags"><label><input type="checkbox" checked={q.required} onChange={e => patchQuestion(q.id, { required: e.target.checked })} /> Required</label><label><input type="checkbox" checked={q.is_eligibility} onChange={e => patchQuestion(q.id, { is_eligibility: e.target.checked })} /> Job-related eligibility question</label><button className="btn" type="button" onClick={() => setQuestions(current => current.filter(item => item.id !== q.id))}>Remove</button></div>
               </fieldset>)}
