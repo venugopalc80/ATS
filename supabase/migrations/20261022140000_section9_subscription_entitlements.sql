@@ -41,8 +41,7 @@ create table if not exists public.organization_subscriptions (
   constraint organization_subscriptions_period_check
     check (current_period_end is null or current_period_start is null or current_period_end > current_period_start),
   constraint organization_subscriptions_provider_pair_check
-    check ((billing_provider is null and provider_subscription_id is null)
-        or (billing_provider is not null and provider_subscription_id is not null))
+    check (provider_subscription_id is null or billing_provider is not null)
 );
 
 create unique index if not exists organization_subscriptions_provider_sub_uq
@@ -97,7 +96,7 @@ alter table public.organization_usage_periods enable row level security;
 drop policy if exists subscription_plans_authenticated_read on public.subscription_plans;
 create policy subscription_plans_authenticated_read
   on public.subscription_plans for select to authenticated
-  using (is_active or public.is_org_admin(null::uuid) = false);
+  using (is_active);
 
 drop policy if exists plan_entitlements_authenticated_read on public.plan_entitlements;
 create policy plan_entitlements_authenticated_read
