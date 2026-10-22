@@ -32,11 +32,14 @@ create policy application_stage_history_member_insert
     and (actor_user_id is null or actor_user_id = auth.uid())
   );
 
-create or replace function public.record_application_stage_history()
+create schema if not exists private;
+revoke all on schema private from public, anon, authenticated;
+
+create or replace function private.record_application_stage_history()
 returns trigger
 language plpgsql
 security definer
-set search_path = public
+set search_path = ''
 as $$
 declare
   actor_id uuid;
@@ -73,7 +76,7 @@ $$;
 drop trigger if exists applications_stage_history_insert on public.applications;
 create trigger applications_stage_history_insert
   after insert on public.applications
-  for each row execute function public.record_application_stage_history();
+  for each row execute function private.record_application_stage_history();
 
 drop trigger if exists applications_stage_history_update on public.applications;
 create trigger applications_stage_history_update
@@ -89,4 +92,4 @@ where not exists (
   select 1 from public.application_stage_history h where h.application_id = a.id
 );
 
-revoke all on function public.record_application_stage_history() from public, anon, authenticated;
+revoke all on function private.record_application_stage_history() from public, anon, authenticated;
