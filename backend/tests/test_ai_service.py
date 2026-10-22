@@ -60,5 +60,26 @@ class AIServiceTests(unittest.TestCase):
                 generate_text("summarize_candidate", [], None, "model", "openai-compatible")
 
 
+    @patch.dict(os.environ, {"AI_PROVIDER_APPROVED": "true", "AI_PROVIDER_API_KEY": "test-key"}, clear=False)
+    @patch("app.services.ai_service.requests.post")
+    def test_provider_rejects_malformed_response(self, post):
+        response = Mock()
+        response.json.return_value = {"unexpected": "shape"}
+        response.raise_for_status.return_value = None
+        post.return_value = response
+        with self.assertRaisesRegex(RuntimeError, "unsupported response format"):
+            generate_text("summarize_candidate", [], None, "test-model", "openai-compatible")
+
+    @patch.dict(os.environ, {"AI_PROVIDER_APPROVED": "true", "AI_PROVIDER_API_KEY": "test-key"}, clear=False)
+    @patch("app.services.ai_service.requests.post")
+    def test_provider_rejects_empty_response(self, post):
+        response = Mock()
+        response.json.return_value = {"choices": [{"message": {"content": "   "}}]}
+        response.raise_for_status.return_value = None
+        post.return_value = response
+        with self.assertRaisesRegex(RuntimeError, "empty response"):
+            generate_text("summarize_candidate", [], None, "test-model", "openai-compatible")
+
+
 if __name__ == "__main__":
     unittest.main()
