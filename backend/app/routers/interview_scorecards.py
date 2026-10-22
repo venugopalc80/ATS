@@ -170,3 +170,24 @@ def get_scorecard_review(interview_id: UUID, user_id: UUID = Depends(get_current
         raise _database_error(exc) from exc
     except (LookupError, PermissionError, ValueError) as exc:
         raise _handle_service_error(exc) from exc
+
+
+@router.get("/api/interviews/{interview_id}/scorecards/me")
+def get_my_scorecard(interview_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    try:
+        from app.db import get_connection
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.interviews where id=%s", [interview_id])
+                row = cursor.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="Interview not found")
+        organization_id = row["organization_id"]
+        assert_org_member(user_id, organization_id)
+        return service.get_my_feedback(organization_id, interview_id, user_id)
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+    except (LookupError, PermissionError, ValueError) as exc:
+        raise _handle_service_error(exc) from exc
