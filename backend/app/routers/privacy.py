@@ -248,12 +248,14 @@ async def preview_retention(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select id, data_category, purpose, jurisdiction, retention_days,
+                    """select distinct on (data_category, purpose, jurisdiction)
+                              id, data_category, purpose, jurisdiction, retention_days,
                               action, version, effective_at
                        from public.retention_policies
                        where organization_id = %s and enabled = true
                          and effective_at <= %s and (%s is null or id = %s)
-                       order by data_category, purpose, jurisdiction, version desc
+                       order by data_category, purpose, jurisdiction,
+                                effective_at desc, version desc, id desc
                        limit 50""",
                     [organization_id, preview_at, policy_id, policy_id],
                 )
