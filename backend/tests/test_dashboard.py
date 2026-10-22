@@ -155,6 +155,9 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["jobs"][0]["health"], "needs_attention")
         self.assertIn("Role is on hold", result["jobs"][0]["health_reasons"])
+        vacancy_query = next(sql for sql, _params in cursor.queries if "left join public.applications" in sql)
+        self.assertIn("order by case when j.status='on_hold' then 0 else 1 end", vacancy_query)
+        self.assertIn("coalesce(j.opened_at,j.created_at) asc limit 10", vacancy_query)
 
     async def test_rejects_non_member_before_database_access(self):
         with patch.object(
