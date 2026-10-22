@@ -137,7 +137,7 @@ export default function InterviewDetailPage() {
 
   return (
     <main className="p-8">
-      <Link href="/interviews">← Interviews</Link>
+      <div className="flex flex-wrap items-center justify-between gap-3"><Link href="/interviews">← Interviews</Link><Link className="btn primary" href={"/interviews/" + id + "/scorecard"}>Open scorecard</Link></div>
       <h1 className="mt-5 text-3xl font-semibold">Interview details</h1>
       <p className="mt-2 text-gray-500">
         Current time: {new Date(interview.scheduled_at).toLocaleString()} · {interview.interview_type}

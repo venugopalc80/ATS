@@ -8,6 +8,7 @@ from app.routers.me import router as me_router
 from app.routers.clients import router as clients_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.interviews import router as interviews_router
+from app.routers.interview_scorecards import router as interview_scorecards_router
 from app.routers.offers import router as offers_router
 from app.routers.placements import router as placements_router
 from app.routers.audit import router as audit_router
@@ -39,6 +40,7 @@ app.include_router(me_router)
 app.include_router(clients_router)
 app.include_router(dashboard_router)
 app.include_router(interviews_router)
+app.include_router(interview_scorecards_router)
 app.include_router(offers_router)
 app.include_router(placements_router)
 app.include_router(audit_router)
