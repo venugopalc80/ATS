@@ -799,13 +799,13 @@ async def create_recorded_recommendation(
             )
             if not cur.fetchone():
                 raise HTTPException(status_code=404, detail="Recommendation target not found")
-            if payload.model_version_id:
-                cur.execute(
-                    "select id from public.ai_model_versions where id=%s and organization_id=%s",
-                    [payload.model_version_id, payload.organization_id],
-                )
-                if not cur.fetchone():
-                    raise HTTPException(status_code=404, detail="Model version not found")
+            cur.execute(
+                """select id from public.ai_model_versions
+                   where id=%s and organization_id=%s and status='approved' and data_processing_approved=true""",
+                [payload.model_version_id, payload.organization_id],
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=409, detail="An approved model version with data-processing approval is required")
             cur.execute(
                 """insert into public.ai_recommendations
                    (organization_id, object_type, object_id, purpose, input_references, evidence,
