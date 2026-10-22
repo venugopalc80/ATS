@@ -89,6 +89,15 @@ class CampaignCreate(BaseModel):
     attribution_window_days: int = Field(default=30, ge=1, le=365)
 
 
+class CampaignChannelCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    organization_id: UUID
+    channel_key: Literal["employee_referral", "careers_site", "linkedin", "job_board", "agency", "event", "email", "social", "other"]
+    source_label: str | None = Field(default=None, max_length=160)
+    external_reference: str | None = Field(default=None, max_length=500)
+    spend_amount: float | None = Field(default=None, ge=0)
+
+
 class ReferralCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
     organization_id: UUID
@@ -916,7 +925,10 @@ async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_curr
                 cursor.execute("""select c.id,c.organization_id,c.name,c.description,c.status,c.target_job_id,
                     c.owner_user_id,c.starts_at,c.ends_at,c.budget_amount,c.budget_currency,c.attribution_window_days,
                     c.created_at,c.updated_at,count(distinct cm.candidate_id) as attributed_candidates,
-                    count(distinct r.id) as referrals
+                    count(distinct r.id) as referrals,
+                    count(distinct r.id) filter (where r.status='qualified') as qualified_referrals,
+                    count(distinct r.id) filter (where r.status='hired') as hired_referrals,
+                    c.budget_amount / nullif(count(distinct r.id) filter (where r.status='hired'),0) as budget_per_hire
                     from public.recruitment_campaigns c
                     left join public.campaign_memberships cm on cm.organization_id=c.organization_id and cm.campaign_id=c.id
                     left join public.referrals r on r.organization_id=c.organization_id and r.campaign_id=c.id
@@ -956,6 +968,51 @@ async def create_campaign(payload: CampaignCreate, user_id: UUID = Depends(get_c
         raise HTTPException(status_code=422, detail="Campaign could not be created; check the target job and supplied fields") from exc
 
 
+@router.get("/campaigns/{campaign_id}/channels")
+async def list_campaign_channels(campaign_id: UUID, organization_id: UUID,
+                                user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""select id,organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount,created_at
+                    from public.campaign_channels where organization_id=%s and campaign_id=%s order by created_at""",
+                    [organization_id,campaign_id])
+                return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/campaigns/{campaign_id}/channels", status_code=201)
+async def create_campaign_channel(campaign_id: UUID, payload: CampaignChannelCreate,
+                                  user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, payload.organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""insert into public.campaign_channels
+                    (organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount)
+                    select %s,c.id,%s,%s,%s,%s from public.recruitment_campaigns c
+                    where c.id=%s and c.organization_id=%s
+                    returning id,organization_id,campaign_id,channel_key,source_label,external_reference,spend_amount,created_at""",
+                    [payload.organization_id,payload.channel_key,payload.source_label,payload.external_reference,
+                     payload.spend_amount,campaign_id,payload.organization_id])
+                row = cursor.fetchone()
+                if row is None:
+                    raise HTTPException(status_code=404, detail="Campaign not found")
+                cursor.execute("""insert into public.campaign_events
+                    (organization_id,campaign_id,actor_user_id,event_type,new_value)
+                    values (%s,%s,%s,'updated',%s::jsonb)""",
+                    [payload.organization_id,campaign_id,user_id,json.dumps({"channel_key":payload.channel_key})])
+                return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+    except Exception as exc:
+        raise HTTPException(status_code=409, detail="Campaign channel already exists or the supplied values are invalid") from exc
+
+
 @router.get("/referrals")
 async def list_referrals(organization_id: UUID, campaign_id: UUID | None = None,
                          user_id: UUID = Depends(get_current_user_id)):
@@ -990,6 +1047,13 @@ async def create_referral(payload: ReferralCreate, user_id: UUID = Depends(get_c
                      payload.application_id,payload.referrer_user_id,payload.referrer_name,payload.notes,user_id])
                 row = cursor.fetchone()
                 if row["campaign_id"]:
+                    if row["candidate_id"]:
+                        cursor.execute("""insert into public.campaign_memberships
+                            (organization_id,campaign_id,candidate_id,application_id,channel_id,attribution_type,created_by)
+                            values (%s,%s,%s,%s,%s,'manual',%s)
+                            on conflict (organization_id,campaign_id,candidate_id,attribution_type) do nothing""",
+                            [payload.organization_id,row["campaign_id"],row["candidate_id"],row["application_id"],
+                             row["channel_id"],user_id])
                     cursor.execute("""insert into public.campaign_events
                         (organization_id,campaign_id,candidate_id,application_id,actor_user_id,event_type,new_value)
                         values (%s,%s,%s,%s,%s,'referral_received',%s::jsonb)""",
