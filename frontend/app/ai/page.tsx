@@ -131,6 +131,18 @@ export default function AIWorkspacePage() {
     } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save use case."); }
   }
 
+  async function approveModel(modelId: string) {
+    if (!API_BASE) return;
+    try {
+      const response = await apiFetch(API_BASE + "/api/ai/governance/models/" + modelId + "/approve?organization_id=" + encodeURIComponent(organizationId), {
+        method: "POST",
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Model approval failed.");
+      setMessage("Model approved after passing evaluation."); await loadGovernance();
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to approve model."); }
+  }
+
   async function registerModel(event: FormEvent) {
     event.preventDefault();
     if (!API_BASE) return;
@@ -233,7 +245,7 @@ export default function AIWorkspacePage() {
           <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Use case<select className="filter" value={useCaseKey} onChange={e => setUseCaseKey(e.target.value as UseCaseKey)}>{useCases.map(item => <option key={item.key} value={item.key}>{item.name}</option>)}</select></label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}><input type="checkbox" checked={providerApproved} onChange={e => setProviderApproved(e.target.checked)} /> Provider/data processing approved</label>
           <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13 }}><input type="checkbox" checked={enabled} onChange={e => setEnabled(e.target.checked)} /> Enable this use case</label>
-          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Approval status<select className="filter" value={approvalStatus} onChange={e => setApprovalStatus(e.target.value)}><option value="pending">Pending</option><option value="approved">Approved</option><option value="suspended">Suspended</option><option value="retired">Retired</option></select></label>
+          <label style={{ display: "grid", gap: 6, fontSize: 13 }}>Approval status<select className="filter" value={approvalStatus} onChange={e => setApprovalStatus(e.target.value)}><option value="pending">Pending</option><option value="suspended">Suspended</option><option value="retired">Retired</option></select></label>
           <button className="btn primary">Save use case</button>
         </form>
         <form onSubmit={registerModel} style={{ display: "grid", gap: 12 }}>
@@ -247,7 +259,14 @@ export default function AIWorkspacePage() {
         </form>
       </div>
       {governance && <div style={{ marginTop: 20, display: "grid", gap: 16 }}>
-        {(["use_cases", "models", "evaluations", "incidents"] as const).map(key => <div key={key}><strong style={{ textTransform: "capitalize" }}>{key.replaceAll("_", " ")}</strong><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", background: "#f8fafc", padding: 12, borderRadius: 8, fontSize: 12 }}>{JSON.stringify(governance[key] ?? [], null, 2)}</pre></div>)}
+        {(["use_cases", "evaluations", "incidents"] as const).map(key => <div key={key}><strong style={{ textTransform: "capitalize" }}>{key.replaceAll("_", " ")}</strong><pre style={{ whiteSpace: "pre-wrap", overflowWrap: "anywhere", background: "#f8fafc", padding: 12, borderRadius: 8, fontSize: 12 }}>{JSON.stringify(governance[key] ?? [], null, 2)}</pre></div>)}
+        <div><strong>Model versions</strong>
+          {Array.isArray(governance.models) && (governance.models as Array<Record<string, unknown>>).map(model => <div key={String(model.id)} className="card" style={{ marginTop: 8, padding: 12 }}>
+            <div><strong>{String(model.provider)} / {String(model.model_name)} ({String(model.model_version)})</strong></div>
+            <div className="muted-small">Status: {String(model.status)} · Data approval: {String(model.data_processing_approved)}</div>
+            {model.status !== "approved" && model.data_processing_approved === true && <button className="btn" style={{ marginTop: 8 }} type="button" onClick={() => void approveModel(String(model.id))}>Approve after evaluation</button>}
+          </div>)}
+        </div>
       </div>}
     </section>}
   </main>;
