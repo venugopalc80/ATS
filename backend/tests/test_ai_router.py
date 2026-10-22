@@ -243,5 +243,46 @@ class ModelApprovalGateTests(unittest.TestCase):
         self.assertEqual(cursor.execute.call_count, 2)
 
 
+class FairnessAuditCautionTests(unittest.TestCase):
+    def test_small_sample_groups_are_flagged_in_uncertainty_notes(self):
+        import asyncio
+        import json
+        from unittest.mock import MagicMock, patch
+        from app.routers.ai import FairnessAuditInput, create_fairness_audit
+
+        organization_id = uuid4()
+        user_id = uuid4()
+        audit_id = uuid4()
+        payload = FairnessAuditInput(
+            organization_id=organization_id,
+            audit_name="Quarterly selection-rate review",
+            dataset_version="dataset-2026-Q3",
+            methodology="Compare aggregate selection rates across approved groups.",
+            outcome_metric="selection_rate",
+            aggregate_results={"overall": {"selection_rate": 0.32}},
+            sample_sizes={"group_a": 7, "group_b": 120},
+            missingness={},
+            legal_review_reference="review-record-2026-03",
+        )
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"id": audit_id, "audit_name": payload.audit_name},
+            None,
+        ]
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__.return_value = cursor
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.cursor.return_value = cursor_cm
+        with patch("app.routers.ai.assert_org_admin"):
+            with patch("app.routers.ai.get_connection", return_value=connection):
+                asyncio.run(create_fairness_audit(payload, user_id=user_id))
+
+        stored_notes = json.loads(cursor.execute.call_args_list[0].args[1][8])
+        self.assertTrue(any("group_a" in note and "Small or invalid sample sizes" in note for note in stored_notes))
+        audit_metadata = json.loads(cursor.execute.call_args_list[1].args[1][3])
+        self.assertEqual(audit_metadata["small_sample_groups"], ["group_a"])
+
+
 if __name__ == "__main__":
     unittest.main()
