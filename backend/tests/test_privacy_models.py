@@ -241,4 +241,28 @@ def test_retention_preview_is_non_destructive_and_audits_access(monkeypatch):
     assert result["policies"][0]["items"] == [item]
     assert any("privacy.retention_previewed" in query for query, _ in cursor_state["queries"])
     assert any("e.target_table = 'candidates'" in query for query, _ in cursor_state["queries"])
+    policy_query = cursor_state["queries"][0][0].lower()
+    assert "distinct on (data_category, purpose, jurisdiction)" in policy_query
+    assert "organization_id = %s" in policy_query
+    assert "effective_at <= %s" in policy_query
     assert not any(query.lstrip().lower().startswith(("delete ", "update ")) for query, _ in cursor_state["queries"])
+
+
+def test_retention_preview_rejects_naive_as_of_before_database_access(monkeypatch):
+    from fastapi import HTTPException
+
+    monkeypatch.setattr(privacy_module, "assert_org_admin", lambda user, org: None)
+    monkeypatch.setattr(
+        privacy_module,
+        "get_connection",
+        lambda: (_ for _ in ()).throw(AssertionError("database must not be accessed")),
+    )
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(privacy_module.preview_retention(
+            organization_id=uuid4(),
+            policy_id=None,
+            as_of=datetime(2026, 10, 22),
+            limit=100,
+            user_id=uuid4(),
+        ))
+    assert error.value.status_code == 422
