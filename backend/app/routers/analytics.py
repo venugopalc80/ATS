@@ -131,7 +131,7 @@ async def analytics_kpis(
 
                 fill_clauses = [
                     "jr.organization_id=%s",
-                    "jr.status='approved'",
+                    "jr.status in ('approved','converted')",
                     "jr.approved_at is not null",
                     "j.organization_id=jr.organization_id",
                     "j.id=jr.job_id",
@@ -417,10 +417,10 @@ async def analytics_workload(
                        task_counts as (
                            select t.assigned_to as user_id,
                                   count(*) filter (
-                                      where t.completed_at is null and t.due_at < now()
+                                      where t.status='open' and t.due_at < now()
                                   )::int as overdue_tasks,
                                   count(*) filter (
-                                      where t.completed_at is null
+                                      where t.status='open'
                                   )::int as open_tasks
                            from public.recruiter_tasks t
                            where t.organization_id=%s and t.assigned_to is not null
@@ -450,7 +450,7 @@ async def analytics_workload(
                     """select
                            count(*) filter (where j.status='open' and j.recruiter_id is null)::int as unassigned_open_vacancies,
                            (select count(*)::int from public.recruiter_tasks t
-                            where t.organization_id=%s and t.assigned_to is null and t.completed_at is null)
+                            where t.organization_id=%s and t.assigned_to is null and t.status='open')
                              as unassigned_open_tasks
                        from public.jobs j
                        where j.organization_id=%s""",
@@ -462,8 +462,8 @@ async def analytics_workload(
             "recruiters": recruiters,
             "unassigned": unassigned,
             "definitions": {
-                "open_tasks": "Tasks with completed_at IS NULL",
-                "overdue_tasks": "Open tasks with due_at earlier than the current database time",
+                "open_tasks": "Tasks with status open; cancelled and completed tasks are excluded",
+                "overdue_tasks": "Tasks with status open and due_at earlier than the current database time",
                 "upcoming_interviews": "Scheduled or rescheduled interviews at or after the current database time",
                 "capacity_score": None,
                 "note": "These counts describe workload, not recruiter productivity or performance.",
