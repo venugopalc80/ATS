@@ -221,3 +221,61 @@ def list_approvals(organization_id: UUID, offer_id: UUID):
                 [organization_id, offer_id],
             )
             return cur.fetchall()
+
+
+def withdraw_offer(organization_id: UUID, offer_id: UUID, actor_id: UUID, reason: str):
+    reason = reason.strip()
+    if not reason or len(reason) > 2000:
+        raise HTTPException(422, "A withdrawal reason of 1 to 2000 characters is required")
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select status from public.offers where id=%s and organization_id=%s for update", [offer_id, organization_id])
+            offer = cur.fetchone()
+            if not offer:
+                raise HTTPException(404, "Offer not found")
+            if offer["status"] not in {"draft", "awaiting_approval", "approved", "issued"}:
+                raise HTTPException(409, "This offer can no longer be withdrawn")
+            cur.execute(
+                """update public.offers set status='withdrawn', withdrawn_at=now(), withdrawn_by=%s,
+                   responded_at=now(), updated_at=now()
+                   where id=%s and organization_id=%s returning *""",
+                [actor_id, offer_id, organization_id],
+            )
+            result = cur.fetchone()
+            cur.execute(
+                """insert into public.audit_events
+                   (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'offer_withdrawn','offer',%s,%s::jsonb)""",
+                [organization_id, actor_id, offer_id, json.dumps({"reason": reason})],
+            )
+        conn.commit()
+        return result
+
+
+def expire_offer(organization_id: UUID, offer_id: UUID, actor_id: UUID):
+    with get_connection() as conn:
+        with conn.cursor() as cur:
+            cur.execute("select status, expires_at from public.offers where id=%s and organization_id=%s for update", [offer_id, organization_id])
+            offer = cur.fetchone()
+            if not offer:
+                raise HTTPException(404, "Offer not found")
+            if offer["status"] != "issued":
+                raise HTTPException(409, "Only issued offers can expire")
+            if offer["expires_at"] is None:
+                raise HTTPException(409, "This offer has no expiry date")
+            cur.execute(
+                """update public.offers set status='expired', responded_at=now(), updated_at=now()
+                   where id=%s and organization_id=%s and expires_at <= now() returning *""",
+                [offer_id, organization_id],
+            )
+            result = cur.fetchone()
+            if result is None:
+                raise HTTPException(409, "Offer expiry date is still in the future")
+            cur.execute(
+                """insert into public.audit_events
+                   (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'offer_expired','offer',%s,'{}'::jsonb)""",
+                [organization_id, actor_id, offer_id],
+            )
+        conn.commit()
+        return result
