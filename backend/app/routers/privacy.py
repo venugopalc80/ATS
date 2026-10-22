@@ -30,6 +30,7 @@ RETENTION_CATEGORY_CONFIG = {
         "target_table": "candidates",
         "due_expression": "coalesce(r.retention_until, r.created_at + (%s * interval '1 day'))",
         "active_filter": "true",
+        "exception_match": "e.target_table = 'candidates' and e.target_record_id = r.id",
         "clock_start": "created_at; an explicit retention_until overrides the calculated date",
     },
     "candidate_document": {
@@ -37,14 +38,16 @@ RETENTION_CATEGORY_CONFIG = {
         "target_table": "candidate_documents",
         "due_expression": "r.created_at + (%s * interval '1 day')",
         "active_filter": "r.deleted_at is null",
-        "clock_start": "document created_at",
+        "exception_match": "((e.target_table = 'candidate_documents' and e.target_record_id = r.id) or (e.target_table = 'candidates' and e.target_record_id = r.candidate_id))",
+        "clock_start": "document created_at; a candidate-level hold also protects the document",
     },
     "processing_record": {
         "table": "candidate_processing_records",
         "target_table": "candidate_processing_records",
         "due_expression": "r.created_at + (%s * interval '1 day')",
         "active_filter": "true",
-        "clock_start": "processing record created_at",
+        "exception_match": "((e.target_table = 'candidate_processing_records' and e.target_record_id = r.id) or (e.target_table = 'candidates' and e.target_record_id = r.candidate_id))",
+        "clock_start": "processing record created_at; a candidate-level hold also protects the record",
     },
 }
 
@@ -286,7 +289,7 @@ async def preview_retention(
                     active_filter = config["active_filter"]
                     common_exception = (
                         "e.organization_id = r.organization_id "
-                        "and e.target_table = %s and e.target_record_id = r.id "
+                        f"and {config['exception_match']} "
                         "and e.starts_at <= %s and (e.ends_at is null or e.ends_at > %s) "
                         "and (e.policy_id is null or e.policy_id = %s) "
                         "and (e.exception_type = 'legal_hold' or e.approved_by is not null)"
@@ -309,7 +312,7 @@ async def preview_retention(
                               where r.organization_id = %s and {active_filter}
                                 and {due_expression} <= %s
                             ) due_records""",
-                        [target_table, preview_at, preview_at, policy["id"],
+                        [preview_at, preview_at, policy["id"],
                          policy["id"], target_table, policy["action"],
                          organization_id, policy["retention_days"], preview_at],
                     )
@@ -329,7 +332,7 @@ async def preview_retention(
                             order by due_at asc, r.id asc
                             limit %s""",
                         [policy["retention_days"], organization_id, policy["retention_days"], preview_at,
-                         target_table, preview_at, preview_at, policy["id"],
+                         preview_at, preview_at, policy["id"],
                          policy["id"], target_table, policy["action"], limit],
                     )
                     items = list(cursor.fetchall())
