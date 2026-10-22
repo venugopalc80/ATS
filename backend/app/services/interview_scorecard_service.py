@@ -313,7 +313,7 @@ def review_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID, ca
             assigned = [UUID(str(value)) for value in (interview["interviewer_ids"] or [])]
             if user_id not in assigned and not can_review_early:
                 raise PermissionError("Only assigned interviewers or authorised reviewers can review scorecards")
-            if user_id in assigned and not can_review_early:
+            if user_id in assigned:
                 cursor.execute(
                     """select status from public.interview_feedback
                        where organization_id=%s and interview_id=%s and interviewer_id=%s""",
