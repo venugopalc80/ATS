@@ -67,7 +67,8 @@ create table if not exists public.messages (
     (visibility = 'candidate' and channel <> 'internal' and status <> 'internal')
   ),
   check ((template_id is null and template_version is null) or
-         (template_id is not null and template_version is not null and template_version > 0))
+         (template_id is not null and template_version is not null and template_version > 0)),
+  unique (organization_id, id)
 );
 create unique index if not exists messages_org_idempotency_idx
   on public.messages (organization_id, idempotency_key)
@@ -133,6 +134,7 @@ create table if not exists public.notification_events (
   essential boolean not null default false,
   idempotency_key text not null,
   created_at timestamptz not null default now(),
+  unique (organization_id, id),
   unique (organization_id, idempotency_key)
 );
 create index if not exists notification_events_org_created_idx
