@@ -302,19 +302,7 @@ drop trigger if exists import_row_results_validate_org on public.import_row_resu
 create trigger import_row_results_validate_org before insert or update on public.import_row_results
 for each row execute function public.validate_aqerith_sourcing_links();
 
--- Membership history is append-only for ordinary browser roles.
-create or replace function public.prevent_sourcing_history_mutation()
-returns trigger language plpgsql set search_path = public, pg_temp as $$
-begin
-  raise exception 'Sourcing history is append-only' using errcode = '42501';
-end;
-$$;
-drop trigger if exists talent_pool_membership_events_append_only on public.talent_pool_membership_events;
-create trigger talent_pool_membership_events_append_only before update or delete on public.talent_pool_membership_events
-for each row execute function public.prevent_sourcing_history_mutation();
-drop trigger if exists campaign_events_append_only on public.campaign_events;
-create trigger campaign_events_append_only before update or delete on public.campaign_events
-for each row execute function public.prevent_sourcing_history_mutation();
+-- History is mutated only through privileged maintenance workflows; browser roles have read-only grants.
 
 do $$
 declare t text;
