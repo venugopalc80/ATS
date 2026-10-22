@@ -5,9 +5,14 @@ on:
     branches: [main]
     paths:
       - "backend/app/routers/sourcing.py"
+      - "backend/app/main.py"
       - "backend/tests/test_sourcing*.py"
       - "backend/requirements.txt"
-      - "supabase/migrations/20261022130000_search_sourcing_features.sql"
+      - "frontend/app/search/**"
+      - "frontend/app/imports/**"
+      - "frontend/app/talent-pools/**"
+      - "frontend/app/campaigns/**"
+      - "supabase/migrations/20261022*.sql"
       - ".github/workflows/section-4-sourcing.yml"
 
 jobs:
