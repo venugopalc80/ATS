@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 
 from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.schemas.job_distribution import DistributionChannelOut, DistributionSave
+from app.services.google_indexing import notify_google_indexing
 
 router = APIRouter(prefix="/api/jobs", tags=["job distribution"])
 VALID_CHANNELS = {"careers", "google", "linkedin", "indeed", "monster", "other"}
@@ -47,6 +48,7 @@ async def save_job_distribution(
     job_id: UUID,
     payload: DistributionSave,
     organization_id: UUID,
+    background_tasks: BackgroundTasks,
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, organization_id)
@@ -57,14 +59,22 @@ async def save_job_distribution(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select organization_id from public.jobs where id = %s",
+                    "select organization_id, status from public.jobs where id = %s",
                     [job_id],
                 )
                 job = cursor.fetchone()
                 if job is None or job["organization_id"] != organization_id:
                     raise HTTPException(status_code=404, detail="Job not found")
+                cursor.execute(
+                    """select selected from public.job_distribution_channels
+                       where organization_id = %s and job_id = %s and channel_id = 'google'""",
+                    [organization_id, job_id],
+                )
+                previous_google = cursor.fetchone()
+                was_google_selected = bool(previous_google and previous_google["selected"])
+                google_item = next((item for item in payload.channels if item.channel_id == "google"), None)
+                is_google_selected = bool(google_item and google_item.selected)
                 for item in payload.channels:
-                    status = item.status
                     if not item.selected:
                         status = "not_selected"
                     elif item.channel_id == "careers":
@@ -94,7 +104,14 @@ async def save_job_distribution(
                        order by channel_id""",
                     [organization_id, job_id],
                 )
-                return [DistributionChannelOut.model_validate(row) for row in cursor.fetchall()]
+                saved = [DistributionChannelOut.model_validate(row) for row in cursor.fetchall()]
+                if job["status"] == "open" and is_google_selected:
+                    background_tasks.add_task(notify_google_indexing, str(job_id), "URL_UPDATED")
+                elif was_google_selected and not is_google_selected:
+                    background_tasks.add_task(
+                        notify_google_indexing, str(job_id), "URL_DELETED", True
+                    )
+                return saved
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:

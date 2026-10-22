@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field, field_validator
 
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
@@ -9,8 +9,10 @@ from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_conn
 router = APIRouter(prefix="/api/public/jobs", tags=["public careers"])
 
 PUBLIC_COLUMNS = """
-    id, title, description, location, country_code, employment_type, work_mode,
-    salary_min, salary_max, salary_currency, required_skills, created_at, updated_at
+    j.id, j.organization_id, j.client_id, j.title, j.description, j.location,
+    j.country_code, j.employment_type, j.work_mode, j.salary_min, j.salary_max,
+    j.salary_currency, j.required_skills, j.created_at, j.updated_at,
+    c.name AS hiring_organization_name, c.website AS hiring_organization_website
 """
 
 
@@ -31,18 +33,35 @@ class PublicApplicationIn(BaseModel):
         return value
 
 
+def _public_job_filter() -> str:
+    # Jobs must be explicitly selected for either the public careers page or Google.
+    return """
+        j.status = 'open'
+        and exists (
+            select 1
+            from public.job_distribution_channels d
+            where d.job_id = j.id
+              and d.organization_id = j.organization_id
+              and d.selected = true
+              and d.channel_id in ('careers', 'google')
+        )
+    """
+
+
 @router.get("")
-async def list_public_jobs(organization_id: UUID = Query(...)):
-    """Public careers listing. Only open jobs are exposed; private recruiting fields are omitted."""
+async def list_public_jobs():
+    """List only open jobs explicitly selected for public careers or Google discovery."""
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     f"""select {PUBLIC_COLUMNS}
-                        from public.jobs
-                        where organization_id = %s and status = 'open'
-                        order by updated_at desc""",
-                    [organization_id],
+                        from public.jobs j
+                        left join public.clients c
+                          on c.id = j.client_id and c.organization_id = j.organization_id
+                        where {_public_job_filter()}
+                        order by j.updated_at desc
+                        limit 5000"""
                 )
                 return list(cursor.fetchall())
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -50,16 +69,18 @@ async def list_public_jobs(organization_id: UUID = Query(...)):
 
 
 @router.get("/{job_id}")
-async def get_public_job(job_id: UUID, organization_id: UUID = Query(...)):
-    """Return a single open job only when it belongs to the requested organisation."""
+async def get_public_job(job_id: UUID):
+    """Return a public job by globally unique ID, only if published and still open."""
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     f"""select {PUBLIC_COLUMNS}
-                        from public.jobs
-                        where id = %s and organization_id = %s and status = 'open'""",
-                    [job_id, organization_id],
+                        from public.jobs j
+                        left join public.clients c
+                          on c.id = j.client_id and c.organization_id = j.organization_id
+                        where j.id = %s and {_public_job_filter()}""",
+                    [job_id],
                 )
                 row = cursor.fetchone()
                 if row is None:
@@ -72,8 +93,8 @@ async def get_public_job(job_id: UUID, organization_id: UUID = Query(...)):
 
 
 @router.post("/{job_id}/applications", status_code=201)
-async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn, organization_id: UUID = Query(...)):
-    """Create a candidate and application from a public careers form."""
+async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn):
+    """Create an application for a published job using its server-resolved tenant."""
     if not payload.consent:
         raise HTTPException(status_code=422, detail="Consent is required to submit an application")
     email = str(payload.email).strip().lower()
@@ -84,14 +105,20 @@ async def apply_for_public_job(job_id: UUID, payload: PublicApplicationIn, organ
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select id from public.jobs where id=%s and organization_id=%s and status='open'",
-                    [job_id, organization_id],
+                    f"""select j.organization_id
+                        from public.jobs j
+                        where j.id = %s and {_public_job_filter()}""",
+                    [job_id],
                 )
-                if cursor.fetchone() is None:
+                job = cursor.fetchone()
+                if job is None:
                     raise HTTPException(status_code=404, detail="Job not found or no longer accepting applications")
+                organization_id = job["organization_id"]
 
                 cursor.execute(
-                    "select id from public.candidates where organization_id=%s and lower(email)=lower(%s) order by created_at desc limit 1",
+                    """select id from public.candidates
+                       where organization_id=%s and lower(email)=lower(%s)
+                       order by created_at desc limit 1""",
                     [organization_id, email],
                 )
                 existing = cursor.fetchone()
