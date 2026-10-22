@@ -10,7 +10,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.auth import assert_org_admin, assert_org_member, get_current_user_id
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id, get_org_role
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api", tags=["search and sourcing"])
@@ -116,6 +116,12 @@ class ReferralStatusUpdate(BaseModel):
     organization_id: UUID
     status: Literal["received", "reviewing", "qualified", "interviewing", "hired", "declined", "withdrawn"]
     reason: str = Field(min_length=1, max_length=500)
+
+
+def _assert_sourcing_manager(user_id: UUID, organization_id: UUID) -> None:
+    role = get_org_role(user_id, organization_id)
+    if role not in {"owner", "admin", "recruiter", "recruitment_manager"}:
+        raise HTTPException(status_code=403, detail="Recruiter or organisation administrator access required")
 
 
 def _db_error(exc: Exception) -> HTTPException:
@@ -243,7 +249,7 @@ async def advanced_search(
     offset: int = Query(default=0, ge=0, le=100000),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     if min_experience is not None and max_experience is not None and min_experience > max_experience:
         raise HTTPException(status_code=422, detail="Minimum experience cannot exceed maximum experience")
     if date_from and date_to and date_from >= date_to:
@@ -262,7 +268,7 @@ async def advanced_search(
 
 @router.get("/saved-searches")
 async def list_saved_searches(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -278,7 +284,7 @@ async def list_saved_searches(organization_id: UUID, user_id: UUID = Depends(get
 
 @router.post("/saved-searches", status_code=201)
 async def create_saved_search(payload: SavedSearchCreate, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    _assert_sourcing_manager(user_id, payload.organization_id)
     if payload.is_shared:
         assert_org_admin(user_id, payload.organization_id)
     try:
@@ -301,7 +307,7 @@ async def create_saved_search(payload: SavedSearchCreate, user_id: UUID = Depend
 @router.patch("/saved-searches/{search_id}")
 async def update_saved_search(search_id: UUID, organization_id: UUID, payload: SavedSearchUpdate,
                               user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     data = payload.model_dump(exclude_unset=True)
     if not data:
         raise HTTPException(status_code=422, detail="Provide at least one field to update")
@@ -339,7 +345,7 @@ async def run_saved_search(search_id: UUID, organization_id: UUID,
                            limit: int = Query(default=25, ge=1, le=100),
                            offset: int = Query(default=0, ge=0, le=100000),
                            user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -363,7 +369,7 @@ async def run_saved_search(search_id: UUID, organization_id: UUID,
 @router.delete("/saved-searches/{search_id}", status_code=204)
 async def delete_saved_search(search_id: UUID, organization_id: UUID,
                               user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -379,7 +385,7 @@ async def delete_saved_search(search_id: UUID, organization_id: UUID,
 
 @router.get("/talent-pools")
 async def list_talent_pools(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -396,7 +402,7 @@ async def list_talent_pools(organization_id: UUID, user_id: UUID = Depends(get_c
 
 @router.post("/talent-pools", status_code=201)
 async def create_talent_pool(payload: PoolCreate, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    _assert_sourcing_manager(user_id, payload.organization_id)
     owner = payload.owner_user_id or user_id
     if owner != user_id:
         assert_org_admin(user_id, payload.organization_id)
@@ -422,7 +428,7 @@ async def create_talent_pool(payload: PoolCreate, user_id: UUID = Depends(get_cu
 async def list_talent_pool_members(pool_id: UUID, organization_id: UUID,
                                    include_inactive: bool = False,
                                    user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -453,7 +459,7 @@ async def list_talent_pool_members(pool_id: UUID, organization_id: UUID,
 @router.post("/talent-pools/{pool_id}/members", status_code=201)
 async def add_talent_pool_member(pool_id: UUID, payload: PoolMembershipCreate,
                                  user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    _assert_sourcing_manager(user_id, payload.organization_id)
     if payload.expires_at and payload.expires_at <= datetime.now(timezone.utc):
         raise HTTPException(status_code=422, detail="Membership expiry must be in the future")
     try:
@@ -503,7 +509,7 @@ async def add_talent_pool_member(pool_id: UUID, payload: PoolMembershipCreate,
 async def remove_talent_pool_member(pool_id: UUID, membership_id: UUID, organization_id: UUID,
                                     reason: str = Query(min_length=1, max_length=500),
                                     user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -625,7 +631,7 @@ async def preview_candidate_csv_import(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Validate a bounded CSV, persist row-level preview results, and do not create candidates yet."""
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     filename = (file.filename or "").strip()
     if not filename.lower().endswith(".csv"):
         raise HTTPException(status_code=415, detail="Only CSV imports are supported by this endpoint")
@@ -745,7 +751,7 @@ async def commit_candidate_csv_import(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Commit only reviewed preview rows; each created candidate retains source and batch provenance."""
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -805,7 +811,7 @@ async def commit_candidate_csv_import(
 
 @router.get("/imports")
 async def list_candidate_import_batches(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -822,7 +828,7 @@ async def list_candidate_import_batches(organization_id: UUID, user_id: UUID = D
 @router.get("/candidate-tags")
 async def list_candidate_tags(organization_id: UUID, candidate_id: UUID | None = None,
                               user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -867,7 +873,7 @@ async def create_candidate_tag(payload: CandidateTagCreate, user_id: UUID = Depe
 @router.put("/candidate-tags/{tag_id}/candidates/{candidate_id}")
 async def assign_candidate_tag(tag_id: UUID, candidate_id: UUID, organization_id: UUID,
                                user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -901,7 +907,7 @@ async def assign_candidate_tag(tag_id: UUID, candidate_id: UUID, organization_id
 @router.delete("/candidate-tags/{tag_id}/candidates/{candidate_id}", status_code=204)
 async def unassign_candidate_tag(tag_id: UUID, candidate_id: UUID, organization_id: UUID,
                                  user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -922,7 +928,7 @@ async def unassign_candidate_tag(tag_id: UUID, candidate_id: UUID, organization_
 
 @router.get("/campaigns")
 async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -974,7 +980,7 @@ async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_curr
 
 @router.post("/campaigns", status_code=201)
 async def create_campaign(payload: CampaignCreate, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    _assert_sourcing_manager(user_id, payload.organization_id)
     campaign_owner = payload.owner_user_id or user_id
     if campaign_owner != user_id:
         assert_org_admin(user_id, payload.organization_id)
@@ -1008,7 +1014,7 @@ async def create_campaign(payload: CampaignCreate, user_id: UUID = Depends(get_c
 @router.get("/campaigns/{campaign_id}/channels")
 async def list_campaign_channels(campaign_id: UUID, organization_id: UUID,
                                 user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -1023,7 +1029,7 @@ async def list_campaign_channels(campaign_id: UUID, organization_id: UUID,
 @router.post("/campaigns/{campaign_id}/channels", status_code=201)
 async def create_campaign_channel(campaign_id: UUID, payload: CampaignChannelCreate,
                                   user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    _assert_sourcing_manager(user_id, payload.organization_id)
     if (payload.spend_amount is None) != (payload.spend_currency is None):
         raise HTTPException(status_code=422, detail="Channel spend amount and currency must be supplied together")
     try:
@@ -1055,7 +1061,7 @@ async def create_campaign_channel(campaign_id: UUID, payload: CampaignChannelCre
 @router.get("/referrals")
 async def list_referrals(organization_id: UUID, campaign_id: UUID | None = None,
                          user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, organization_id)
+    _assert_sourcing_manager(user_id, organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -1074,7 +1080,7 @@ async def list_referrals(organization_id: UUID, campaign_id: UUID | None = None,
 
 @router.post("/referrals", status_code=201)
 async def create_referral(payload: ReferralCreate, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    _assert_sourcing_manager(user_id, payload.organization_id)
     if payload.referrer_user_id is not None:
         assert_org_member(payload.referrer_user_id, payload.organization_id)
     try:
@@ -1114,7 +1120,7 @@ async def create_referral(payload: ReferralCreate, user_id: UUID = Depends(get_c
 @router.patch("/referrals/{referral_id}/status")
 async def update_referral_status(referral_id: UUID, payload: ReferralStatusUpdate,
                                  user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    _assert_sourcing_manager(user_id, payload.organization_id)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
