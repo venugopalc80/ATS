@@ -31,7 +31,9 @@
 - [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
 - [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, and old/new edit audit metadata
 - [ ] Add/verify broader database-backed lifecycle and job status-transition tests
-- [ ] Confirm CI on latest feature commit `59ec0284fe40f5604ed35af2dad29c5b63d92f6a` (GitHub Actions run 39800613227 was queued at last check; Vercel checks still fail due to deployment rate limiting)
+- [x] Backend unit tests pass on code/test commit `cb2c15ed94378ae69cf45c5b1378ea287437a204` (GitHub Actions run 39800730424)
+- [ ] Confirm frontend typecheck and production build in run 39800730424 (in progress at last check)
+- [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
 
