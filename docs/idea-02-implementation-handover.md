@@ -35,7 +35,7 @@
 - [ ] Resolve Vercel preview build-rate limit (latest checks report deployment rate limited; retry after the limit window or use an approved build-capacity change)
 - [x] Latest backend unit-test run 39805425180 passed: 48 tests run, 4 skipped, including route ordering, job status-transition and assignment-role regression tests
 - [x] Latest backend suite in GitHub Actions run 39805687840 passed on code commit `80303c5d81de39bf4419d19e5de2a210d5db0b15`: 49 tests run, 4 skipped, including old/new job reassignment audit metadata
-- [x] Frontend typecheck passed in run 39805687840; production build was still running at last check
+- [x] Full automated checks in GitHub Actions run 39805687840 passed: 49 backend tests (4 skipped), frontend typecheck, and production build
 - [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
