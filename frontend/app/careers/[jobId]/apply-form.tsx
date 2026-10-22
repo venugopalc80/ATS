@@ -1,5 +1,6 @@
 "use client";
 import { FormEvent, useEffect, useState } from "react";
+import "./apply-form.css";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 type Question = { id:string; question_key:string; label:string; help_text?:string|null; field_type:"text"|"textarea"|"email"|"phone"|"number"|"date"|"select"|"radio"|"checkbox"|"multi_select"|"boolean"; required:boolean; options:string[]; is_eligibility:boolean; position:number };
