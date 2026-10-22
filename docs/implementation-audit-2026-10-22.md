@@ -102,3 +102,19 @@ The latest GitHub query returned **42 open pull requests**, of which **34 are dr
 - **P4 — calculate the score:** score all 49 ideas against their acceptance criteria and publish both verified completion and evidence coverage.
 
 No PR was merged or closed by this audit update, and no production migration or deployment was performed.
+
+
+## Follow-up verification (2026-10-22, after initial snapshot)
+
+### Production deployment evidence
+
+- Vercel's latest deployment query for project `ats`, filtered to production, returned a **READY** deployment from `main` at commit `6d9fbcb4214c25d2fc8770e515b10c22038eec97` ("fix: keep active organisation selection consistent").
+- Deployment inspector: https://vercel.com/the-pixel-muses/ats/2o6UhYMCG3GPnRZxBbEuJcSzLNfD
+- This verifies the Vercel project's production deployment record, not the custom domain's DNS/routing, backend service deployment, or production database migration parity. Those remain separate checks.
+
+### Idea 04 duplicate-PR comparison
+
+- **PR #69** head `feat/idea-04-application-pipeline`, SHA `607396414c53e124a01c57a6dcc82f786d58d680`, base `main`. It contains the dedicated transition/history endpoints, service logic, unit tests, and migration. Its body reports a staging-only SQL smoke test, but also says tests have not yet been executed in a proper repository checkout and the migration was applied outside migration history.
+- **PR #70** is another draft from `main` for the same core capability. Its body says automated tests and migration execution have not been run and it has not been applied to a database.
+- **Recommendation:** use #69 as the lead candidate for a technical acceptance review because it has stronger stated staging evidence; do not merge it yet. First reconcile the staging-only SQL with the committed migration and migration history, run backend tests and static checks, add authenticated tenant-isolation/API tests, and confirm the configured stage definitions are actually enforced. Only then decide whether #70 has any unique changes worth cherry-picking; otherwise mark it superseded after the canonical path is accepted.
+- No PR was merged or closed and no production database or deployment was changed during this follow-up.
