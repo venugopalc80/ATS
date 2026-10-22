@@ -275,8 +275,17 @@ async def assistant(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, payload.organization_id)
+    role = get_org_role(user_id, payload.organization_id)
     if payload.task not in ALLOWED_TASKS:
         raise HTTPException(status_code=422, detail="Unsupported AI task")
+    privileged_tasks = {
+        "summarize_candidate", "draft_candidate_message", "extract_job_requirements",
+        "draft_job_description", "explain_recommendation", "answer_authorized_records",
+    }
+    if payload.task in privileged_tasks and role not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Recruiter or organisation administrator permission required for this AI task")
+    if payload.task == "interview_questions" and role not in {"owner", "admin", "recruiter", "hiring_manager"}:
+        raise HTTPException(status_code=403, detail="Interview preparation permission required")
     use_case_key = {
         "summarize_candidate": "recruitment_assistant",
         "extract_job_requirements": "recruitment_assistant",
@@ -437,6 +446,8 @@ async def review_recommendation(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, payload.organization_id)
+    if get_org_role(user_id, payload.organization_id) not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Recommendation review permission required")
     if not payload.approved and not (payload.override_reason or "").strip():
         raise HTTPException(status_code=422, detail="A reason is required when overriding a recommendation")
     try:
@@ -770,6 +781,8 @@ async def create_recorded_recommendation(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, payload.organization_id)
+    if get_org_role(user_id, payload.organization_id) not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Recommendation recording permission required")
     table_by_type = {
         "candidate": "candidates",
         "application": "applications",
