@@ -14,6 +14,7 @@ type Preview = {
   column_mapping: Record<string, string>;
   message: string;
 };
+type ImportRow = { id: string; row_number: number; status: string; errors: string[]; duplicate_candidate_id?: string | null; candidate_id?: string | null };
 type CommitResult = {
   id: string;
   status: string;
@@ -28,6 +29,7 @@ export default function CandidateImportsPage() {
   const [mappingText, setMappingText] = useState("");
   const [duplicatePolicy, setDuplicatePolicy] = useState<"review" | "skip" | "allow">("review");
   const [preview, setPreview] = useState<Preview | null>(null);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
   const [result, setResult] = useState<CommitResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -42,6 +44,7 @@ export default function CandidateImportsPage() {
     setMessage("");
     setResult(null);
     setPreview(null);
+    setImportRows([]);
     try {
       const form = new FormData();
       form.append("file", file);
@@ -57,6 +60,11 @@ export default function CandidateImportsPage() {
       const body = await response.json();
       if (!response.ok) throw new Error(typeof body.detail === "string" ? body.detail : "CSV preview failed.");
       setPreview(body);
+      const rowParams = new URLSearchParams({ organization_id: organizationId, limit: "500", offset: "0" });
+      const rowsResponse = await apiFetch(`${API_BASE}/api/imports/${body.batch_id}/rows?${rowParams.toString()}`);
+      const rowsBody = await rowsResponse.json();
+      if (!rowsResponse.ok) throw new Error(typeof rowsBody.detail === "string" ? rowsBody.detail : "Could not load row validation results.");
+      setImportRows(rowsBody as ImportRow[]);
       setMessage(body.message || "Preview ready. No candidate records have been created.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "CSV preview failed.");
@@ -144,13 +152,28 @@ export default function CandidateImportsPage() {
         </section>
       )}
 
+      {preview && importRows.length > 0 && (
+        <section className="card" style={{ marginBottom: 20 }}>
+          <div className="card-head"><span className="card-title">Row validation results</span><span className="muted-small">{importRows.length} rows shown</span></div>
+          <div style={{ overflowX: "auto" }}>
+            <table className="table">
+              <thead><tr><th>CSV row</th><th>Status</th><th>Validation notes</th></tr></thead>
+              <tbody>{importRows.map((row) => <tr key={row.id}>
+                <td>{row.row_number}</td><td>{row.status}</td>
+                <td>{row.errors?.length ? row.errors.join("; ") : "No validation errors"}</td>
+              </tr>)}</tbody>
+            </table>
+          </div>
+        </section>
+      )}
+
       {result && (
         <section className="card">
           <div className="card-head"><span className="card-title">Import result</span></div>
           <p>Status: <strong>{result.status}</strong></p>
           <p>Imported: {result.imported_rows} of {result.total_rows}</p>
           <p>Duplicates: {result.duplicate_rows} · Rejected: {result.rejected_rows}</p>
-          <button className="btn" onClick={() => { setFile(null); setPreview(null); setResult(null); setMappingText(""); }}>Start another import</button>
+          <button className="btn" onClick={() => { setFile(null); setPreview(null); setResult(null); setImportRows([]); setMappingText(""); }}>Start another import</button>
         </section>
       )}
     </main>
