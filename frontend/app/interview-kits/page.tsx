@@ -7,8 +7,10 @@ import { getActiveOrganizationId } from "@/lib/organization";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORG = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
+type Job = { id: string; title: string };
 type Kit = {
   id: string;
+  job_id?: string | null;
   name: string;
   description?: string | null;
   status: string;
@@ -24,6 +26,8 @@ const emptyCompetency = (): Competency => ({
 
 export default function InterviewKitsPage() {
   const [kits, setKits] = useState<Kit[]>([]);
+  const [jobs, setJobs] = useState<Job[]>([]);
+  const [jobId, setJobId] = useState("");
   const [editingKitId, setEditingKitId] = useState<string | null>(null);
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -37,9 +41,13 @@ export default function InterviewKitsPage() {
   async function load() {
     setLoading(true);
     try {
-      const response = await apiFetch(API_BASE + "/api/interview-kits?organization_id=" + encodeURIComponent(organizationId));
+      const [response, jobsResponse] = await Promise.all([
+        apiFetch(API_BASE + "/api/interview-kits?organization_id=" + encodeURIComponent(organizationId)),
+        apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(organizationId)),
+      ]);
       if (!response.ok) throw new Error("Unable to load interview kits.");
       setKits(await response.json());
+      if (jobsResponse.ok) setJobs(await jobsResponse.json());
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to load interview kits.");
     } finally {
@@ -82,13 +90,13 @@ export default function InterviewKitsPage() {
               }] : [],
             })),
           };
-          return editingKitId ? definition : { organization_id: organizationId, job_id: null, ...definition };
+          return editingKitId ? definition : { organization_id: organizationId, job_id: jobId || null, ...definition };
         })()),
       });
       const result = await response.json().catch(() => null);
       if (!response.ok) throw new Error(result?.detail ?? "Unable to create interview kit.");
       setMessage(editingKitId ? "New draft version created. Review it, then publish when ready." : "Draft kit created. Review the criteria, then publish the version when it is ready.");
-      setEditingKitId(null); setName(""); setDescription(""); setInstructions(""); setCompetencies([emptyCompetency()]);
+      setEditingKitId(null); setName(""); setDescription(""); setInstructions(""); setJobId(""); setCompetencies([emptyCompetency()]);
       await load();
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to create interview kit.");
@@ -133,6 +141,9 @@ export default function InterviewKitsPage() {
         <p className="mt-1 text-sm text-gray-500">Use observable, job-related competencies. Avoid vague criteria such as cultural similarity or personality fit.</p>
         <form className="mt-5 space-y-5" onSubmit={createKit}>
           <div className="grid gap-4 md:grid-cols-2">
+            {!editingKitId && <label className="block text-sm">Apply to vacancy (optional)
+              <select className="input mt-1 w-full" value={jobId} onChange={(e) => setJobId(e.target.value)}><option value="">All vacancies</option>{jobs.map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}</select>
+            </label>}
             <label className="block text-sm">Kit name
               <input className="input mt-1 w-full" required minLength={1} maxLength={160} value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Senior Python Engineer" />
             </label>
@@ -188,7 +199,7 @@ export default function InterviewKitsPage() {
                   <div>
                     <h3 className="font-semibold">{kit.name}</h3>
                     <p className="mt-1 text-sm text-gray-500">{kit.description || "No description provided."}</p>
-                    <p className="mt-2 text-xs uppercase tracking-wide">{kit.status}{kit.version_number ? " · version " + kit.version_number : " · draft"}</p>
+                    <p className="mt-2 text-xs uppercase tracking-wide">{kit.status}{kit.version_number ? " · version " + kit.version_number : " · draft"}</p><p className="mt-1 text-xs text-gray-500">{kit.job_id ? "Vacancy-specific kit" : "Available across vacancies"}</p>
                   </div>
                   <div className="flex flex-wrap gap-2">{kit.draft_template_id && <button className="btn primary" disabled={saving} onClick={() => void publish(kit)}>Publish draft</button>}{kit.status === "published" && !kit.draft_template_id && <button className="btn" disabled={saving} onClick={() => { setEditingKitId(kit.id); setName(kit.name); setDescription(kit.description ?? ""); setInstructions(""); setCompetencies([emptyCompetency()]); window.scrollTo({ top: 0, behavior: "smooth" }); }}>Create new version</button>}</div>
                 </div>
