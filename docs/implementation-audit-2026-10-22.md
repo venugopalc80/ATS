@@ -118,3 +118,32 @@ No PR was merged or closed by this audit update, and no production migration or 
 - **PR #70** is another draft from `main` for the same core capability. Its body says automated tests and migration execution have not been run and it has not been applied to a database.
 - **Recommendation:** use #69 as the lead candidate for a technical acceptance review because it has stronger stated staging evidence; do not merge it yet. First reconcile the staging-only SQL with the committed migration and migration history, run backend tests and static checks, add authenticated tenant-isolation/API tests, and confirm the configured stage definitions are actually enforced. Only then decide whether #70 has any unique changes worth cherry-picking; otherwise mark it superseded after the canonical path is accepted.
 - No PR was merged or closed and no production database or deployment was changed during this follow-up.
+
+
+## Roadmap source discovery and Idea 04 acceptance scoring (2026-10-22)
+
+A project Library brief titled `Pasted text(3).txt` supplies detailed acceptance criteria for Ideas **04–08**. This improves source coverage, but it is not the full 49-idea canonical index. The full 49-row roadmap and criteria still need to be assembled from authoritative project briefs and reconciled before publishing a product-wide completion percentage.
+
+### Idea 04 — Applications & Recruitment Pipeline
+
+Using the six acceptance criteria in the feature brief and current evidence:
+
+| Acceptance criterion | Current evidence | Score |
+|---|---|---:|
+| Applications remain separate from candidate profiles | Separate `applications` entity references candidate and job IDs | Pass (1) |
+| Invalid stage transitions rejected by backend | Transition validation and unit tests; relevant CI backend job passed | Pass (1) |
+| Every transition is auditable | Stage-history trigger and staging smoke test reported; migration-history reconciliation still outstanding | Partial (0.5) |
+| Tenant isolation is tested | Authenticated cross-tenant/API test evidence not yet supplied | Not verified (0) |
+| Bulk actions report partial failures accurately | No accepted evidence for bulk pipeline actions | Not implemented / not verified (0) |
+| Candidate-facing status is separated from internal status | No accepted evidence for the required separation | Not verified (0) |
+
+**Provisional Idea 04 acceptance score: 2.5 / 6 = 41.7% evidenced; 58.3% remains unpassed or unverified.** This is a criterion score for Idea 04 only, not the whole product. It is deliberately conservative and should be updated when more code/tests are reviewed. The pipeline board, configurable stage definitions, bulk operations and SLA monitoring are also still required by the feature brief, so this score is not a claim that Idea 04 is release-ready.
+
+### Progress reporting convention
+
+Until the complete 49-idea criteria inventory is reconciled, each update should report:
+1. **Idea-level completion** only when criteria can be scored with evidence.
+2. **Roadmap evidence coverage** separately from implementation completion.
+3. **Product-wide completion** as *not yet verified*, rather than inventing a precise percentage from PR counts.
+
+Current roadmap evidence coverage: detailed acceptance criteria located for Ideas 04–08 (**5/49 = 10.2%** of the idea IDs). This is documentation coverage, not implementation completion.
