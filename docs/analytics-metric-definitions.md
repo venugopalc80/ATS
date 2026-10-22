@@ -1,7 +1,7 @@
 # Section 6 — Analytics and Business Intelligence
 
 **Scope:** AQERITH Ideas 28–33  
-**Status:** Metric contract plus KPI, funnel conversion/waiting-time, recruiter workload and source-effectiveness APIs committed on the feature branch. Earlier slices passed CI; the latest additions are awaiting CI. SQL shapes have been checked read-only against the staging schema; staging has no recruitment/campaign rows for result reconciliation.  
+**Status:** Metric contract, KPI/funnel/workload/source APIs, six-month baseline demand forecast, allowlisted CSV exports and first analytics workspace UI are committed on the feature branch. CI is running for the expanded slice. Forecast SQL has been executed read-only against staging; staging has no recruitment/campaign rows for numerical reconciliation.  
 **Last reviewed:** 2026-10-22
 
 This document defines the proposed shared contract for analytics APIs, dashboards, exports and forecast comparisons. A metric is not accepted solely because the UI displays a value.
