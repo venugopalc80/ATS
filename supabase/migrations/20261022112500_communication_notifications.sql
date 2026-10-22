@@ -33,6 +33,7 @@ create table if not exists public.message_templates (
   approved_by uuid references public.profiles(id) on delete set null,
   approved_at timestamptz,
   created_at timestamptz not null default now(),
+  unique (organization_id, id),
   unique (organization_id, template_key, version),
   check ((status = 'approved' and approved_at is not null and approved_by is not null)
       or status <> 'approved')
@@ -49,7 +50,7 @@ create table if not exists public.messages (
   channel text not null check (channel in ('email','sms','in_app','internal')),
   body_text text not null check (length(trim(body_text)) > 0),
   subject text,
-  template_id uuid references public.message_templates(id) on delete set null,
+  template_id uuid,
   template_version integer,
   status text not null default 'draft'
     check (status in ('internal','draft','queued','sent','delivered','failed','bounced','undelivered')),
@@ -58,6 +59,8 @@ create table if not exists public.messages (
   updated_at timestamptz not null default now(),
   foreign key (organization_id, thread_id)
     references public.communication_threads(organization_id, id) on delete cascade,
+  foreign key (organization_id, template_id)
+    references public.message_templates(organization_id, id) on delete restrict,
   check (
     (visibility = 'internal' and channel = 'internal' and status = 'internal')
     or
@@ -81,6 +84,7 @@ create table if not exists public.message_recipients (
   delivery_status text not null default 'pending'
     check (delivery_status in ('pending','queued','sent','delivered','failed','bounced','undelivered')),
   created_at timestamptz not null default now(),
+  unique (organization_id, id),
   foreign key (organization_id, message_id)
     references public.messages(organization_id, id) on delete cascade
 );
@@ -91,7 +95,7 @@ create table if not exists public.delivery_events (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
   message_id uuid not null references public.messages(id) on delete cascade,
-  recipient_id uuid references public.message_recipients(id) on delete set null,
+  recipient_id uuid,
   provider text not null,
   provider_event_id text,
   event_type text not null check (event_type in ('queued','sent','delivered','opened','bounced','failed','undelivered')),
@@ -100,6 +104,8 @@ create table if not exists public.delivery_events (
   created_at timestamptz not null default now(),
   foreign key (organization_id, message_id)
     references public.messages(organization_id, id) on delete cascade,
+  foreign key (organization_id, recipient_id)
+    references public.message_recipients(organization_id, id) on delete restrict,
   unique (provider, provider_event_id)
 );
 create index if not exists delivery_events_message_time_idx
