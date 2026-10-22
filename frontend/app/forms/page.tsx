@@ -41,6 +41,8 @@ export default function ApplicationFormsPage() {
     { ...blankQuestion(), question_key: "relevant_experience", label: "Briefly describe your relevant experience", field_type: "textarea", required: true },
   ]);
   const [selectedVersion, setSelectedVersion] = useState("");
+  const [selectedTemplate, setSelectedTemplate] = useState("");
+  const [selectedVersionStatus, setSelectedVersionStatus] = useState<"draft" | "published" | "archived" | "">("");
   const [jobId, setJobId] = useState("");
   const [preview, setPreview] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -67,40 +69,80 @@ export default function ApplicationFormsPage() {
     setQuestions(current => current.map(question => question.id === id ? { ...question, ...patch } : question));
   }
 
+  async function saveDraft() {
+    if (!organizationId) throw new Error("Select an organisation before creating a form.");
+    const questionPayload = questions.map(({ id, ...question }, position) => ({ ...question, position, options: question.options }));
+    let templateId = selectedTemplate;
+    let versionId = selectedVersion;
+    if (!templateId) {
+      const create = await apiFetch(`${API_BASE}/api/application-forms`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: organizationId, name, description, privacy_notice_text: privacyNotice, privacy_notice_version: "1", questions: questionPayload }),
+      });
+      const body = await create.json().catch(() => ({}));
+      if (!create.ok) throw new Error(body.detail || "Could not create the form");
+      templateId = body.id;
+      versionId = body.version.id;
+      setSelectedTemplate(templateId);
+      setSelectedVersion(versionId);
+      setSelectedVersionStatus("draft");
+    } else if (!versionId || selectedVersionStatus !== "draft") {
+      const createVersion = await apiFetch(`${API_BASE}/api/application-forms/${templateId}/versions`, { method: "POST" });
+      const body = await createVersion.json().catch(() => ({}));
+      if (!createVersion.ok) throw new Error(body.detail || "Could not create a new draft version");
+      versionId = body.version.id;
+      setSelectedVersion(versionId);
+      setSelectedVersionStatus("draft");
+    }
+    const save = await apiFetch(`${API_BASE}/api/application-forms/versions/${versionId}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, description, privacy_notice_text: privacyNotice, privacy_notice_version: "1", questions: questionPayload }),
+    });
+    const saved = await save.json().catch(() => ({}));
+    if (!save.ok) throw new Error(saved.detail || "Could not save the draft");
+    await loadData();
+    return versionId;
+  }
+
   async function createForm(event: FormEvent) {
-    event.preventDefault();
+    event.preventDefault(); setBusy(true); setError(""); setMessage("");
+    try {
+      const versionId = await saveDraft();
+      setMessage("Draft saved. Preview it, then publish when it is ready.");
+      setSelectedVersion(versionId);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not save the form"); }
+    finally { setBusy(false); }
+  }
+
+  async function openExistingForm(form: FormSummary) {
     setBusy(true); setError(""); setMessage("");
     try {
-      const response = await apiFetch(`${API_BASE}/api/application-forms`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          organization_id: organizationId, name, description,
-          privacy_notice_text: privacyNotice, privacy_notice_version: "1",
-          questions: questions.map(({ id, ...question }, position) => ({ ...question, position, options: question.options })),
-        }),
-      });
+      const response = await apiFetch(`${API_BASE}/api/application-forms/${form.id}`);
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.detail || "Could not create the form");
-      setSelectedVersion(body.version.id);
-      setMessage("Draft created. Preview it, then publish when it is ready.");
-      await loadData();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not create the form");
-    } finally { setBusy(false); }
+      if (!response.ok) throw new Error(body.detail || "Could not open this form");
+      const latest = (body.versions ?? [])[0] as (FormVersion & { privacy_notice_text: string; privacy_notice_version: string }) | undefined;
+      if (!latest) throw new Error("This form has no saved version.");
+      setSelectedTemplate(form.id); setSelectedVersion(latest.id); setSelectedVersionStatus(latest.status);
+      setName(body.name); setDescription(body.description ?? ""); setPrivacyNotice(latest.privacy_notice_text);
+      setQuestions((latest.questions ?? []).map((q, index) => ({ ...q, options: q.options ?? [], position: q.position ?? index })));
+      setPreview(false);
+      setMessage(`Loaded version ${latest.version_number} (${latest.status}). Saving changes creates a new version if this one is already published.`);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not open this form"); }
+    finally { setBusy(false); }
   }
 
   async function publishAndAssign() {
-    if (!selectedVersion) { setError("Create a draft first, then select its version."); return; }
     setBusy(true); setError(""); setMessage("");
     try {
-      const publish = await apiFetch(`${API_BASE}/api/application-forms/versions/${selectedVersion}/publish`, { method: "POST" });
+      const versionId = await saveDraft();
+      const publish = await apiFetch(`${API_BASE}/api/application-forms/versions/${versionId}/publish`, { method: "POST" });
       const publishedBody = await publish.json().catch(() => ({}));
-      if (!publish.ok && publishedBody.status !== "published") throw new Error(publishedBody.detail || "Could not publish this version");
+      if (!publish.ok) throw new Error(publishedBody.detail || "Could not publish this version");
+      setSelectedVersionStatus("published");
       if (jobId) {
         const assign = await apiFetch(`${API_BASE}/api/application-forms/jobs/${encodeURIComponent(jobId)}/assignment`, {
           method: "PUT", headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ organization_id: organizationId, form_version_id: selectedVersion }),
+          body: JSON.stringify({ organization_id: organizationId, form_version_id: versionId }),
         });
         const assignBody = await assign.json().catch(() => ({}));
         if (!assign.ok) throw new Error(assignBody.detail || "Published, but assignment failed. Assign it to a job before candidates can use it.");
@@ -171,7 +213,7 @@ export default function ApplicationFormsPage() {
           <label>Assign to vacancy (optional)<select value={jobId} onChange={e => setJobId(e.target.value)}><option value="">Choose a job</option>{jobs.map(job => <option key={job.id} value={job.id}>{job.title} · {job.status}</option>)}</select></label>
           <button className="btn primary" type="button" onClick={publishAndAssign} disabled={busy || !selectedVersion}>{busy ? "Working…" : "Publish version"}</button>
           <h3>Existing forms</h3>
-          {forms.length ? forms.map(form => <div className="existing-form" key={form.id}><strong>{form.name}</strong><p>{form.description || "Reusable application form"}</p><small>Version {form.version_number ?? "—"} · {form.status ?? "no version"}</small>{form.latest_version_id ? <button className="btn" type="button" onClick={() => { setSelectedVersion(form.latest_version_id ?? ""); setName(form.name); setDescription(form.description ?? ""); }}>Use latest version ID</button> : null}</div>) : <p className="subtitle">No forms created yet.</p>}
+          {forms.length ? forms.map(form => <div className="existing-form" key={form.id}><strong>{form.name}</strong><p>{form.description || "Reusable application form"}</p><small>Version {form.version_number ?? "—"} · {form.status ?? "no version"}</small>{form.latest_version_id ? <button className="btn" type="button" onClick={() => openExistingForm(form)} disabled={busy}>Open form</button> : null}</div>) : <p className="subtitle">No forms created yet.</p>}
         </aside>
       </div>
     </main>
