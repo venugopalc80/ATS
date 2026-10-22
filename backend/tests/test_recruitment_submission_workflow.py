@@ -18,6 +18,19 @@ APPLICATION = UUID("77777777-7777-4777-8777-777777777777")
 USER = UUID("22222222-2222-4222-8222-222222222222")
 NOW = datetime(2026, 10, 14, 12, tzinfo=timezone.utc)
 
+DEFAULT_STAGE_CONFIG = [
+    {"stage_key": "new", "enabled": True, "allowed_next_stages": ["screening", "rejected", "withdrawn"]},
+    {"stage_key": "screening", "enabled": True, "allowed_next_stages": ["shortlisted", "submitted", "interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "shortlisted", "enabled": True, "allowed_next_stages": ["interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "submitted", "enabled": True, "allowed_next_stages": ["interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "interview", "enabled": True, "allowed_next_stages": ["assessment", "offer", "rejected", "withdrawn"]},
+    {"stage_key": "assessment", "enabled": True, "allowed_next_stages": ["interview", "offer", "rejected", "withdrawn"]},
+    {"stage_key": "offer", "enabled": True, "allowed_next_stages": ["hired", "rejected", "withdrawn"]},
+    {"stage_key": "hired", "enabled": True, "allowed_next_stages": []},
+    {"stage_key": "rejected", "enabled": True, "allowed_next_stages": []},
+    {"stage_key": "withdrawn", "enabled": True, "allowed_next_stages": []},
+]
+
 
 class PublicApplyCursor:
     """Small SQL-aware fake: all state is in memory and no real database is touched."""
@@ -189,13 +202,18 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
                     return None
 
             def fetchone(self):
-                if "select status from public.applications" in self.sql:
-                    return {"status": state["status"]}
+                if "select status, organization_id from public.applications" in self.sql:
+                    return {"status": state["status"], "organization_id": state["organization_id"]}
                 if "from public.applications where id=%s" in self.sql:
                     return dict(state)
                 if self.sql.startswith("update public.applications set"):
                     return dict(state)
                 raise AssertionError(f"Unexpected fetchone query: {self.sql}")
+
+            def fetchall(self):
+                if "from public.application_stage_config" in self.sql:
+                    return list(DEFAULT_STAGE_CONFIG)
+                return []
 
         @contextmanager
         def fake_connection():
@@ -219,7 +237,7 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any("where id=%s" in sql for sql, _ in executed))
 
     async def test_invalid_stage_transition_is_rejected_without_update(self):
-        state = {"status": "new"}
+        state = {"status": "new", "organization_id": ORG}
         updates = []
 
         class StateCursor:
@@ -232,9 +250,13 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 if self.sql.startswith("update public.applications set"):
                     updates.append(self.sql)
             def fetchone(self):
-                if "select status from public.applications" in self.sql:
+                if "select status, organization_id from public.applications" in self.sql:
                     return dict(state)
                 raise AssertionError(f"Unexpected query: {self.sql}")
+            def fetchall(self):
+                if "from public.application_stage_config" in self.sql:
+                    return list(DEFAULT_STAGE_CONFIG)
+                return []
 
         @contextmanager
         def fake_connection():
