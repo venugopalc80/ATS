@@ -20,11 +20,7 @@ create table if not exists public.document_extractions (
     confirmed_by uuid,
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now(),
-    unique (organization_id, document_id),
-    constraint document_extractions_org_document_fk
-      foreign key (document_id, organization_id)
-      references public.candidate_documents(id, organization_id)
-      on delete cascade
+    unique (organization_id, document_id)
 );
 create index if not exists document_extractions_org_status_idx
     on public.document_extractions (organization_id, status, updated_at desc);
