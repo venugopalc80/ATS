@@ -8,6 +8,7 @@ from app.routers.me import router as me_router
 from app.routers.clients import router as clients_router
 from app.routers.dashboard import router as dashboard_router
 from app.routers.interviews import router as interviews_router
+from app.routers.interview_scorecards import router as interview_scorecards_router
 from app.routers.offers import router as offers_router
 from app.routers.placements import router as placements_router
 from app.routers.audit import router as audit_router
@@ -15,8 +16,10 @@ from app.routers.notes import router as notes_router
 from app.routers.job_distribution import router as job_distribution_router
 from app.routers.public_jobs import router as public_jobs_router
 from app.routers.documents import router as documents_router
+from app.routers.assessments import router as assessments_router
+from app.routers.recruitment_documents import router as recruitment_documents_router
 
-app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
+app=FastAPI(title="AQERITH API",version="0.10.0",description="AQERITH recruitment operations API")
 frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
 frontend_origins = {
     origin.strip().rstrip("/")
@@ -32,23 +35,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.include_router(jobs_router)
-app.include_router(candidates_router)
-app.include_router(applications_router)
-app.include_router(me_router)
-app.include_router(clients_router)
-app.include_router(dashboard_router)
-app.include_router(interviews_router)
-app.include_router(offers_router)
-app.include_router(placements_router)
-app.include_router(audit_router)
-app.include_router(notes_router)
-app.include_router(job_distribution_router)
-app.include_router(public_jobs_router)
-app.include_router(documents_router)
+for router in (
+    jobs_router, candidates_router, applications_router, me_router, clients_router,
+    dashboard_router, interviews_router, interview_scorecards_router, offers_router,
+    placements_router, audit_router, notes_router, job_distribution_router,
+    public_jobs_router, documents_router, assessments_router, recruitment_documents_router,
+):
+    app.include_router(router)
 
 @app.get("/")
-async def root()->dict[str,str]: return {"status":"ok","service":"ats-api","docs":"/docs"}
+async def root()->dict[str,str]: return {"status":"ok","service":"aqerith-api","docs":"/docs"}
 
 @app.get("/health")
-async def health()->dict[str,str]: return {"status":"ok","service":"ats-api"}
+async def health()->dict[str,str]: return {"status":"ok","service":"aqerith-api"}
