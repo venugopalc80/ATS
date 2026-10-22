@@ -113,6 +113,8 @@ export default function CandidatesPage() {
   const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string; country: string }>>([]);
   const [activeView, setActiveView] = useState("All candidates");
   const [page, setPage] = useState(1);
+  const [totalCandidates, setTotalCandidates] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const pageSize = 25;
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Candidate | null>(null);
@@ -179,15 +181,26 @@ export default function CandidatesPage() {
     if (!API_BASE || !organizationId) { setLoading(false); return; }
 
     let cancelled = false;
+    setLoading(true);
 
     async function load() {
       try {
-        const response = await apiFetch(
-          API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId)
-        );
+        const params = new URLSearchParams({
+          organization_id: organizationId,
+          page: String(page),
+          page_size: String(pageSize),
+        });
+        if (query.trim()) params.set("search", query.trim());
+        if (status !== "all") params.set("status", status);
+        if (country !== "all") params.set("country_code", country);
+        const response = await apiFetch(API_BASE + "/api/candidates?" + params.toString());
         if (!response.ok) throw new Error("API returned " + response.status);
         const data: Candidate[] = await response.json();
-        if (!cancelled) setCandidates(data);
+        const total = Number(response.headers.get("X-Total-Count") ?? data.length);
+        if (!cancelled) {
+          setCandidates(data);
+          setTotalCandidates(Number.isFinite(total) ? total : data.length);
+        }
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : "Unable to load candidates.");
       } finally {
@@ -195,28 +208,18 @@ export default function CandidatesPage() {
       }
     }
 
-    load();
+    void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [page, pageSize, query, status, country, refreshKey]);
 
-  const filtered = useMemo(() => candidates.filter((candidate) => {
-    const haystack = (
-      fullName(candidate) + " " +
-      (candidate.email ?? "") + " " +
-      (candidate.current_title ?? "") + " " +
-      (candidate.city ?? "") + " " +
-      candidate.skills.join(" ")
-    ).toLowerCase();
-
-    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country);
-  }).sort((a, b) => {
+  const filtered = useMemo(() => candidates.slice().sort((a, b) => {
     const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
     const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
     return sortDirection === "asc" ? comparison : -comparison;
-  }), [candidates, query, status, country, sortBy, sortDirection]);
+  }), [candidates, sortBy, sortDirection]);
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pageCount = Math.max(1, Math.ceil(totalCandidates / pageSize));
+  const visibleCandidates = filtered;
   const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
   useEffect(() => {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
@@ -465,8 +468,9 @@ export default function CandidatesPage() {
         return;
       }
 
+      const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
       const endpoint = editing
-        ? API_BASE + "/api/candidates/" + editing.id
+        ? API_BASE + "/api/candidates/" + editing.id + "?organization_id=" + encodeURIComponent(organizationId)
         : API_BASE + "/api/candidates";
 
       const response = await apiFetch(endpoint, {
@@ -486,6 +490,9 @@ export default function CandidatesPage() {
           ? current.map((item) => item.id === saved.id ? saved : item)
           : [saved, ...current]
       );
+      setTotalCandidates((current) => editing ? current : current + 1);
+      setRefreshKey((current) => current + 1);
+      if (!editing) setPage(1);
       setMessage(editing ? "Candidate updated successfully." : "Candidate created successfully.");
       setEditing(null);
       setForm(emptyForm);
@@ -501,12 +508,15 @@ export default function CandidatesPage() {
     if (!window.confirm("Delete " + fullName(candidate) + "? This cannot be undone.")) return;
 
     try {
-      const response = await apiFetch(API_BASE + "/api/candidates/" + candidate.id, { method: "DELETE" });
+      const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+      const response = await apiFetch(API_BASE + "/api/candidates/" + candidate.id + "?organization_id=" + encodeURIComponent(organizationId), { method: "DELETE" });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.detail || "API returned " + response.status);
       }
       setCandidates((current) => current.filter((item) => item.id !== candidate.id));
+      setTotalCandidates((current) => Math.max(0, current - 1));
+      setRefreshKey((current) => current + 1);
       setMessage("Candidate deleted.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to delete candidate.");
@@ -555,8 +565,8 @@ export default function CandidatesPage() {
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
-              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
-              <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
+              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(["GB", "US", "IN", "AU", ...candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean)])].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
+              <span className="muted-small">{totalCandidates} candidate{totalCandidates === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
             </div>
           </div>
 
@@ -593,7 +603,7 @@ export default function CandidatesPage() {
                 ))}
               </tbody>
             </table></div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {totalCandidates ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, totalCandidates)} of {totalCandidates}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
           </div>
         </section>
       </main>
