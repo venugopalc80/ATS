@@ -292,7 +292,7 @@ export default function Dashboard() {
           <div className="dashboard-section-grid dashboard-lower-grid">
             <section className="card">
               <div className="card-head"><span className="card-title">Vacancy health</span><Link href="/jobs" className="link">All vacancies →</Link></div>
-              <p className="muted-small">Rules: flag open roles older than {data?.rules.vacancy_target_days ?? 30} days or with fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
+              <p className="muted-small">Needs attention when a role is on hold, has been open for more than {data?.rules.vacancy_target_days ?? 30} days, or has fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
               {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
                 <div className="dashboard-empty"><strong>Vacancy health unavailable</strong><p>We could not load vacancy records. Retry before making staffing decisions.</p></div>
               ) : !data?.jobs.length ? (
