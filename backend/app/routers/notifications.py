@@ -65,7 +65,7 @@ async def update_preference(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, payload.organization_id)
-    if is_essential_notification_type(payload.notification_type):
+    if not payload.enabled and is_essential_notification_type(payload.notification_type):
         raise HTTPException(status_code=422, detail="Essential security and service notices cannot be disabled")
     try:
         with get_connection() as connection:
