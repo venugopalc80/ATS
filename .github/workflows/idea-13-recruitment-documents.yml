@@ -1,0 +1,29 @@
+name: Idea 13 recruitment document tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/app/routers/recruitment_documents.py"
+      - "backend/tests/test_recruitment_documents.py"
+      - "backend/tests/test_documents_validation.py"
+      - "backend/requirements.txt"
+      - "supabase/migrations/014_recruitment_documents_esignatures.sql"
+      - ".github/workflows/idea-13-recruitment-documents.yml"
+
+jobs:
+  recruitment-document-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Run document validation and recruitment template tests
+        env:
+          PYTHONPATH: backend
+        run: python -m unittest discover -s backend/tests -p "test_*documents*.py" -v
