@@ -70,3 +70,44 @@ def test_retention_policy_rejects_negative_retention_period():
             organization_id=uuid4(), data_category="candidate_cv", purpose="recruitment",
             jurisdiction="GB", retention_days=-1, action="delete", version=1,
             effective_at=datetime(2026, 10, 22, tzinfo=timezone.utc))
+
+
+from app.routers.privacy import is_privacy_request_transition_allowed
+
+
+@pytest.mark.parametrize(
+    ("current", "next_status"),
+    [
+        ("received", "identity_verification"),
+        ("identity_verification", "in_progress"),
+        ("in_progress", "completed"),
+        ("awaiting_information", "in_progress"),
+        ("partially_completed", "completed"),
+        ("received", "cancelled"),
+    ],
+)
+def test_privacy_request_allows_documented_transitions(current, next_status):
+    assert is_privacy_request_transition_allowed(current, next_status)
+
+
+@pytest.mark.parametrize(
+    ("current", "next_status"),
+    [
+        ("received", "completed"),
+        ("completed", "in_progress"),
+        ("declined", "completed"),
+        ("cancelled", "identity_verification"),
+        ("awaiting_information", "declined"),
+    ],
+)
+def test_privacy_request_rejects_invalid_transitions(current, next_status):
+    assert not is_privacy_request_transition_allowed(current, next_status)
+
+
+def test_privacy_request_can_keep_current_status():
+    assert is_privacy_request_transition_allowed("in_progress", "in_progress")
+
+
+def test_partial_completion_rejects_whitespace_only_justification():
+    with pytest.raises(ValidationError, match="documented exception"):
+        PrivacyRequestUpdate(status="partially_completed", exception_details="   ")
