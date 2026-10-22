@@ -15,6 +15,8 @@ type SupportCase = {
   updated_at: string;
 };
 
+type SupportMessage = { id: string; author_user_id?: string | null; body: string; created_at: string };
+
 type AccessGrant = {
   id: string;
   support_case_id: string;
@@ -30,6 +32,9 @@ export default function SupportPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [cases, setCases] = useState<SupportCase[]>([]);
   const [grants, setGrants] = useState<AccessGrant[]>([]);
+  const [expandedCase, setExpandedCase] = useState("");
+  const [messagesByCase, setMessagesByCase] = useState<Record<string, SupportMessage[]>>({});
+  const [reply, setReply] = useState("");
   const [category, setCategory] = useState("technical");
   const [subject, setSubject] = useState("");
   const [description, setDescription] = useState("");
@@ -94,6 +99,43 @@ export default function SupportPage() {
     }
   }
 
+  async function toggleConversation(caseId: string) {
+    if (expandedCase === caseId) {
+      setExpandedCase("");
+      return;
+    }
+    setExpandedCase(caseId);
+    if (messagesByCase[caseId]) return;
+    try {
+      const response = await apiFetch(API_BASE + "/api/support/cases/" + encodeURIComponent(caseId) + "/messages");
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || "Unable to load conversation.");
+      setMessagesByCase((current) => ({ ...current, [caseId]: body.messages ?? [] }));
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to load conversation.");
+    }
+  }
+
+  async function sendReply(caseId: string, event: FormEvent) {
+    event.preventDefault();
+    if (!reply.trim()) return;
+    try {
+      const response = await apiFetch(API_BASE + "/api/support/cases/" + encodeURIComponent(caseId) + "/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ body: reply }),
+      });
+      const body = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(body.detail || "Unable to send reply.");
+      setMessagesByCase((current) => ({ ...current, [caseId]: [...(current[caseId] ?? []), body] }));
+      setReply("");
+      setMessage("Reply sent.");
+      await load(organizationId);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to send reply.");
+    }
+  }
+
   async function decideGrant(grant: AccessGrant, action: "approve" | "revoke") {
     setMessage("");
     try {
@@ -146,6 +188,17 @@ export default function SupportPage() {
                 {cases.map((item) => <article className="card" key={item.id}>
                   <div className="card-head"><strong>{item.subject}</strong><span className={"badge " + (item.status === "resolved" || item.status === "closed" ? "green" : "blue")}>{item.status.replaceAll("_", " ")}</span></div>
                   <div className="muted-small">{item.category} · {item.priority} · Opened {new Date(item.created_at).toLocaleDateString()}</div>
+                  <button className="btn" style={{ marginTop: 12 }} onClick={() => void toggleConversation(item.id)}>{expandedCase === item.id ? "Hide conversation" : "View conversation"}</button>
+                  {expandedCase === item.id && <div style={{ marginTop: 14 }}>
+                    <div style={{ display: "grid", gap: 8, marginBottom: 12 }}>
+                      {(messagesByCase[item.id] ?? []).map((entry) => <div className="notice" key={entry.id}><div className="muted-small">{new Date(entry.created_at).toLocaleString()}</div><div style={{ whiteSpace: "pre-wrap" }}>{entry.body}</div></div>)}
+                      {(messagesByCase[item.id] ?? []).length === 0 && <p className="muted-small">No replies yet.</p>}
+                    </div>
+                    <form onSubmit={(event) => void sendReply(item.id, event)}>
+                      <label>Reply<textarea className="filter" style={{ display: "block", width: "100%", minHeight: 80, marginTop: 6 }} required maxLength={8000} value={reply} onChange={(event) => setReply(event.target.value)} /></label>
+                      <button className="btn primary" style={{ marginTop: 10 }} type="submit">Send reply</button>
+                    </form>
+                  </div>}
                 </article>)}
               </div>
             )}
