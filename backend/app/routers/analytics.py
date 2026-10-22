@@ -244,3 +244,111 @@ async def analytics_funnel(
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
+
+
+@router.get("/workload")
+async def analytics_workload(
+    organization_id: UUID,
+    recruiter_id: UUID | None = Query(default=None),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Show assigned work and unassigned demand without treating counts as productivity scores."""
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """with member_scope as (
+                           select m.user_id, m.role, p.full_name
+                           from public.organization_members m
+                           left join public.profiles p on p.id=m.user_id
+                           where m.organization_id=%s
+                             and (%s::uuid is null or m.user_id=%s::uuid)
+                       ),
+                       job_counts as (
+                           select j.recruiter_id as user_id,
+                                  count(*) filter (where j.status='open')::int as open_vacancies,
+                                  count(*) filter (where j.status='on_hold')::int as on_hold_vacancies
+                           from public.jobs j
+                           where j.organization_id=%s and j.recruiter_id is not null
+                           group by j.recruiter_id
+                       ),
+                       application_counts as (
+                           select j.recruiter_id as user_id,
+                                  count(distinct a.id) filter (
+                                      where a.status not in ('hired','rejected','withdrawn')
+                                  )::int as active_applications
+                           from public.applications a
+                           join public.jobs j on j.id=a.job_id and j.organization_id=a.organization_id
+                           where a.organization_id=%s and j.recruiter_id is not null
+                           group by j.recruiter_id
+                       ),
+                       interview_counts as (
+                           select j.recruiter_id as user_id,
+                                  count(distinct i.id)::int as upcoming_interviews
+                           from public.interviews i
+                           join public.applications a on a.id=i.application_id and a.organization_id=i.organization_id
+                           join public.jobs j on j.id=a.job_id and j.organization_id=a.organization_id
+                           where i.organization_id=%s
+                             and i.status in ('scheduled','rescheduled')
+                             and i.scheduled_at >= now()
+                             and j.recruiter_id is not null
+                           group by j.recruiter_id
+                       ),
+                       task_counts as (
+                           select t.assigned_to as user_id,
+                                  count(*) filter (
+                                      where t.completed_at is null and t.due_at < now()
+                                  )::int as overdue_tasks,
+                                  count(*) filter (
+                                      where t.completed_at is null
+                                  )::int as open_tasks
+                           from public.recruiter_tasks t
+                           where t.organization_id=%s and t.assigned_to is not null
+                           group by t.assigned_to
+                       )
+                       select ms.user_id, ms.role, coalesce(ms.full_name, 'Unnamed user') as name,
+                              coalesce(jc.open_vacancies,0)::int as open_vacancies,
+                              coalesce(jc.on_hold_vacancies,0)::int as on_hold_vacancies,
+                              coalesce(ac.active_applications,0)::int as active_applications,
+                              coalesce(ic.upcoming_interviews,0)::int as upcoming_interviews,
+                              coalesce(tc.open_tasks,0)::int as open_tasks,
+                              coalesce(tc.overdue_tasks,0)::int as overdue_tasks
+                       from member_scope ms
+                       left join job_counts jc on jc.user_id=ms.user_id
+                       left join application_counts ac on ac.user_id=ms.user_id
+                       left join interview_counts ic on ic.user_id=ms.user_id
+                       left join task_counts tc on tc.user_id=ms.user_id
+                       order by ms.full_name nulls last, ms.user_id""",
+                    [organization_id, recruiter_id, recruiter_id, organization_id,
+                     organization_id, organization_id, organization_id],
+                )
+                recruiters = [
+                    {**dict(row), "user_id": str(row["user_id"])}
+                    for row in cursor.fetchall()
+                ]
+                cursor.execute(
+                    """select
+                           count(*) filter (where j.status='open' and j.recruiter_id is null)::int as unassigned_open_vacancies,
+                           (select count(*)::int from public.recruiter_tasks t
+                            where t.organization_id=%s and t.assigned_to is null and t.completed_at is null)
+                             as unassigned_open_tasks
+                       from public.jobs j
+                       where j.organization_id=%s""",
+                    [organization_id, organization_id],
+                )
+                unassigned = dict(cursor.fetchone())
+        return {
+            "organization_id": str(organization_id),
+            "recruiters": recruiters,
+            "unassigned": unassigned,
+            "definitions": {
+                "open_tasks": "Tasks with completed_at IS NULL",
+                "overdue_tasks": "Open tasks with due_at earlier than the current database time",
+                "upcoming_interviews": "Scheduled or rescheduled interviews at or after the current database time",
+                "capacity_score": None,
+                "note": "These counts describe workload, not recruiter productivity or performance.",
+            },
+        }
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
