@@ -91,6 +91,7 @@ create table if not exists public.recruitment_document_signers (
   created_at timestamptz not null default now(),
   foreign key (document_id, organization_id)
     references public.recruitment_documents(id, organization_id) on delete cascade,
+  unique (id, organization_id),
   unique (document_id, signer_role, email)
 );
 create index if not exists recruitment_signers_document_idx
