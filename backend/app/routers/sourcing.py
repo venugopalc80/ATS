@@ -510,6 +510,294 @@ async def remove_talent_pool_member(pool_id: UUID, membership_id: UUID, organiza
         raise _db_error(exc) from exc
 
 
+CSV_MAX_BYTES = 5 * 1024 * 1024
+CSV_MAX_ROWS = 1000
+CANDIDATE_IMPORT_FIELDS = {
+    "first_name", "last_name", "email", "phone", "city", "region",
+    "country_code", "current_title", "years_experience", "skills", "status",
+}
+CSV_HEADER_ALIASES = {
+    "first_name": ("first name", "firstname", "given name", "forename"),
+    "last_name": ("last name", "lastname", "surname", "family name"),
+    "email": ("email", "email address", "e-mail"),
+    "phone": ("phone", "phone number", "mobile", "telephone"),
+    "city": ("city", "town"),
+    "region": ("region", "state", "county", "province"),
+    "country_code": ("country code", "country", "country_code"),
+    "current_title": ("current title", "job title", "current role", "title"),
+    "years_experience": ("years experience", "years of experience", "experience", "years_experience"),
+    "skills": ("skills", "skill set", "technologies"),
+    "status": ("status", "candidate status"),
+}
+
+
+def _normalise_header(value: str) -> str:
+    return re.sub(r"[^a-z0-9]+", " ", value.casefold()).strip()
+
+
+def _default_column_mapping(headers: list[str]) -> dict[str, str]:
+    normalized = {_normalise_header(header): header for header in headers}
+    mapping: dict[str, str] = {}
+    for field, aliases in CSV_HEADER_ALIASES.items():
+        for alias in aliases:
+            if _normalise_header(alias) in normalized:
+                mapping[field] = normalized[_normalise_header(alias)]
+                break
+    return mapping
+
+
+def _map_csv_row(row: dict[str, str | None], mapping: dict[str, str]) -> tuple[dict, list[str]]:
+    data: dict[str, object] = {}
+    errors: list[str] = []
+    for field, header in mapping.items():
+        raw = (row.get(header) or "").strip()
+        if field == "skills":
+            data[field] = [item.strip()[:80] for item in re.split(r"[,;|]", raw) if item.strip()][:50]
+        elif field == "country_code":
+            data[field] = raw.upper() or None
+        elif field == "email":
+            data[field] = raw.lower() or None
+        elif field == "years_experience":
+            if not raw:
+                data[field] = None
+            else:
+                try:
+                    value = float(raw)
+                    if value < 0 or value > 80:
+                        raise ValueError
+                    data[field] = value
+                except ValueError:
+                    errors.append("years_experience must be a number between 0 and 80")
+        elif field == "status":
+            value = raw.casefold().replace(" ", "_") or "active"
+            if value not in {"active", "inactive", "placed", "do_not_contact"}:
+                errors.append("status must be active, inactive, placed or do_not_contact")
+            else:
+                data[field] = value
+        else:
+            data[field] = raw[:320] or None
+    data.setdefault("first_name", None)
+    data.setdefault("last_name", None)
+    data.setdefault("email", None)
+    data.setdefault("phone", None)
+    data.setdefault("city", None)
+    data.setdefault("region", None)
+    data.setdefault("country_code", None)
+    data.setdefault("current_title", None)
+    data.setdefault("years_experience", None)
+    data.setdefault("skills", [])
+    data.setdefault("status", "active")
+    if not data["first_name"]:
+        errors.append("first_name is required")
+    if data["email"] and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", str(data["email"])):
+        errors.append("email format is invalid")
+    if data["country_code"] and not re.fullmatch(r"[A-Z]{2}", str(data["country_code"])):
+        errors.append("country_code must be a two-letter ISO code")
+    return data, errors
+
+
+@router.post("/imports/preview", status_code=201)
+async def preview_candidate_csv_import(
+    organization_id: UUID,
+    file: UploadFile = File(...),
+    column_mapping: str | None = Query(default=None, max_length=3000),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Validate a bounded CSV, persist row-level preview results, and do not create candidates yet."""
+    assert_org_member(user_id, organization_id)
+    filename = (file.filename or "").strip()
+    if not filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=415, detail="Only CSV imports are supported by this endpoint")
+    if (file.content_type or "").lower() not in {"text/csv", "application/csv", "application/vnd.ms-excel", "application/octet-stream"}:
+        raise HTTPException(status_code=415, detail="Unsupported CSV content type")
+    raw = await file.read(CSV_MAX_BYTES + 1)
+    await file.close()
+    if not raw:
+        raise HTTPException(status_code=422, detail="The uploaded CSV is empty")
+    if len(raw) > CSV_MAX_BYTES:
+        raise HTTPException(status_code=413, detail="CSV files must be 5 MB or smaller")
+    try:
+        decoded = raw.decode("utf-8-sig")
+    except UnicodeDecodeError as exc:
+        raise HTTPException(status_code=422, detail="CSV must be UTF-8 encoded") from exc
+    try:
+        reader = csv.DictReader(io.StringIO(decoded, newline=""))
+        headers = reader.fieldnames or []
+        if not headers or len(headers) > 100:
+            raise HTTPException(status_code=422, detail="CSV must contain between 1 and 100 header columns")
+        if any(not header or len(header) > 200 for header in headers):
+            raise HTTPException(status_code=422, detail="CSV contains an invalid header")
+        if column_mapping:
+            try:
+                supplied_mapping = json.loads(column_mapping)
+            except json.JSONDecodeError as exc:
+                raise HTTPException(status_code=422, detail="column_mapping must be valid JSON") from exc
+            if not isinstance(supplied_mapping, dict) or any(
+                key not in CANDIDATE_IMPORT_FIELDS or value not in headers
+                for key, value in supplied_mapping.items()
+            ):
+                raise HTTPException(status_code=422, detail="Column mapping contains an unsupported field or unknown CSV header")
+            mapping = supplied_mapping
+        else:
+            mapping = _default_column_mapping(headers)
+        if "first_name" not in mapping:
+            raise HTTPException(status_code=422, detail="Map a CSV column to first_name before previewing")
+        rows = []
+        for row_number, row in enumerate(reader, start=2):
+            if row_number > CSV_MAX_ROWS + 1:
+                raise HTTPException(status_code=413, detail=f"CSV imports are limited to {CSV_MAX_ROWS} data rows per batch")
+            rows.append((row_number, row))
+    except csv.Error as exc:
+        raise HTTPException(status_code=422, detail="CSV parsing failed") from exc
+
+    file_digest = hashlib.sha256(raw).hexdigest()
+    seen_emails: set[str] = set()
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""insert into public.candidate_sources (organization_id,source_key,display_name,source_type)
+                    values (%s,'csv_import','CSV import','csv_import')
+                    on conflict (organization_id,source_key) do update set display_name=excluded.display_name
+                    returning id""", [organization_id])
+                source_id = cursor.fetchone()["id"]
+                cursor.execute("""insert into public.import_batches
+                    (organization_id,source_id,uploaded_by,original_filename,content_type,file_size_bytes,file_sha256,status,total_rows)
+                    values (%s,%s,%s,%s,%s,%s,%s,'previewed',%s)
+                    returning id""",
+                    [organization_id,source_id,user_id,filename[:255],file.content_type or "text/csv",len(raw),file_digest,len(rows)])
+                batch_id = cursor.fetchone()["id"]
+                valid_count = duplicate_count = rejected_count = 0
+                for row_number, raw_row in rows:
+                    mapped, errors = _map_csv_row(raw_row, mapping)
+                    email = mapped.get("email")
+                    duplicate_id = None
+                    status_value = "valid"
+                    if email:
+                        normalized_email = str(email).casefold()
+                        if normalized_email in seen_emails:
+                            errors.append("Duplicate email appears earlier in this import batch")
+                            status_value = "duplicate"
+                        else:
+                            seen_emails.add(normalized_email)
+                            cursor.execute("""select id from public.candidates
+                                where organization_id=%s and lower(email)=lower(%s) limit 1""",
+                                [organization_id, email])
+                            existing = cursor.fetchone()
+                            if existing:
+                                duplicate_id = existing["id"]
+                                errors.append("A candidate with this email already exists")
+                                status_value = "duplicate"
+                    if errors and status_value != "duplicate":
+                        status_value = "rejected"
+                    if status_value == "valid":
+                        valid_count += 1
+                    elif status_value == "duplicate":
+                        duplicate_count += 1
+                    else:
+                        rejected_count += 1
+                    cursor.execute("""insert into public.import_row_results
+                        (organization_id,batch_id,row_number,status,mapped_data,errors,duplicate_candidate_id)
+                        values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)""",
+                        [organization_id,batch_id,row_number,status_value,json.dumps(mapped),json.dumps(errors),duplicate_id])
+                cursor.execute("""update public.import_batches set valid_rows=%s,duplicate_rows=%s,rejected_rows=%s,
+                    updated_at=now() where id=%s and organization_id=%s""",
+                    [valid_count,duplicate_count,rejected_count,batch_id,organization_id])
+                cursor.execute("""insert into public.audit_events
+                    (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+                    values (%s,%s,'candidate_csv_import_previewed','import_batch',%s,%s::jsonb)""",
+                    [organization_id,user_id,batch_id,json.dumps({"filename":filename[:255],"sha256":file_digest,"rows":len(rows)})])
+                return {"batch_id":batch_id,"filename":filename[:255],"sha256":file_digest,
+                    "total_rows":len(rows),"valid_rows":valid_count,"duplicate_rows":duplicate_count,
+                    "rejected_rows":rejected_count,"column_mapping":mapping,
+                    "message":"Preview saved. No candidate records have been created yet."}
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/imports/{batch_id}/commit")
+async def commit_candidate_csv_import(
+    batch_id: UUID,
+    organization_id: UUID,
+    duplicate_policy: Literal["review", "skip", "allow"] = "review",
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Commit only reviewed preview rows; each created candidate retains source and batch provenance."""
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""select id,source_id,status,total_rows from public.import_batches
+                    where id=%s and organization_id=%s for update""", [batch_id,organization_id])
+                batch = cursor.fetchone()
+                if not batch:
+                    raise HTTPException(status_code=404, detail="Import batch not found")
+                if batch["status"] not in {"previewed", "completed_with_errors"}:
+                    raise HTTPException(status_code=409, detail="This import batch cannot be committed in its current state")
+                cursor.execute("""select id,row_number,status,mapped_data,duplicate_candidate_id
+                    from public.import_row_results where organization_id=%s and batch_id=%s
+                    order by row_number for update""", [organization_id,batch_id])
+                row_results = list(cursor.fetchall())
+                imported = duplicates = rejected = 0
+                for item in row_results:
+                    should_import = item["status"] == "valid" or (item["status"] == "duplicate" and duplicate_policy == "allow")
+                    if item["status"] == "duplicate":
+                        duplicates += 1
+                    if item["status"] == "rejected":
+                        rejected += 1
+                    if not should_import:
+                        continue
+                    data = item["mapped_data"]
+                    cursor.execute("""insert into public.candidates
+                        (organization_id,first_name,last_name,email,phone,city,region,country_code,status,
+                         current_title,years_experience,skills,source_id,import_batch_id,created_at,updated_at)
+                        values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,now(),now())
+                        returning id""",
+                        [organization_id,data["first_name"],data.get("last_name"),data.get("email"),data.get("phone"),
+                         data.get("city"),data.get("region"),data.get("country_code"),data.get("status","active"),
+                         data.get("current_title"),data.get("years_experience"),data.get("skills",[]),batch["source_id"],batch_id])
+                    candidate_id = cursor.fetchone()["id"]
+                    cursor.execute("""update public.import_row_results set status='imported',candidate_id=%s,processed_at=now()
+                        where id=%s and organization_id=%s""", [candidate_id,item["id"],organization_id])
+                    cursor.execute("""insert into public.audit_events
+                        (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+                        values (%s,%s,'candidate_imported_from_csv','candidate',%s,%s::jsonb)""",
+                        [organization_id,user_id,candidate_id,json.dumps({"batch_id":str(batch_id),"row_number":item["row_number"]})])
+                    imported += 1
+                final_status = "completed" if rejected == 0 and duplicates == 0 else "completed_with_errors"
+                cursor.execute("""update public.import_batches set status=%s,duplicate_policy=%s,imported_rows=%s,
+                    duplicate_rows=%s,rejected_rows=%s,completed_at=now(),updated_at=now()
+                    where id=%s and organization_id=%s returning id,status,total_rows,imported_rows,duplicate_rows,rejected_rows""",
+                    [final_status,duplicate_policy,imported,duplicates,rejected,batch_id,organization_id])
+                summary = cursor.fetchone()
+                cursor.execute("""insert into public.audit_events
+                    (organization_id,actor_user_id,action,entity_type,entity_id,metadata)
+                    values (%s,%s,'candidate_csv_import_committed','import_batch',%s,%s::jsonb)""",
+                    [organization_id,user_id,batch_id,json.dumps({"duplicate_policy":duplicate_policy,"imported":imported,"duplicates":duplicates,"rejected":rejected})])
+                return summary
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.get("/imports")
+async def list_candidate_import_batches(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""select id,source_id,uploaded_by,original_filename,content_type,file_size_bytes,
+                    file_sha256,status,duplicate_policy,total_rows,valid_rows,imported_rows,duplicate_rows,
+                    rejected_rows,created_at,started_at,completed_at,updated_at
+                    from public.import_batches where organization_id=%s order by created_at desc limit 100""",
+                    [organization_id])
+                return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
 @router.get("/campaigns")
 async def list_campaigns(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, organization_id)
