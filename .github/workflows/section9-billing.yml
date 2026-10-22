@@ -1,0 +1,81 @@
+name: Section 9 billing tests
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/app/routers/billing.py"
+      - "backend/app/routers/billing_webhooks.py"
+      - "backend/app/services/entitlement_policy.py"
+      - "backend/app/routers/organization_settings.py"
+      - "backend/tests/test_organization_settings.py"
+      - "backend/app/routers/help_onboarding.py"
+      - "backend/tests/test_help_onboarding.py"
+      - "backend/app/routers/platform_ops.py"
+      - "backend/tests/test_platform_ops.py"
+      - "supabase/migrations/20261022160000_section9_platform_support.sql"
+      - "frontend/app/platform/ops/page.tsx"
+      - "frontend/package.json"
+      - "frontend/tsconfig.json"
+      - "frontend/app/billing/page.tsx"
+      - "frontend/app/settings/page.tsx"
+      - "frontend/app/help/page.tsx"
+      - "frontend/app/onboarding/checklist/page.tsx"
+      - "backend/tests/test_billing.py"
+      - "backend/tests/test_billing_webhooks.py"
+      - "backend/tests/test_entitlement_policy.py"
+      - "backend/requirements.txt"
+      - ".github/workflows/section9-billing.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  billing-unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r backend/requirements.txt
+      - name: Test entitlement policy
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_entitlement_policy.py" -v
+      - name: Test billing API
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_billing.py" -v
+      - name: Test organisation settings validation
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_organization_settings.py" -v
+      - name: Test onboarding payload validation
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_help_onboarding.py" -v
+      - name: Test platform support validation
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_platform_ops.py" -v
+      - name: Test Stripe webhook safeguards
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_billing_webhooks.py" -v
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Build frontend
+        working-directory: frontend
+        run: npm run build
