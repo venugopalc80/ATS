@@ -62,6 +62,28 @@ async def create_requisition(payload: RequisitionCreate, user_id: UUID = Depends
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
+@router.get("/assignees")
+async def list_requisition_assignees(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    """Return assignable team members for the caller's organisation only."""
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select m.user_id, p.full_name, p.email, m.role
+                       from public.organization_members m
+                       join public.profiles p on p.id = m.user_id
+                       where m.organization_id = %s
+                         and m.role in ('owner','admin','recruiter','hiring_manager')
+                       order by coalesce(nullif(p.full_name, ''), p.email, m.user_id::text)""",
+                    [organization_id],
+                )
+                rows = list(cursor.fetchall())
+        return [{"user_id": str(row["user_id"]), "full_name": row["full_name"], "email": row["email"], "role": row["role"]} for row in rows]
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
+
+
 @router.get("/{requisition_id}", response_model=RequisitionOut)
 async def get_requisition(requisition_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     return RequisitionOut.model_validate(await authorised_row(requisition_id, user_id))
