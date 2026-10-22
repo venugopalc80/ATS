@@ -17,6 +17,14 @@ ESSENTIAL_TYPES = {
 }
 
 
+def is_essential_notification_type(notification_type: str) -> bool:
+    """Keep whole essential notification namespaces non-disableable as well as exact keys."""
+    return any(
+        notification_type == prefix or notification_type.startswith(f"{prefix}.")
+        for prefix in (*ESSENTIAL_TYPES, "security")
+    )
+
+
 class PreferenceUpdate(BaseModel):
     organization_id: UUID
     notification_type: str = Field(min_length=1, max_length=100, pattern="^[a-zA-Z0-9_.-]+$")
@@ -57,7 +65,7 @@ async def update_preference(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, payload.organization_id)
-    if payload.notification_type in ESSENTIAL_TYPES or payload.notification_type.startswith("security."):
+    if is_essential_notification_type(payload.notification_type):
         raise HTTPException(status_code=422, detail="Essential security and service notices cannot be disabled")
     try:
         with get_connection() as connection:
