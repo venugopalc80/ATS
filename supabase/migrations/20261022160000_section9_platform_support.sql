@@ -74,6 +74,7 @@ create table if not exists public.support_access_grants (
   expires_at timestamptz not null,
   revoked_at timestamptz,
   check (expires_at > requested_at),
+  check (scope <@ array['case_metadata','case_messages','subscription_metadata','service_health']::text[]),
   check ((approved_at is null) = (approved_by_org_user_id is null))
 );
 create index if not exists support_access_grants_org_expiry_idx
