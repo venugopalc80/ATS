@@ -203,6 +203,57 @@ async def analytics_funnel(
                     params,
                 )
                 stages = [dict(row) for row in cursor.fetchall()]
+                duration_clauses = [
+                    "ei.organization_id=%s",
+                    "a.organization_id=ei.organization_id",
+                    "j.organization_id=a.organization_id",
+                    "ei.exited_at is not null",
+                    "ei.exited_at >= ei.entered_at",
+                ]
+                duration_params = [organization_id]
+                if date_from:
+                    duration_clauses.append("ei.entered_at >= %s::date")
+                    duration_params.append(date_from)
+                if date_to:
+                    duration_clauses.append("ei.entered_at < (%s::date + interval '1 day')")
+                    duration_params.append(date_to)
+                if job_id:
+                    duration_clauses.append("a.job_id=%s")
+                    duration_params.append(job_id)
+                if recruiter_id:
+                    duration_clauses.append("j.recruiter_id=%s")
+                    duration_params.append(recruiter_id)
+                cursor.execute(
+                    f"""with event_intervals as (
+                            select h.organization_id, h.application_id, h.new_stage,
+                                   h.created_at as entered_at,
+                                   lead(h.created_at) over (
+                                       partition by h.organization_id, h.application_id
+                                       order by h.created_at, h.id
+                                   ) as exited_at
+                            from public.application_stage_history h
+                            where h.organization_id=%s
+                        )
+                        select ei.new_stage as stage,
+                               count(*)::int as completed_intervals,
+                               percentile_cont(0.5) within group (
+                                   order by extract(epoch from (ei.exited_at-ei.entered_at))/86400.0
+                               ) as median_days,
+                               percentile_cont(0.75) within group (
+                                   order by extract(epoch from (ei.exited_at-ei.entered_at))/86400.0
+                               ) as p75_days,
+                               percentile_cont(0.90) within group (
+                                   order by extract(epoch from (ei.exited_at-ei.entered_at))/86400.0
+                               ) as p90_days
+                        from event_intervals ei
+                        join public.applications a on a.id=ei.application_id
+                        join public.jobs j on j.id=a.job_id
+                        where {' and '.join(duration_clauses)}
+                        group by ei.new_stage
+                        order by min(ei.entered_at), ei.new_stage""",
+                    [organization_id, *duration_params],
+                )
+                waiting_time = [dict(row) for row in cursor.fetchall()]
                 cursor.execute(
                     f"""select a.status, count(distinct a.id)::int as distinct_applications
                         from public.application_stage_history h
@@ -235,11 +286,13 @@ async def analytics_funnel(
             "sample_size": cohort_size,
             "low_sample_size": total < 5,
             "stages": stages,
+            "stage_waiting_time": waiting_time,
             "outcomes": outcomes,
             "limitations": [
                 "Stage-entry events are counted from recorded history; applications with no history event are not represented in stage counts.",
                 "Distinct application counts by stage are not mutually exclusive and must not be summed as a total funnel population.",
-                "Waiting-time percentiles require validated stage-entry/exit semantics and are not included in this initial endpoint.",
+                "Waiting time uses the next recorded stage-history timestamp; open intervals with no later event are excluded.",
+                "Timestamps tied to the same instant are ordered by event ID because the source schema has no explicit transition sequence.",
             ],
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
