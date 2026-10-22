@@ -1124,7 +1124,7 @@ async def update_campaign_status(campaign_id: UUID, payload: CampaignStatusUpdat
                     where id=%s and organization_id=%s returning id,status,updated_at""",
                     [payload.status,campaign_id,payload.organization_id])
                 updated = cursor.fetchone()
-                event_type = payload.status if payload.status in {"activated", "paused", "completed"} else "updated"
+                event_type = {"active": "activated", "paused": "paused", "completed": "completed"}.get(payload.status, "updated")
                 cursor.execute("""insert into public.campaign_events
                     (organization_id,campaign_id,actor_user_id,event_type,previous_value,new_value,reason)
                     values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s)""",
