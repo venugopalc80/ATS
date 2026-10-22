@@ -44,7 +44,7 @@ class ScorecardResponseInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
     competency_id: UUID
     rating: int = Field(ge=1, le=5)
-    evidence: str = Field(min_length=1, max_length=4000)
+    evidence: str = Field(default="", max_length=4000)
     notes: str | None = Field(default=None, max_length=4000)
 
     @field_validator("evidence")
