@@ -57,7 +57,7 @@ class AIServiceTests(unittest.TestCase):
     def test_provider_requires_credentials(self):
         with patch.dict(os.environ, {"AI_PROVIDER_API_KEY": ""}):
             with self.assertRaisesRegex(RuntimeError, "credentials"):
-                generate_text("summarize_candidate", [], None, "model")
+                generate_text("summarize_candidate", [], None, "model", "openai-compatible")
 
 
 if __name__ == "__main__":
