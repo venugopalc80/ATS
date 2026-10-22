@@ -40,6 +40,25 @@ def _validate_configured_transition(
         raise ValueError("Invalid application stage transition")
 
 
+def _validate_stage_config_shape(
+    stage_key: str, data: dict[str, Any], existing: dict[str, Any]
+) -> tuple[list[str], bool, bool]:
+    """Validate invariants that can be checked without querying other stages."""
+    next_stages = data.get("allowed_next_stages", existing["allowed_next_stages"] or [])
+    terminal = data.get("is_terminal", existing["is_terminal"])
+    enabled = data.get("enabled", existing["enabled"])
+
+    if stage_key in {"hired", "rejected", "withdrawn"} and terminal is False:
+        raise ValueError("Hired, Rejected and Withdrawn must remain terminal stages")
+    if terminal and next_stages:
+        raise ValueError("Terminal stages cannot have allowed next stages")
+    if enabled and not terminal and not next_stages:
+        raise ValueError("Enabled non-terminal stages must allow at least one next stage")
+    if stage_key in next_stages:
+        raise ValueError("A stage cannot transition to itself")
+    return list(next_stages), bool(terminal), bool(enabled)
+
+
 class ApplicationService:
     async def list_stage_config(self, organization_id: UUID) -> list[dict[str, Any]]:
         with get_connection() as connection:
@@ -70,14 +89,7 @@ class ApplicationService:
                 if any(value is None for value in data.values()):
                     raise ValueError("Stage configuration fields cannot be null")
 
-                next_stages = data.get("allowed_next_stages", existing["allowed_next_stages"] or [])
-                terminal = data.get("is_terminal", existing["is_terminal"])
-                if stage_key in {"hired", "rejected", "withdrawn"} and terminal is False:
-                    raise ValueError("Hired, Rejected and Withdrawn must remain terminal stages")
-                if terminal and next_stages:
-                    raise ValueError("Terminal stages cannot have allowed next stages")
-                if stage_key in next_stages:
-                    raise ValueError("A stage cannot transition to itself")
+                next_stages, _terminal, _enabled = _validate_stage_config_shape(stage_key, data, existing)
                 if next_stages:
                     cursor.execute(
                         "select stage_key from public.application_stage_config "
