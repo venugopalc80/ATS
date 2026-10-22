@@ -8,7 +8,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.auth import assert_org_admin, assert_org_member, get_current_user_id
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id, get_org_role
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.services.ai_service import ALLOWED_TASKS, PROMPT_VERSION, fingerprint, generate_text
 
@@ -35,7 +35,7 @@ class ModelInput(BaseModel):
     model_version: str = Field(min_length=1, max_length=120)
     intended_purpose: str = Field(min_length=10, max_length=2000)
     data_processing_approved: bool = False
-    status: Literal["draft", "evaluating", "approved", "disabled", "retired"] = "draft"
+    status: Literal["draft", "evaluating", "disabled", "retired"] = "draft"
     limitations: list[str] = Field(default_factory=list, max_length=30)
 
 
@@ -444,6 +444,305 @@ async def review_recommendation(
                 [payload.organization_id, user_id, recommendation_id,
                  json.dumps({"approved": payload.approved, "override_reason": payload.override_reason})],
             )
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+class EvaluationInput(BaseModel):
+    organization_id: UUID
+    model_version_id: UUID
+    suite_name: str = Field(min_length=2, max_length=120)
+    dataset_version: str = Field(min_length=1, max_length=120)
+    pass_criteria: dict = Field(min_length=1)
+
+
+class EvaluationResultInput(BaseModel):
+    test_case_key: str = Field(min_length=1, max_length=160)
+    passed: bool
+    metric_name: str | None = Field(default=None, max_length=120)
+    metric_value: float | None = None
+    expected_summary: str | None = Field(default=None, max_length=2000)
+    observed_summary: str | None = Field(default=None, max_length=2000)
+    details: dict = Field(default_factory=dict)
+
+
+class EvaluationResultsInput(BaseModel):
+    organization_id: UUID
+    results: list[EvaluationResultInput] = Field(min_length=1, max_length=500)
+
+
+class FairnessAuditInput(BaseModel):
+    organization_id: UUID
+    audit_name: str = Field(min_length=2, max_length=160)
+    dataset_version: str = Field(min_length=1, max_length=120)
+    methodology: str = Field(min_length=10, max_length=4000)
+    outcome_metric: str = Field(min_length=2, max_length=120)
+    aggregate_results: dict = Field(min_length=1)
+    sample_sizes: dict = Field(min_length=1)
+    missingness: dict = Field(default_factory=dict)
+    uncertainty_notes: list[str] = Field(default_factory=list, max_length=50)
+    legal_review_reference: str | None = Field(default=None, max_length=500)
+
+
+@router.post("/governance/evaluations", status_code=201)
+async def start_evaluation(payload: EvaluationInput, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_admin(user_id, payload.organization_id)
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                "select id from public.ai_model_versions where id=%s and organization_id=%s",
+                [payload.model_version_id, payload.organization_id],
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Model version not found")
+            cur.execute(
+                """insert into public.ai_evaluation_runs
+                   (organization_id, model_version_id, suite_name, dataset_version, pass_criteria, started_by)
+                   values (%s,%s,%s,%s,%s::jsonb,%s)
+                   returning id, status, suite_name, dataset_version, pass_criteria, started_at""",
+                [payload.organization_id, payload.model_version_id, payload.suite_name,
+                 payload.dataset_version, json.dumps(payload.pass_criteria), user_id],
+            )
+            return cur.fetchone()
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/governance/evaluations/{evaluation_id}/results")
+async def complete_evaluation(
+    evaluation_id: UUID,
+    payload: EvaluationResultsInput,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_admin(user_id, payload.organization_id)
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """select id, status, pass_criteria from public.ai_evaluation_runs
+                   where id=%s and organization_id=%s for update""",
+                [evaluation_id, payload.organization_id],
+            )
+            evaluation = cur.fetchone()
+            if not evaluation:
+                raise HTTPException(status_code=404, detail="Evaluation run not found")
+            if evaluation["status"] != "running":
+                raise HTTPException(status_code=409, detail="Evaluation run is already complete")
+            criteria = evaluation["pass_criteria"] or {}
+            minimum_cases = max(1, int(criteria.get("minimum_cases", 1)))
+            max_failure_rate = float(criteria.get("max_failure_rate", 0))
+            failed_count = sum(1 for result in payload.results if not result.passed)
+            case_count = len(payload.results)
+            failure_rate = failed_count / case_count
+            passed = case_count >= minimum_cases and failure_rate <= max_failure_rate
+            for result in payload.results:
+                cur.execute(
+                    """insert into public.ai_evaluation_results
+                       (organization_id, evaluation_run_id, test_case_key, passed, metric_name,
+                        metric_value, expected_summary, observed_summary, details)
+                       values (%s,%s,%s,%s,%s,%s,%s,%s,%s::jsonb)""",
+                    [payload.organization_id, evaluation_id, result.test_case_key, result.passed,
+                     result.metric_name, result.metric_value, result.expected_summary,
+                     result.observed_summary, json.dumps(result.details)],
+                )
+            summary = {"case_count": case_count, "failed_count": failed_count,
+                       "failure_rate": failure_rate, "minimum_cases": minimum_cases,
+                       "max_failure_rate": max_failure_rate}
+            cur.execute(
+                """update public.ai_evaluation_runs set status=%s, summary=%s::jsonb, completed_at=now()
+                   where id=%s and organization_id=%s returning id, status, summary, completed_at""",
+                ["passed" if passed else "failed", json.dumps(summary), evaluation_id, payload.organization_id],
+            )
+            row = cur.fetchone()
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_evaluation_completed','ai_evaluation_run',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, evaluation_id, json.dumps(summary | {"status": row["status"]})],
+            )
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/governance/models/{model_id}/approve")
+async def approve_model(model_id: UUID, organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_admin(user_id, organization_id)
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """select id, data_processing_approved, status from public.ai_model_versions
+                   where id=%s and organization_id=%s for update""",
+                [model_id, organization_id],
+            )
+            model = cur.fetchone()
+            if not model:
+                raise HTTPException(status_code=404, detail="Model version not found")
+            if not model["data_processing_approved"]:
+                raise HTTPException(status_code=409, detail="Documented provider/data-processing approval is required")
+            cur.execute(
+                """select id from public.ai_evaluation_runs
+                   where organization_id=%s and model_version_id=%s and status='passed'
+                   order by completed_at desc limit 1""",
+                [organization_id, model_id],
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=409, detail="A passing evaluation run is required before model approval")
+            cur.execute(
+                """update public.ai_model_versions set status='approved', approved_by=%s, approved_at=now()
+                   where id=%s and organization_id=%s
+                   returning id, provider, model_name, model_version, status, approved_by, approved_at""",
+                [user_id, model_id, organization_id],
+            )
+            row = cur.fetchone()
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_model_approved','ai_model_version',%s,'{}'::jsonb)""",
+                [organization_id, user_id, model_id],
+            )
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/governance/fairness-audits", status_code=201)
+async def create_fairness_audit(payload: FairnessAuditInput, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_admin(user_id, payload.organization_id)
+    # Small groups remain visible to reviewers but must be explicitly flagged as uncertain.
+    small_groups = []
+    for group, value in payload.sample_sizes.items():
+        try:
+            if int(value) < 10:
+                small_groups.append(str(group))
+        except (TypeError, ValueError):
+            small_groups.append(str(group))
+    notes = list(payload.uncertainty_notes)
+    if small_groups:
+        notes.append("Small or invalid sample sizes require cautious interpretation: " + ", ".join(small_groups))
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """insert into public.ai_fairness_audits
+                   (organization_id, audit_name, dataset_version, methodology, outcome_metric,
+                    aggregate_results, sample_sizes, missingness, uncertainty_notes,
+                    legal_review_reference, reviewed_by, reviewed_at)
+                   values (%s,%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s::jsonb,%s::jsonb,%s,%s,now())
+                   returning id, audit_name, dataset_version, outcome_metric, sample_sizes,
+                             missingness, uncertainty_notes, legal_review_reference, reviewed_at, created_at""",
+                [payload.organization_id, payload.audit_name, payload.dataset_version, payload.methodology,
+                 payload.outcome_metric, json.dumps(payload.aggregate_results), json.dumps(payload.sample_sizes),
+                 json.dumps(payload.missingness), json.dumps(notes), payload.legal_review_reference, user_id],
+            )
+            row = cur.fetchone()
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_fairness_audit_created','ai_fairness_audit',%s,%s::jsonb)""",
+                [payload.organization_id, user_id, row["id"], json.dumps({"dataset_version": payload.dataset_version,
+                 "outcome_metric": payload.outcome_metric, "small_sample_groups": small_groups})],
+            )
+            return row
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/job-description-versions/{version_id}/review")
+async def review_job_description(version_id: UUID, payload: ReviewInput, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, payload.organization_id)
+    role = get_org_role(user_id, payload.organization_id)
+    if role not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Job description review permission required")
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """update public.ai_job_description_versions set
+                     status=case when %s then 'approved' else 'in_review' end,
+                     reviewed_by=%s, reviewed_at=now()
+                   where id=%s and organization_id=%s and status in ('draft','in_review')
+                   returning id, job_id, version_number, status, reviewed_by, reviewed_at""",
+                [payload.approved, user_id, version_id, payload.organization_id],
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Editable job description draft not found")
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/job-description-versions/{version_id}/publish")
+async def publish_job_description(version_id: UUID, organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    role = get_org_role(user_id, organization_id)
+    if role not in {"owner", "admin", "recruiter"}:
+        raise HTTPException(status_code=403, detail="Job description publication permission required")
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """select id, job_id, content from public.ai_job_description_versions
+                   where id=%s and organization_id=%s and status='approved' for update""",
+                [version_id, organization_id],
+            )
+            draft = cur.fetchone()
+            if not draft:
+                raise HTTPException(status_code=409, detail="Only an approved draft can be published")
+            cur.execute(
+                """update public.jobs set description=%s, updated_at=now()
+                   where id=%s and organization_id=%s returning id""",
+                [draft["content"], draft["job_id"], organization_id],
+            )
+            if not cur.fetchone():
+                raise HTTPException(status_code=404, detail="Job not found")
+            cur.execute(
+                """update public.ai_job_description_versions set status='published', published_by=%s, published_at=now()
+                   where id=%s and organization_id=%s returning id, job_id, version_number, status, published_at""",
+                [user_id, version_id, organization_id],
+            )
+            row = cur.fetchone()
+            cur.execute(
+                """update public.ai_job_description_versions set status='superseded'
+                   where organization_id=%s and job_id=%s and id<>%s and status='published'""",
+                [organization_id, draft["job_id"], version_id],
+            )
+            cur.execute(
+                """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'ai_job_description_published','job',%s,%s::jsonb)""",
+                [organization_id, user_id, draft["job_id"], json.dumps({"version_id": str(version_id)})],
+            )
+            return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.post("/interview-kits/{kit_id}/review")
+async def review_interview_kit(kit_id: UUID, payload: ReviewInput, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, payload.organization_id)
+    role = get_org_role(user_id, payload.organization_id)
+    if role not in {"owner", "admin", "recruiter", "hiring_manager"}:
+        raise HTTPException(status_code=403, detail="Interview kit review permission required")
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(
+                """update public.ai_interview_kits set
+                     status=case when %s then 'approved' else 'in_review' end,
+                     reviewed_by=%s, reviewed_at=now()
+                   where id=%s and organization_id=%s and status in ('draft','in_review')
+                   returning id, job_id, version_number, status, reviewed_by, reviewed_at""",
+                [payload.approved, user_id, kit_id, payload.organization_id],
+            )
+            row = cur.fetchone()
+            if not row:
+                raise HTTPException(status_code=404, detail="Interview kit draft not found")
             return row
     except HTTPException:
         raise
