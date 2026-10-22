@@ -200,7 +200,7 @@ async def create_document_download(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select storage_bucket, storage_path, original_filename
+                    """select candidate_id, storage_bucket, storage_path, original_filename
                        from public.candidate_documents
                        where id=%s and organization_id=%s and deleted_at is null""",
                     [document_id, organization_id],
@@ -208,6 +208,13 @@ async def create_document_download(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s,%s,'candidate_document_download_link_created','candidate_document',%s,%s::jsonb)""",
+                    [organization_id, user_id, document_id,
+                     __import__("json").dumps({"candidate_id": str(row["candidate_id"])})],
+                )
         result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": False})
         signed_url = result.get("signedURL") or result.get("signedUrl")
         if not signed_url:
@@ -239,6 +246,13 @@ async def preview_candidate_document(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s,%s,'candidate_document_preview_requested','candidate_document',%s,%s::jsonb)""",
+                    [organization_id, user_id, document_id,
+                     __import__("json").dumps({"candidate_id": str(row["candidate_id"])})],
+                )
         if row["content_type"] == "application/pdf":
             result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(
                 row["storage_path"], 60, options={"download": False}
