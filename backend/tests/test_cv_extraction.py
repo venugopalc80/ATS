@@ -112,8 +112,8 @@ def test_header_title_is_preferred_over_older_role_label():
 
 def test_experience_is_not_guessed_from_vague_decade_phrase():
     text = (
-        "Siva Rama Krishna Prasad Padamata\\nSr. Fullstack Architect\\n"
-        "bindu@talentclustr.com\\n"
+        "Siva Rama Krishna Prasad Padamata\nSr. Fullstack Architect\n"
+        "bindu@talentclustr.com\n"
         "A results-driven Fullstack Architect with over a decade of experience "
         "in architecting and deploying scalable web applications."
     )
@@ -126,9 +126,9 @@ def test_experience_is_not_guessed_from_vague_decade_phrase():
 
 def test_experience_extracts_explicit_sixteen_plus_years():
     text = (
-        "Jeevan Reddy Bandi\\nJava Lead Developer\\n"
-        "jeevanreddi.b@gmail.com\\n"
-        "Professional Summary\\nI have 16+ years of experience in software development."
+        "Jeevan Reddy Bandi\nJava Lead Developer\n"
+        "jeevanreddi.b@gmail.com\n"
+        "Professional Summary\nI have 16+ years of experience in software development."
     )
     fields = cv_candidate_fields(text, "Jeevan-Java Lead Developer.pdf")
     assert fields["years_experience"] == 16.0
@@ -145,8 +145,8 @@ def test_experience_extracts_explicit_sixteen_plus_years():
 )
 def test_experience_patterns_are_explicit_and_conservative(summary, expected):
     fields = cv_candidate_fields(
-        "Jordan Taylor\\nSenior Software Engineer\\n"
-        "jordan@example.com\\nProfessional Summary\\n" + summary,
+        "Jordan Taylor\nSenior Software Engineer\n"
+        "jordan@example.com\nProfessional Summary\n" + summary,
         "jordan-taylor.pdf",
     )
     assert fields["years_experience"] == expected
@@ -171,8 +171,8 @@ def test_explicit_role_after_long_summary_is_found_in_employment_history():
 
 def test_filename_is_not_used_as_candidate_name_when_text_has_no_name():
     fields = cv_candidate_fields(
-        "Professional Summary\\nSenior Software Engineer\\n"
-        "alex@example.com\\n10 years of experience in software development.",
+        "Professional Summary\nSenior Software Engineer\n"
+        "alex@example.com\n10 years of experience in software development.",
         "Senior-Software-Engineer-Agency-Resume.pdf",
     )
     assert fields["first_name"] == "CV candidate"
