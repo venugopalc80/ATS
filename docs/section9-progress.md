@@ -4,11 +4,11 @@ Progress percentages are engineering estimates of completed feature scope, not a
 
 ## Current estimate
 
-- **Section 9 overall:** approximately **45% complete / 55% pending**.
+- **Section 9 overall:** approximately **46% complete / 54% pending**.
 - **Idea 46 — Subscription Plans, Billing & Entitlements:** approximately **50% complete / 50% pending**.
 - **Idea 47 — Organisation Settings & Customisation:** approximately **60% complete / 40% pending**.
 - **Idea 48 — Help Centre, Onboarding & Product Guidance:** approximately **60% complete / 40% pending**.
-- **Idea 49 — Platform Administration, Support & Product Health:** approximately **40% complete / 60% pending**.
+- **Idea 49 — Platform Administration, Support & Product Health:** approximately **45% complete / 55% pending**.
 
 ## Implemented on feat/section9-commercial-operations
 
@@ -37,6 +37,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Support access is bound to a specific case, requires organisation admin approval, expires within a maximum of 60 minutes, can be revoked, and is audit-logged.
 - Platform support queue and health endpoint avoid exposing candidate records by default.
 - Customer support and restricted platform operations UIs.
+- Platform operators can open a case only with an active organisation-approved grant, view the approved conversation, send customer-visible replies, or add internal notes.
 - Validation tests authored for support request payloads.
 
 ## Staging validation
@@ -45,7 +46,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Verified the newly added tables have RLS enabled and policies in place for their intended browser roles.
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - No production database changes, merges or production deployments were performed.
-- GitHub Actions Section 9 billing/unit-test workflow passed on commit f61738e78ad0a875ea0a7cb8cfa4e04e196ed369: entitlement policy, billing API, organisation settings validation, onboarding payload validation, platform support validation and Stripe webhook safeguards all passed. Frontend typecheck/build and end-to-end Stripe checkout/webhook tests have not yet been executed.
+- GitHub Actions Section 9 billing/unit-test workflow passed on commit f61738e78ad0a875ea0a7cb8cfa4e04e196ed369: entitlement policy, billing API, organisation settings validation, onboarding payload validation, platform support validation and Stripe webhook safeguards all passed. A separate acceptance workflow passed backend tests, frontend typecheck and production build on the prior code snapshot. The newest platform operations UI commit still requires a fresh run; end-to-end Stripe checkout/webhook tests remain pending.
 - Vercel preview deployments reported the account's daily deployment limit has been reached; preview deployment validation is blocked until the limit resets or the account limit changes.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
 
@@ -56,7 +57,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Wire entitlement enforcement into real job, candidate, seat and AI operations; add race-safe quota enforcement.
 - Finish subscription and usage UI, settings/help/support UX and role-based access acceptance checks.
 - Add integration tests for tenant isolation, access grant expiry/revocation, webhook idempotency and settings version concurrency.
-- Run backend tests, frontend typecheck/build, staging smoke tests and CI. Keep PR in draft until checks pass.
+- Re-run backend tests, frontend typecheck/build after the latest UI changes, and staging smoke tests. The Section 9 workflow now includes frontend typecheck/build steps and triggers on platform operations UI changes. Keep PR in draft until checks pass.
 - Provision platform operators through a separate privileged process; customer organisation roles must never grant platform access.
 
 ## Safety
