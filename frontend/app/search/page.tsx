@@ -152,8 +152,8 @@ export default function AdvancedSearchPage() {
   }
 
   function titleFor(item: SearchItem) {
-    return String(item.candidate_name ?? [item.first_name, item.last_name].filter(Boolean).join(" ")
-      ?? item.title ?? item.original_filename ?? item.id ?? "Record");
+    const candidateName = [item.first_name, item.last_name].filter(Boolean).join(" ");
+    return String(item.candidate_name || candidateName || item.title || item.original_filename || item.id || "Record");
   }
 
   function subtitleFor(item: SearchItem) {
