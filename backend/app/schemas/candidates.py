@@ -23,6 +23,8 @@ class CandidateBase(BaseModel):
     skills: list[str] = Field(default_factory=list)
     ai_summary: str | None = None
 
+    model_config = {"extra": "forbid"}
+
 
 class CandidateCreate(CandidateBase):
     organization_id: UUID
