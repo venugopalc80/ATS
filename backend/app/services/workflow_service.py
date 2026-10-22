@@ -18,7 +18,7 @@ def list_workflows(organization_id: UUID) -> list[dict[str, Any]]:
         with connection.cursor() as cursor:
             cursor.execute(
                 """select id, organization_id, name, description, status, active_version_id,
-                          created_by, updated_by, created_at, updated_at
+                          draft_definition, created_by, updated_by, created_at, updated_at
                    from public.workflow_definitions
                    where organization_id=%s
                    order by updated_at desc""",
