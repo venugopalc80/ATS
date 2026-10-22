@@ -41,18 +41,38 @@ insert into public.help_articles
 values
   ('create-first-job', 'en-GB', 1, 'Create your first job', 'Jobs',
    'Set up a vacancy and keep its hiring workflow in one workspace.',
-   '## Create a job\n1. Open **Jobs** from the workspace navigation.\n2. Choose the action to create a job and enter its title, location, employment type and description.\n3. Save the job as a draft while details are being reviewed, or open it when it is ready to recruit.\n\nKeep the job description focused on role requirements and avoid unnecessary personal or protected-characteristic criteria.',
+   $article$## Create a job
+1. Open **Jobs** from the workspace navigation.
+2. Choose the action to create a job and enter its title, location, employment type and description.
+3. Save the job as a draft while details are being reviewed, or open it when it is ready to recruit.
+
+Keep the job description focused on role requirements and avoid unnecessary personal or protected-characteristic criteria.$article$,
    true),
   ('manage-candidates', 'en-GB', 1, 'Manage candidates responsibly', 'Candidates',
    'Keep candidate records accurate and limit access to people who need it.',
-   '## Candidate records\n1. Open **Candidates** to find or add a candidate.\n2. Keep contact details and work-related information accurate and relevant.\n3. Use the application workflow to connect a candidate to a vacancy.\n4. Follow your organisation’s privacy notice, retention policy and applicable data-protection obligations.\n\nDo not add sensitive personal information unless there is a clear lawful and operational need.',
+   $article$## Candidate records
+1. Open **Candidates** to find or add a candidate.
+2. Keep contact details and work-related information accurate and relevant.
+3. Use the application workflow to connect a candidate to a vacancy.
+4. Follow your organisation’s privacy notice, retention policy and applicable data-protection obligations.
+
+Do not add sensitive personal information unless there is a clear lawful and operational need.$article$,
    true),
   ('organisation-settings', 'en-GB', 1, 'Configure organisation settings', 'Settings',
    'Set workspace defaults for country, currency, time zone and job creation.',
-   '## Workspace defaults\n1. Open **Organisation settings**.\n2. Update the brand name, country code, currency, time zone, date format and default job options.\n3. Save your changes. Each successful save creates a new version and an audit record.\n\nOnly organisation owners and admins can change settings. Historical recruitment events should not be rewritten when defaults change.',
+   $article$## Workspace defaults
+1. Open **Organisation settings**.
+2. Update the brand name, country code, currency, time zone, date format and default job options.
+3. Save your changes. Each successful save creates a new version and an audit record.
+
+Only organisation owners and admins can change settings. Historical recruitment events should not be rewritten when defaults change.$article$,
    true),
   ('roles-and-access', 'en-GB', 1, 'Understand workspace access', 'Security',
    'Use organisation roles to grant only the access each team member needs.',
-   '## Access basics\n- **Owner/Admin:** manage organisation-level settings and access-sensitive operations.\n- **Recruiter/Hiring manager/Viewer:** use the capabilities allowed by their assigned role.\n\nInvite only people who need access, review memberships regularly and do not share login credentials. Role availability and individual permissions may depend on the current product configuration.',
+   $article$## Access basics
+- **Owner/Admin:** manage organisation-level settings and access-sensitive operations.
+- **Recruiter/Hiring manager/Viewer:** use the capabilities allowed by their assigned role.
+
+Invite only people who need access, review memberships regularly and do not share login credentials. Role availability and individual permissions may depend on the current product configuration.$article$,
    true)
 on conflict (slug, locale, version) do nothing;
