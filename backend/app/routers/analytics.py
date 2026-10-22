@@ -64,6 +64,7 @@ async def analytics_kpis(
                 application_row = cursor.fetchone()
 
                 offer_where = ["o.organization_id = %s", "o.status in ('accepted','rejected')",
+                               "o.responded_at is not null",
                                "a.organization_id = o.organization_id", "j.organization_id = a.organization_id"]
                 offer_params = [organization_id]
                 if date_from:
@@ -165,9 +166,9 @@ async def analytics_kpis(
                               and a.job_id=jr.job_id
                               and o.status='accepted'
                               and o.responded_at is not null
+                              and o.responded_at >= jr.approved_at
                         ) filled on filled.accepted_at is not null
-                        where {' and '.join(fill_clauses)}
-                          and filled.accepted_at >= jr.approved_at""",
+                        where {' and '.join(fill_clauses)}""",
                     fill_params,
                 )
                 fill_row = cursor.fetchone()
