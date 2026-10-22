@@ -37,7 +37,7 @@ alter table public.interview_kits
 alter table public.interview_kits
   add constraint interview_kits_current_version_fk
   foreign key (organization_id, current_version_id)
-  references public.scorecard_templates(organization_id, id) on delete set null;
+  references public.scorecard_templates(organization_id, id) on delete set null (current_version_id);
 
 create table if not exists public.competencies (
   id uuid primary key default gen_random_uuid(),
@@ -147,3 +147,63 @@ create policy scorecard_responses_member_all on public.scorecard_responses
 revoke all on public.interview_kits, public.scorecard_templates, public.competencies,
   public.interview_kit_questions, public.interview_feedback, public.scorecard_responses
   from anon, authenticated;
+
+
+-- Published versions are immutable. New changes must create a new version.
+create or replace function public.prevent_published_scorecard_template_mutation()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+begin
+  if old.status = 'published' then
+    raise exception 'Published scorecard templates are immutable; create a new version';
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists scorecard_template_immutable on public.scorecard_templates;
+create trigger scorecard_template_immutable
+before update or delete on public.scorecard_templates
+for each row execute function public.prevent_published_scorecard_template_mutation();
+
+create or replace function public.prevent_published_scorecard_child_mutation()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $$
+declare
+  target_template_id uuid;
+  target_organization_id uuid;
+  template_status text;
+begin
+  if tg_op = 'DELETE' then
+    target_template_id := old.template_id;
+    target_organization_id := old.organization_id;
+  else
+    target_template_id := new.template_id;
+    target_organization_id := new.organization_id;
+  end if;
+  select status into template_status
+    from public.scorecard_templates
+    where organization_id = target_organization_id and id = target_template_id;
+  if template_status = 'published' then
+    raise exception 'Published scorecard competencies and questions are immutable';
+  end if;
+  return case when tg_op = 'DELETE' then old else new end;
+end;
+$$;
+
+drop trigger if exists competency_template_immutable on public.competencies;
+create trigger competency_template_immutable
+before insert or update or delete on public.competencies
+for each row execute function public.prevent_published_scorecard_child_mutation();
+
+drop trigger if exists interview_question_template_immutable on public.interview_kit_questions;
+create trigger interview_question_template_immutable
+before insert or update or delete on public.interview_kit_questions
+for each row execute function public.prevent_published_scorecard_child_mutation();
+
+revoke all on function public.prevent_published_scorecard_template_mutation() from public;
+revoke all on function public.prevent_published_scorecard_child_mutation() from public;
