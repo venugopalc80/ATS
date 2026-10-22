@@ -9,9 +9,7 @@ from app.routers.ai import GenerateInput, RecommendationInput, router
 
 class AIRouterContractTests(unittest.TestCase):
     def test_router_registers_ai_endpoints(self):
-        app = FastAPI()
-        app.include_router(router)
-        paths = {route.path for route in app.routes}
+        paths = {route.path for route in router.routes if hasattr(route, "path")}
         self.assertIn("/api/ai/assistant", paths)
         self.assertIn("/api/ai/governance/evaluations", paths)
         self.assertIn("/api/ai/job-description-versions/{version_id}/publish", paths)
