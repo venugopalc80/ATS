@@ -75,7 +75,7 @@ class RecommendationInput(BaseModel):
     evidence: list[dict] = Field(min_length=1, max_length=100)
     explanation: str = Field(min_length=10, max_length=6000)
     limitations: list[str] = Field(default_factory=list, max_length=50)
-    model_version_id: UUID | None = None
+    model_version_id: UUID
 
 
 def _db_error(exc: Exception) -> HTTPException:
