@@ -91,16 +91,21 @@ async def analytics_kpis(
 
                 cursor.execute(
                     f"""select percentile_cont(0.5) within group (
-                                  order by extract(epoch from (o.responded_at - a.created_at)) / 86400.0
+                                  order by extract(epoch from (o.accepted_at - a.created_at)) / 86400.0
                                ) as median_days,
-                               count(*)::int as complete_records
+                               count(distinct a.id)::int as complete_records
                         from public.applications a
                         join public.jobs j on j.id=a.job_id and j.organization_id=a.organization_id
-                        join public.offers o on o.application_id=a.id and o.organization_id=a.organization_id
+                        join lateral (
+                            select min(off.responded_at) as accepted_at
+                            from public.offers off
+                            where off.application_id=a.id
+                              and off.organization_id=a.organization_id
+                              and off.status='accepted'
+                              and off.responded_at is not null
+                        ) o on o.accepted_at is not null
                         where {app_where}
-                          and o.status='accepted'
-                          and o.responded_at is not null
-                          and o.responded_at >= a.created_at""",
+                          and o.accepted_at >= a.created_at""",
                     app_params,
                 )
                 hire_row = cursor.fetchone()
