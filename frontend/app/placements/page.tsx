@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
 
 const API_BASE=process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/,"")??"";
 const DEFAULT_ORG=process.env.NEXT_PUBLIC_ORGANIZATION_ID??"";
@@ -17,7 +18,7 @@ export default function PlacementsPage(){
  const [items,setItems]=useState<Placement[]>([]),[apps,setApps]=useState<Application[]>([]),[candidates,setCandidates]=useState<Candidate[]>([]),[jobs,setJobs]=useState<Job[]>([]),[clients,setClients]=useState<Client[]>([]);
  const [loading,setLoading]=useState(true),[message,setMessage]=useState(""),[showCreate,setShowCreate]=useState(false),[saving,setSaving]=useState(false),[statusFilter,setStatusFilter]=useState("all");
  const [applicationId,setApplicationId]=useState(""),[clientId,setClientId]=useState(""),[startDate,setStartDate]=useState(""),[fee,setFee]=useState(""),[currency,setCurrency]=useState("GBP"),[feeType,setFeeType]=useState("fixed");
- const org=typeof window!=="undefined"?(window.localStorage.getItem("talentos_active_org")||DEFAULT_ORG):DEFAULT_ORG;
+ const org=getActiveOrganizationId(DEFAULT_ORG);
  const appMap=useMemo(()=>new Map(apps.map(a=>[a.id,a])),[apps]),candidateMap=useMemo(()=>new Map(candidates.map(c=>[c.id,c])),[candidates]),jobMap=useMemo(()=>new Map(jobs.map(j=>[j.id,j])),[jobs]),clientMap=useMemo(()=>new Map(clients.map(c=>[c.id,c])),[clients]);
  const load=async()=>{try{const q=encodeURIComponent(org);const [pr,ar,cr,jr,clr]=await Promise.all([apiFetch(API_BASE+`/api/placements?organization_id=${q}`),apiFetch(API_BASE+`/api/applications?organization_id=${q}`),apiFetch(API_BASE+`/api/candidates?organization_id=${q}`),apiFetch(API_BASE+`/api/jobs?organization_id=${q}`),apiFetch(API_BASE+`/api/clients?organization_id=${q}`)]);if(!pr.ok||!ar.ok||!cr.ok||!jr.ok||!clr.ok)throw new Error("Unable to load placement workspace.");setItems(await pr.json());setApps(await ar.json());setCandidates(await cr.json());setJobs(await jr.json());setClients(await clr.json())}catch(e){setMessage(e instanceof Error?e.message:"Unable to load placements.")}finally{setLoading(false)}};
  useEffect(()=>{void load();const requestedStatus=new URLSearchParams(window.location.search).get("status");if(requestedStatus&&["pending","active","completed","cancelled"].includes(requestedStatus))setStatusFilter(requestedStatus)},[]);
