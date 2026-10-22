@@ -85,6 +85,26 @@ class FakeAnalyticsCursor:
             ]
         if "group by a.status" in self.sql:
             return [{"status": "interview", "distinct_applications": 3}]
+        if "as source" in self.sql and "completed_interviews" in self.sql:
+            return [{
+                "source": "Referral",
+                "applications": 10,
+                "qualified_applications": 7,
+                "completed_interviews": 5,
+                "offers": 4,
+                "decided_offers": 3,
+                "accepted_offers": 2,
+                "hires": 2,
+            }, {
+                "source": "Unknown",
+                "applications": 2,
+                "qualified_applications": 0,
+                "completed_interviews": 0,
+                "offers": 0,
+                "decided_offers": 0,
+                "accepted_offers": 0,
+                "hires": 0,
+            }]
         if "from member_scope ms" in self.sql:
             return [{
                 "user_id": UUID("22222222-2222-4222-8222-222222222222"),
@@ -186,6 +206,20 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result["definitions"]["capacity_score"])
         self.assertIn("organization_id=%s", self.cursor.queries[0][0])
         self.membership.assert_called_once()
+
+
+    async def test_source_metrics_use_decided_offer_denominator_and_flag_small_samples(self):
+        result = await analytics_router.analytics_sources(
+            organization_id=ORG,
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 22),
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        self.assertEqual(result["sources"][0]["offer_acceptance_rate"], 2 / 3)
+        self.assertFalse(result["sources"][0]["sample_warning"])
+        self.assertTrue(result["sources"][1]["sample_warning"])
+        self.assertIsNone(result["sources"][1]["offer_acceptance_rate"])
+        self.assertIn("coalesce(nullif(btrim(a.source), ''), 'Unknown')", self.cursor.queries[0][0])
 
 
 if __name__ == "__main__":
