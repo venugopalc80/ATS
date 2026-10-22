@@ -13,14 +13,22 @@ ALLOWED_APPLICATION_TRANSITIONS = {
     "hired": set(), "rejected": set(), "withdrawn": set(),
 }
 APPLICATION_COLUMNS = "id, organization_id, job_id, candidate_id, source, status, match_score, match_explanation, human_reviewed, human_reviewed_by, human_reviewed_at, created_at, updated_at"
+STAGE_HISTORY_COLUMNS = "id, organization_id, application_id, previous_stage, new_stage, actor_user_id, reason, created_at"
+
 
 class ApplicationService:
     async def list_applications(self, organization_id: UUID, status: str | None = None, job_id: UUID | None = None, candidate_id: UUID | None = None) -> list[dict[str, Any]]:
         query = "select " + APPLICATION_COLUMNS + " from public.applications where organization_id = %s"
         params: list[Any] = [organization_id]
-        if status: query += " and status = %s"; params.append(status)
-        if job_id: query += " and job_id = %s"; params.append(job_id)
-        if candidate_id: query += " and candidate_id = %s"; params.append(candidate_id)
+        if status:
+            query += " and status = %s"
+            params.append(status)
+        if job_id:
+            query += " and job_id = %s"
+            params.append(job_id)
+        if candidate_id:
+            query += " and candidate_id = %s"
+            params.append(candidate_id)
         query += " order by created_at desc"
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -51,18 +59,64 @@ class ApplicationService:
 
     async def update_application(self, application_id: UUID, payload: ApplicationUpdate, actor_user_id: UUID) -> dict[str, Any] | None:
         data = payload.model_dump(mode="python", exclude_unset=True)
-        if not data: return await self.get_application(application_id)
+        if not data:
+            return await self.get_application(application_id)
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("select status from public.applications where id=%s", [application_id])
+                cursor.execute("select status from public.applications where id=%s for update", [application_id])
                 existing = cursor.fetchone()
-                if existing is None: return None
+                if existing is None:
+                    return None
                 if "status" in data and data["status"] != existing["status"] and data["status"] not in ALLOWED_APPLICATION_TRANSITIONS.get(existing["status"], set()):
                     raise ValueError("Invalid application stage transition")
                 cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
                 assignments = ", ".join(f"{column} = %s" for column in data)
                 cursor.execute("update public.applications set " + assignments + ", updated_at=now() where id=%s returning " + APPLICATION_COLUMNS, list(data.values()) + [application_id])
                 return cursor.fetchone()
+
+    async def transition_application(
+        self,
+        application_id: UUID,
+        status: str,
+        actor_user_id: UUID,
+        reason: str | None = None,
+    ) -> dict[str, Any] | None:
+        """Apply a permitted stage transition atomically; the DB trigger records its history."""
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select status from public.applications where id=%s for update",
+                    [application_id],
+                )
+                existing = cursor.fetchone()
+                if existing is None:
+                    return None
+                current_status = existing["status"]
+                if status == current_status:
+                    cursor.execute(
+                        "select " + APPLICATION_COLUMNS + " from public.applications where id=%s",
+                        [application_id],
+                    )
+                    return cursor.fetchone()
+                if status not in ALLOWED_APPLICATION_TRANSITIONS.get(current_status, set()):
+                    raise ValueError("Invalid application stage transition")
+                cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
+                cursor.execute("select set_config('app.transition_reason', %s, true)", [reason or ""])
+                cursor.execute(
+                    "update public.applications set status=%s, updated_at=now() where id=%s returning " + APPLICATION_COLUMNS,
+                    [status, application_id],
+                )
+                return cursor.fetchone()
+
+    async def list_stage_history(self, organization_id: UUID, application_id: UUID) -> list[dict[str, Any]]:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select " + STAGE_HISTORY_COLUMNS + " from public.application_stage_history "
+                    "where organization_id=%s and application_id=%s order by created_at desc, id desc",
+                    [organization_id, application_id],
+                )
+                return list(cursor.fetchall())
 
     async def delete_application(self, application_id: UUID) -> bool:
         with get_connection() as connection:
