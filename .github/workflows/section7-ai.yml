@@ -8,6 +8,13 @@ on:
       - "frontend/**"
       - "supabase/migrations/**"
       - ".github/workflows/section7-ai.yml"
+  push:
+    branches: [feat/section7-responsible-ai]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/section7-ai.yml"
   workflow_dispatch:
 
 permissions:
