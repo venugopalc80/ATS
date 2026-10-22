@@ -22,6 +22,38 @@ LegalBasis = Literal[
     "public_task", "vital_interests", "other",
 ]
 
+# Only these categories have an explicit, reviewed retention clock. Unknown categories
+# are reported as unsupported rather than being mapped to an arbitrary table.
+RETENTION_CATEGORY_CONFIG = {
+    "candidate_profile": {
+        "table": "candidates",
+        "target_table": "candidates",
+        "due_expression": "coalesce(r.retention_until, r.created_at + (%s * interval '1 day'))",
+        "active_filter": "true",
+        "clock_start": "created_at; an explicit retention_until overrides the calculated date",
+    },
+    "candidate_document": {
+        "table": "candidate_documents",
+        "target_table": "candidate_documents",
+        "due_expression": "r.created_at + (%s * interval '1 day')",
+        "active_filter": "r.deleted_at is null",
+        "clock_start": "document created_at",
+    },
+    "processing_record": {
+        "table": "candidate_processing_records",
+        "target_table": "candidate_processing_records",
+        "due_expression": "r.created_at + (%s * interval '1 day')",
+        "active_filter": "true",
+        "clock_start": "processing record created_at",
+    },
+}
+
+
+def retention_category_definition(data_category: str) -> dict | None:
+    """Return a fixed SQL mapping; caller input is never used as SQL syntax."""
+    return RETENTION_CATEGORY_CONFIG.get(data_category)
+
+
 PRIVACY_REQUEST_TRANSITIONS = {
     "received": {"identity_verification", "cancelled"},
     "identity_verification": {"in_progress", "awaiting_information", "declined", "cancelled"},
@@ -191,6 +223,144 @@ async def list_retention_policies(
                     [organization_id, enabled, enabled],
                 )
                 return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+
+
+@router.get("/retention-preview")
+async def preview_retention(
+    organization_id: UUID,
+    policy_id: UUID | None = None,
+    as_of: datetime | None = None,
+    limit: int = Query(default=100, ge=1, le=200),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Read-only retention preview. This endpoint never deletes or anonymises records."""
+    assert_org_admin(user_id, organization_id)
+    preview_at = as_of or datetime.now(timezone.utc)
+    if preview_at.tzinfo is None or preview_at.utcoffset() is None:
+        raise HTTPException(status_code=422, detail="'as_of' must include a timezone")
+
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select id, data_category, purpose, jurisdiction, retention_days,
+                              action, version, effective_at
+                       from public.retention_policies
+                       where organization_id = %s and enabled = true
+                         and effective_at <= %s and (%s is null or id = %s)
+                       order by data_category, purpose, jurisdiction, version desc
+                       limit 50""",
+                    [organization_id, preview_at, policy_id, policy_id],
+                )
+                policies = list(cursor.fetchall())
+                if policy_id is not None and not policies:
+                    raise HTTPException(status_code=404, detail="Enabled retention policy not found for this organisation and preview time")
+
+                previews = []
+                for policy in policies:
+                    config = retention_category_definition(policy["data_category"])
+                    if config is None:
+                        previews.append({
+                            "policy_id": policy["id"],
+                            "data_category": policy["data_category"],
+                            "purpose": policy["purpose"],
+                            "jurisdiction": policy["jurisdiction"],
+                            "retention_days": policy["retention_days"],
+                            "action": policy["action"],
+                            "version": policy["version"],
+                            "status": "unsupported_category",
+                            "clock_start": None,
+                            "eligible_count": 0,
+                            "excluded_active_exception_count": 0,
+                            "previously_processed_count": 0,
+                            "items": [],
+                            "message": "No explicit retention clock is configured for this category; no records were scanned.",
+                        })
+                        continue
+
+                    table = config["table"]
+                    target_table = config["target_table"]
+                    due_expression = config["due_expression"]
+                    active_filter = config["active_filter"]
+                    common_exception = (
+                        "e.organization_id = r.organization_id "
+                        "and e.target_table = %s and e.target_record_id = r.id "
+                        "and e.starts_at <= %s and (e.ends_at is null or e.ends_at > %s) "
+                        "and (e.policy_id is null or e.policy_id = %s)"
+                    )
+                    common_processed = (
+                        "l.organization_id = r.organization_id and l.policy_id = %s "
+                        "and l.target_table = %s and l.target_record_id = r.id "
+                        "and l.action = %s and l.status = 'succeeded'"
+                    )
+                    cursor.execute(
+                        f"""select
+                              count(*) filter (where has_active_exception) as held_count,
+                              count(*) filter (where previously_processed) as processed_count,
+                              count(*) filter (where not has_active_exception and not previously_processed) as eligible_count
+                            from (
+                              select r.id,
+                                exists (select 1 from public.retention_exceptions e where {common_exception}) as has_active_exception,
+                                exists (select 1 from public.retention_execution_logs l where {common_processed}) as previously_processed
+                              from public.{table} r
+                              where r.organization_id = %s and {active_filter}
+                                and {due_expression} <= %s
+                            ) due_records""",
+                        [target_table, preview_at, preview_at, policy["id"],
+                         policy["id"], target_table, policy["action"],
+                         organization_id, policy["retention_days"], preview_at],
+                    )
+                    counts = cursor.fetchone()
+
+                    cursor.execute(
+                        f"""select r.id, r.created_at, {due_expression} as due_at
+                            from public.{table} r
+                            where r.organization_id = %s and {active_filter}
+                              and {due_expression} <= %s
+                              and not exists (
+                                select 1 from public.retention_exceptions e where {common_exception}
+                              )
+                              and not exists (
+                                select 1 from public.retention_execution_logs l where {common_processed}
+                              )
+                            order by due_at asc, r.id asc
+                            limit %s""",
+                        [policy["retention_days"], organization_id, policy["retention_days"], preview_at,
+                         target_table, preview_at, preview_at, policy["id"],
+                         policy["id"], target_table, policy["action"], limit],
+                    )
+                    items = list(cursor.fetchall())
+                    previews.append({
+                        "policy_id": policy["id"],
+                        "data_category": policy["data_category"],
+                        "purpose": policy["purpose"],
+                        "jurisdiction": policy["jurisdiction"],
+                        "retention_days": policy["retention_days"],
+                        "action": policy["action"],
+                        "version": policy["version"],
+                        "status": "preview_ready",
+                        "clock_start": config["clock_start"],
+                        "eligible_count": counts["eligible_count"],
+                        "excluded_active_exception_count": counts["held_count"],
+                        "previously_processed_count": counts["processed_count"],
+                        "items": items,
+                        "items_truncated": counts["eligible_count"] > len(items),
+                    })
+
+                return {
+                    "organization_id": organization_id,
+                    "as_of": preview_at,
+                    "preview_only": True,
+                    "deletion_executed": False,
+                    "anonymisation_executed": False,
+                    "policies_scanned": len(policies),
+                    "policy_list_truncated": len(policies) == 50 and policy_id is None,
+                    "policies": previews,
+                }
+    except HTTPException:
+        raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _database_error(exc) from exc
 
