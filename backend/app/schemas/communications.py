@@ -1,6 +1,6 @@
 from datetime import datetime
 from uuid import UUID
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class ThreadCreate(BaseModel):
@@ -11,6 +11,14 @@ class ThreadCreate(BaseModel):
 
 class MessageDraftCreate(BaseModel):
     body_text: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("body_text")
+    @classmethod
+    def strip_body(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Message body cannot be blank")
+        return value
     subject: str | None = Field(default=None, max_length=500)
     channel: str = Field(default="email", pattern="^(email|sms|in_app)$")
     recipient_address: str = Field(min_length=3, max_length=320)
@@ -21,6 +29,14 @@ class MessageDraftCreate(BaseModel):
 
 class InternalNoteCreate(BaseModel):
     body_text: str = Field(min_length=1, max_length=20000)
+
+    @field_validator("body_text")
+    @classmethod
+    def strip_body(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Note cannot be blank")
+        return value
 
 
 class TemplateCreate(BaseModel):
