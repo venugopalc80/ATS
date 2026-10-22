@@ -2,25 +2,47 @@ from typing import Any
 from uuid import UUID
 
 from app.db import get_connection
-from app.schemas.applications import ApplicationCreate, ApplicationUpdate
+from app.schemas.applications import ApplicationCreate, ApplicationUpdate, ApplicationStatus
 
-ALLOWED_APPLICATION_TRANSITIONS = {
-    "new": {"screening", "rejected", "withdrawn"},
-    "screening": {"submitted", "rejected", "withdrawn"},
-    "submitted": {"interview", "rejected", "withdrawn"},
-    "interview": {"offer", "rejected", "withdrawn"},
+ALLOWED_APPLICATION_TRANSITIONS: dict[str, set[str]] = {
+    "new": {"applied", "screening", "rejected", "withdrawn"},
+    "applied": {"screening", "rejected", "withdrawn"},
+    "screening": {"shortlisted", "assessment", "interview", "rejected", "withdrawn"},
+    "shortlisted": {"interview", "assessment", "rejected", "withdrawn"},
+    "submitted": {"interview", "assessment", "rejected", "withdrawn"},
+    "interview": {"assessment", "offer", "rejected", "withdrawn"},
+    "assessment": {"interview", "offer", "rejected", "withdrawn"},
     "offer": {"hired", "rejected", "withdrawn"},
-    "hired": set(), "rejected": set(), "withdrawn": set(),
+    "hired": set(),
+    "rejected": set(),
+    "withdrawn": set(),
 }
-APPLICATION_COLUMNS = "id, organization_id, job_id, candidate_id, source, status, match_score, match_explanation, human_reviewed, human_reviewed_by, human_reviewed_at, created_at, updated_at"
+APPLICATION_COLUMNS = (
+    "id, organization_id, job_id, candidate_id, source, status, match_score, "
+    "match_explanation, human_reviewed, human_reviewed_by, human_reviewed_at, "
+    "created_at, updated_at"
+)
+
 
 class ApplicationService:
-    async def list_applications(self, organization_id: UUID, status: str | None = None, job_id: UUID | None = None, candidate_id: UUID | None = None) -> list[dict[str, Any]]:
+    async def list_applications(
+        self,
+        organization_id: UUID,
+        status: str | None = None,
+        job_id: UUID | None = None,
+        candidate_id: UUID | None = None,
+    ) -> list[dict[str, Any]]:
         query = "select " + APPLICATION_COLUMNS + " from public.applications where organization_id = %s"
         params: list[Any] = [organization_id]
-        if status: query += " and status = %s"; params.append(status)
-        if job_id: query += " and job_id = %s"; params.append(job_id)
-        if candidate_id: query += " and candidate_id = %s"; params.append(candidate_id)
+        if status:
+            query += " and status = %s"
+            params.append(status)
+        if job_id:
+            query += " and job_id = %s"
+            params.append(job_id)
+        if candidate_id:
+            query += " and candidate_id = %s"
+            params.append(candidate_id)
         query += " order by created_at desc"
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -31,14 +53,17 @@ class ApplicationService:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select exists(select 1 from public.jobs where id=%s and organization_id=%s) as job_ok, exists(select 1 from public.candidates where id=%s and organization_id=%s) as candidate_ok",
+                    "select exists(select 1 from public.jobs where id=%s and organization_id=%s) as job_ok, "
+                    "exists(select 1 from public.candidates where id=%s and organization_id=%s) as candidate_ok",
                     [payload.job_id, payload.organization_id, payload.candidate_id, payload.organization_id],
                 )
                 links = cursor.fetchone()
                 if not links["job_ok"] or not links["candidate_ok"]:
                     raise ValueError("Job and candidate must belong to the same organization")
                 cursor.execute(
-                    "insert into public.applications (organization_id, job_id, candidate_id, source, status) values (%s, %s, %s, %s, %s) returning " + APPLICATION_COLUMNS,
+                    "insert into public.applications "
+                    "(organization_id, job_id, candidate_id, source, status) "
+                    "values (%s, %s, %s, %s, %s) returning " + APPLICATION_COLUMNS,
                     [payload.organization_id, payload.job_id, payload.candidate_id, payload.source, payload.status],
                 )
                 return cursor.fetchone()
@@ -46,23 +71,75 @@ class ApplicationService:
     async def get_application(self, application_id: UUID) -> dict[str, Any] | None:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("select " + APPLICATION_COLUMNS + " from public.applications where id=%s", [application_id])
+                cursor.execute(
+                    "select " + APPLICATION_COLUMNS + " from public.applications where id=%s",
+                    [application_id],
+                )
                 return cursor.fetchone()
 
-    async def update_application(self, application_id: UUID, payload: ApplicationUpdate, actor_user_id: UUID) -> dict[str, Any] | None:
+    async def update_application(
+        self, application_id: UUID, payload: ApplicationUpdate, actor_user_id: UUID
+    ) -> dict[str, Any] | None:
         data = payload.model_dump(mode="python", exclude_unset=True)
-        if not data: return await self.get_application(application_id)
+        if not data:
+            return await self.get_application(application_id)
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("select status from public.applications where id=%s", [application_id])
+                cursor.execute("select status from public.applications where id=%s for update", [application_id])
                 existing = cursor.fetchone()
-                if existing is None: return None
-                if "status" in data and data["status"] != existing["status"] and data["status"] not in ALLOWED_APPLICATION_TRANSITIONS.get(existing["status"], set()):
-                    raise ValueError("Invalid application stage transition")
+                if existing is None:
+                    return None
+                if "status" in data and data["status"] != existing["status"]:
+                    if data["status"] not in ALLOWED_APPLICATION_TRANSITIONS.get(existing["status"], set()):
+                        raise ValueError("Invalid application stage transition")
                 cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
                 assignments = ", ".join(f"{column} = %s" for column in data)
-                cursor.execute("update public.applications set " + assignments + ", updated_at=now() where id=%s returning " + APPLICATION_COLUMNS, list(data.values()) + [application_id])
+                cursor.execute(
+                    "update public.applications set " + assignments
+                    + ", updated_at=now() where id=%s returning " + APPLICATION_COLUMNS,
+                    list(data.values()) + [application_id],
+                )
                 return cursor.fetchone()
+
+    async def transition_application(
+        self, application_id: UUID, status: ApplicationStatus, actor_user_id: UUID, reason: str | None
+    ) -> dict[str, Any] | None:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select " + APPLICATION_COLUMNS + " from public.applications where id=%s for update",
+                    [application_id],
+                )
+                existing = cursor.fetchone()
+                if existing is None:
+                    return None
+                current = existing["status"]
+                if status != current and status not in ALLOWED_APPLICATION_TRANSITIONS.get(current, set()):
+                    raise ValueError(f"Invalid application stage transition: {current} -> {status}")
+                cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
+                cursor.execute(
+                    "select set_config('app.application_transition_reason', %s, true)",
+                    [reason or ""],
+                )
+                cursor.execute(
+                    "update public.applications set status=%s, updated_at=now() where id=%s returning "
+                    + APPLICATION_COLUMNS,
+                    [status, application_id],
+                )
+                return cursor.fetchone()
+
+    async def list_stage_history(
+        self, application_id: UUID, organization_id: UUID
+    ) -> list[dict[str, Any]]:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select id, organization_id, application_id, previous_stage, new_stage, "
+                    "actor_user_id, reason, created_at from public.application_stage_history "
+                    "where application_id=%s and organization_id=%s order by created_at desc",
+                    [application_id, organization_id],
+                )
+                return list(cursor.fetchall())
 
     async def delete_application(self, application_id: UUID) -> bool:
         with get_connection() as connection:
