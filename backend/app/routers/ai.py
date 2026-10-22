@@ -314,7 +314,7 @@ async def assistant(
             input_hash = fingerprint({"task": payload.task, "evidence": evidence, "user_request": payload.user_request})
             # Keep raw source inputs out of run history; persist only references and a fingerprint.
             try:
-                output_text = generate_text(payload.task, evidence, payload.user_request, model["model_name"])
+                output_text = generate_text(payload.task, evidence, payload.user_request, model["model_name"], model["provider"])
             except RuntimeError as exc:
                 raise HTTPException(status_code=503, detail=str(exc)) from exc
             except requests_error_types() as exc:
@@ -327,7 +327,7 @@ async def assistant(
                    values (%s,%s,%s,%s,%s,'succeeded',%s::jsonb,%s,%s::jsonb,%s::jsonb,%s::jsonb,now()+(%s * interval '1 day'))
                    returning id, task, status, created_at, retention_expires_at""",
                 [payload.organization_id, use_case["id"], model["id"], user_id, payload.task,
-                 json.dumps(refs), input_hash, json.dumps(output), json.dumps(refs),
+                 json.dumps(refs), input_hash, json.dumps(output, default=str), json.dumps(refs),
                  json.dumps(model.get("limitations") or []), use_case["retention_days"]],
             )
             run = cur.fetchone()
@@ -498,7 +498,7 @@ class FairnessAuditInput(BaseModel):
     sample_sizes: dict = Field(min_length=1)
     missingness: dict = Field(default_factory=dict)
     uncertainty_notes: list[str] = Field(default_factory=list, max_length=50)
-    legal_review_reference: str | None = Field(default=None, max_length=500)
+    legal_review_reference: str = Field(min_length=3, max_length=500)
 
 
 @router.post("/governance/evaluations", status_code=201)
