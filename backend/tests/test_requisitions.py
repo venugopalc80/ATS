@@ -128,3 +128,57 @@ class RequisitionServiceAuditTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(audit_mock.call_args.args[2], USER)
         self.assertEqual(audit_mock.call_args.args[4], rid)
         self.assertEqual(audit_mock.call_args.args[5], {"changes": {"title": {"old": "Old title", "new": "New title"}}})
+
+
+
+class RequisitionAssignmentTests(unittest.TestCase):
+    def test_viewer_cannot_be_assigned_as_recruiter(self):
+        from unittest.mock import MagicMock
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {"role": "viewer"}
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.__exit__.return_value = False
+        connection.cursor.return_value.__enter__.return_value = cursor
+        connection.cursor.return_value.__exit__.return_value = False
+        with patch.object(requisitions_router, "get_connection", return_value=connection):
+            with self.assertRaises(HTTPException) as raised:
+                requisitions_router.validate_org_links(ORG, None, None, USER)
+        self.assertEqual(raised.exception.status_code, 422)
+
+    def test_non_member_cannot_be_assigned_as_hiring_manager(self):
+        from unittest.mock import MagicMock
+        cursor = MagicMock()
+        cursor.fetchone.return_value = None
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.__exit__.return_value = False
+        connection.cursor.return_value.__enter__.return_value = cursor
+        connection.cursor.return_value.__exit__.return_value = False
+        with patch.object(requisitions_router, "get_connection", return_value=connection):
+            with self.assertRaises(HTTPException) as raised:
+                requisitions_router.validate_org_links(ORG, None, USER, None)
+        self.assertEqual(raised.exception.status_code, 422)
+
+
+class RequisitionConversionRetryTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repeated_conversion_returns_existing_job_without_inserting(self):
+        from unittest.mock import MagicMock
+        from app.services import requisition_service as service_module
+
+        rid = UUID("33333333-3333-4333-8333-333333333333")
+        job_id = UUID("66666666-6666-4666-8666-666666666666")
+        converted = {"id": rid, "status": "converted", "job_id": job_id}
+        job = {"id": job_id, "organization_id": ORG, "job_code": "REQ-12345678", "title": "Engineer", "status": "draft"}
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [converted, job]
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.__exit__.return_value = False
+        connection.cursor.return_value.__enter__.return_value = cursor
+        connection.cursor.return_value.__exit__.return_value = False
+        with patch.object(service_module, "get_connection", return_value=connection):
+            result = await service_module.RequisitionService().convert_to_job(rid, USER)
+        self.assertTrue(result["already_converted"])
+        self.assertEqual(result["job"], job)
+        self.assertFalse(any("insert into public.jobs" in str(call).lower() for call in cursor.execute.call_args_list))
