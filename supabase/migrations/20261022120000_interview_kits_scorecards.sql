@@ -265,12 +265,12 @@ $$;
 
 drop trigger if exists interview_feedback_immutable on public.interview_feedback;
 create trigger interview_feedback_immutable
-before update or delete on public.interview_feedback
+before update on public.interview_feedback
 for each row execute function public.prevent_submitted_interview_feedback_mutation();
 
 drop trigger if exists scorecard_response_immutable on public.scorecard_responses;
 create trigger scorecard_response_immutable
-before insert or update or delete on public.scorecard_responses
+before insert or update on public.scorecard_responses
 for each row execute function public.prevent_submitted_scorecard_response_mutation();
 
 revoke all on function public.prevent_submitted_interview_feedback_mutation() from public;
@@ -308,6 +308,6 @@ end;
 $$;
 drop trigger if exists interview_scorecard_decision_immutable on public.interview_scorecard_decisions;
 create trigger interview_scorecard_decision_immutable
-before update or delete on public.interview_scorecard_decisions
+before update on public.interview_scorecard_decisions
 for each row execute function public.prevent_interview_scorecard_decision_mutation();
 revoke all on function public.prevent_interview_scorecard_decision_mutation() from public;
