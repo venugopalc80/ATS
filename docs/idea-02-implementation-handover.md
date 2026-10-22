@@ -5,7 +5,7 @@
 - Draft PR: https://github.com/venugopalc80/ATS/pull/59
 - PR base: `feat/recruiter-tasks-followups` (Idea 01 work is not merged to main)
 - Production database and production deployment: untouched
-- Migration `024_job_requisitions.sql`: committed only; not applied to staging or production
+- Migrations `024_job_requisitions.sql` and `025_job_requisition_fk_indexes.sql`: applied to ATS-Staging only; production untouched
 - Current approval model: organisation owner/admin approval; configurable multi-step approvals are out of scope for this slice
 - Job conversion creates a draft operational job; recruiters must open/publish it separately
 
@@ -25,12 +25,12 @@
 - [x] Approved requisition conversion to a linked draft job, idempotent on retry
 - [x] Requisition/job audit events added for key actions
 - [x] Vacancy closure preserves existing job/application rows
-- [ ] Apply migration to ATS-Staging and verify RLS/grants/policies against the live staging schema
+- [x] Apply migrations to ATS-Staging and verify table columns, RLS, policies, and foreign-key indexes against the live staging schema
 - [ ] Verify draft edit/resume in the UI (API supports update, current page still needs an edit/resume interaction)
 - [ ] Add table sorting and visible pagination controls to the workspace
 - [ ] Add a recruiter assignment UI and confirm reassignment history metadata contains old/new values
 - [ ] Add endpoint/unit tests for each lifecycle transition, conversion retries, tenant-link mismatch, and job status transitions
-- [ ] Run CI on the latest feature commit (the first PR-triggered run tested an earlier head)
+- [ ] Confirm CI on latest feature commit `2d433a6067296f1db888f092ea6ce7293fcf53ba` (run queued at last check; previous head passed backend tests, frontend typecheck, and production build)
 - [ ] Authenticated staging browser acceptance: roles, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
 
@@ -44,6 +44,13 @@
 - `backend/tests/test_requisitions.py`
 - `frontend/app/requisitions/page.tsx`
 - `frontend/app/jobs/page.tsx`
+
+## Staging verification
+- `job_requisitions` exists in ATS-Staging with RLS enabled.
+- Three tenant-scoped SELECT/INSERT/UPDATE policies are present; insert checks `requested_by = auth.uid()` and tenant-scoped client/recruiter/hiring-manager links.
+- Migration 025 adds covering indexes for requisition foreign keys; the performance advisor no longer reports requisition foreign keys as unindexed.
+- The security advisor returned no findings specific to `job_requisitions`. It still reports pre-existing findings for `candidate_documents`, the shared `is_org_member` SECURITY DEFINER helper, and leaked-password protection.
+- No requisition rows were created as part of schema verification.
 
 ## Safety notes
 - Keep the PR as draft until all unchecked acceptance items are addressed.
