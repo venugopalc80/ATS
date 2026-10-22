@@ -266,11 +266,12 @@ export default function CandidatesPage() {
     if (!selectedIds.length) return; setSaving(true); setMessage("");
     try {
       const results = await Promise.all(selectedIds.map(async (id) => {
-        const response = await apiFetch(API_BASE + "/api/candidates/" + id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: bulkStatus }) });
+        const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+        const response = await apiFetch(API_BASE + "/api/candidates/" + id + "?organization_id=" + encodeURIComponent(organizationId), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: bulkStatus }) });
         if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.detail || "Could not update every selected candidate."); }
         return await response.json() as Candidate;
       }));
-      const byId = new Map(results.map((candidate) => [candidate.id, candidate])); setCandidates((current) => current.map((candidate) => byId.get(candidate.id) ?? candidate)); setSelectedIds([]); setMessage("Updated " + results.length + " candidate(s).");
+      const byId = new Map(results.map((candidate) => [candidate.id, candidate])); setCandidates((current) => current.map((candidate) => byId.get(candidate.id) ?? candidate)); setSelectedIds([]); setRefreshKey((current) => current + 1); setMessage("Updated " + results.length + " candidate(s).");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Bulk update failed. Some updates may have succeeded; refresh to verify."); }
     finally { setSaving(false); }
   }
@@ -415,13 +416,22 @@ export default function CandidatesPage() {
       for (const row of eligible) {
         const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean) };
         try {
+          const duplicateParams = new URLSearchParams({ organization_id: organizationId });
+          if (row.email) duplicateParams.set("email", row.email);
+          if (row.phone) duplicateParams.set("phone", row.phone);
+          if (row.email || row.phone) {
+            const duplicateResponse = await apiFetch(API_BASE + "/api/candidates/duplicates?" + duplicateParams.toString());
+            if (!duplicateResponse.ok) throw new Error("Duplicate check failed");
+            const duplicates: Candidate[] = await duplicateResponse.json();
+            if (duplicates.length) { failures.push("Row " + row.line + ": possible duplicate of " + fullName(duplicates[0])); continue; }
+          }
           const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
           const candidate = await response.json() as Candidate; setCandidates((current) => [candidate, ...current]); created++;
         } catch { failures.push("Row " + row.line + ": network error"); }
       }
       setImportMessage("Imported " + created + " candidate(s). Skipped " + (importRows.length - eligible.length) + " invalid or duplicate row(s)." + (failures.length ? " Failed: " + failures.slice(0, 5).join("; ") : ""));
-      if (created > 0) { setImportRows([]); setImportFileName(""); }
+      if (created > 0) { setImportRows([]); setImportFileName(""); setTotalCandidates((current) => current + created); setRefreshKey((current) => current + 1); }
     } finally { setImporting(false); }
   }
 
