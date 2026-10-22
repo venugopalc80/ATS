@@ -345,9 +345,17 @@ def review_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID, ca
             missing = [str(value) for value in assigned if not any(
                 str(row["interviewer_id"]) == str(value) and row["status"] == "submitted" for row in rows
             )]
+            cursor.execute(
+                """select id, reviewer_id, decision, rationale, evidence_snapshot, created_at
+                   from public.interview_scorecard_decisions
+                   where organization_id=%s and interview_id=%s
+                   order by created_at desc""",
+                [organization_id, interview_id],
+            )
+            decisions = list(cursor.fetchall())
             return {"interview_id": interview_id, "assigned_interviewer_count": len(assigned),
                     "submitted_feedback_count": submitted, "missing_interviewer_ids": missing,
-                    "feedback": rows,
+                    "feedback": rows, "decisions": decisions,
                     "note": "Ratings are evidence summaries, not an automated hiring decision."}
 
 
@@ -381,3 +389,70 @@ def get_my_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID) ->
             )
             feedback["responses"] = list(cursor.fetchall())
             return feedback
+
+
+def record_decision(organization_id: UUID, interview_id: UUID, reviewer_id: UUID,
+                    decision: str, rationale: str, evidence_response_ids: list[UUID]) -> dict[str, Any]:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """select interviewer_ids from public.interviews
+                   where organization_id=%s and id=%s""",
+                [organization_id, interview_id],
+            )
+            interview = cursor.fetchone()
+            if interview is None:
+                raise LookupError("Interview not found")
+            assigned = {UUID(str(value)) for value in (interview["interviewer_ids"] or [])}
+            cursor.execute(
+                """select interviewer_id from public.interview_feedback
+                   where organization_id=%s and interview_id=%s and status='submitted'""",
+                [organization_id, interview_id],
+            )
+            submitted = {UUID(str(row["interviewer_id"])) for row in cursor.fetchall()}
+            if not assigned or not assigned.issubset(submitted):
+                raise ValueError("All assigned interviewers must submit feedback before a final review decision")
+            cursor.execute(
+                """select r.id, r.competency_id, c.name as competency_name, r.rating, r.evidence,
+                          r.notes, f.interviewer_id, f.template_id, f.submitted_at
+                   from public.scorecard_responses r
+                   join public.interview_feedback f
+                     on f.organization_id=r.organization_id and f.id=r.feedback_id
+                   join public.competencies c
+                     on c.organization_id=r.organization_id and c.id=r.competency_id
+                   where r.organization_id=%s and f.interview_id=%s and f.status='submitted'
+                     and r.id = any(%s)""",
+                [organization_id, interview_id, evidence_response_ids],
+            )
+            evidence = list(cursor.fetchall())
+            if len(evidence) != len(evidence_response_ids):
+                raise ValueError("Every cited evidence item must belong to a submitted scorecard for this interview")
+            snapshot = [{
+                "response_id": str(row["id"]),
+                "competency_id": str(row["competency_id"]),
+                "competency": row["competency_name"],
+                "rating": row["rating"],
+                "evidence": row["evidence"],
+                "notes": row["notes"],
+                "interviewer_id": str(row["interviewer_id"]),
+                "template_id": str(row["template_id"]),
+                "submitted_at": row["submitted_at"].isoformat() if row["submitted_at"] else None,
+            } for row in evidence]
+            cursor.execute(
+                """insert into public.interview_scorecard_decisions
+                     (organization_id, interview_id, reviewer_id, decision, rationale, evidence_snapshot)
+                   values (%s,%s,%s,%s,%s,%s::jsonb)
+                   returning id, organization_id, interview_id, reviewer_id, decision, rationale,
+                             evidence_snapshot, created_at""",
+                [organization_id, interview_id, reviewer_id, decision, rationale, json.dumps(snapshot)],
+            )
+            result = cursor.fetchone()
+            cursor.execute(
+                """insert into public.audit_events
+                     (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'interview_scorecard.decision_recorded','interview_scorecard_decision',%s,%s::jsonb)""",
+                [organization_id, reviewer_id, result["id"],
+                 json.dumps({"interview_id": str(interview_id), "decision": decision,
+                             "evidence_count": len(snapshot)})],
+            )
+            return result
