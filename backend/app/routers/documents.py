@@ -37,6 +37,7 @@ class DocumentOut(BaseModel):
     file_size_bytes: int
     sha256: str
     created_at: datetime | None = None
+    extracted_profile: dict | None = None
 
 
 def validate_document_bytes(data: bytes, mime: str) -> str:
@@ -112,6 +113,8 @@ async def upload_candidate_document(
     path = f"{organization_id}/{candidate_id}/{document_id}{extension}"
     filename = safe_filename(file.filename, extension)
     digest = hashlib.sha256(data).hexdigest()
+    extracted_text = extract_cv_text(data, mime)
+    extracted_profile = extract_cv_profile(extracted_text, filename)
 
     try:
         storage_client().storage.from_(BUCKET).upload(
@@ -144,7 +147,7 @@ async def upload_candidate_document(
                     [organization_id, user_id, document_id,
                      '{"candidate_id":"' + str(candidate_id) + '","document_type":"cv"}'],
                 )
-                return row
+                return {**row, "extracted_profile": extracted_profile}
     except HTTPException:
         try:
             storage_client().storage.from_(BUCKET).remove([path])
@@ -208,7 +211,7 @@ async def create_document_download(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
-        result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": False})
+        result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": row["original_filename"]})
         signed_url = result.get("signedURL") or result.get("signedUrl")
         if not signed_url:
             raise HTTPException(status_code=503, detail="Unable to create secure download link")
@@ -217,6 +220,39 @@ async def create_document_download(
         raise
     except Exception as exc:
         raise HTTPException(status_code=503, detail="Document service unavailable") from exc
+
+
+@router.post("/{document_id}/extract")
+async def reextract_candidate_document(
+    document_id: UUID,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Re-run CV text extraction for an already uploaded document without changing candidate data."""
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select candidate_id, storage_bucket, storage_path, content_type, original_filename
+                       from public.candidate_documents
+                       where id=%s and organization_id=%s and deleted_at is null and document_type='cv'""",
+                    [document_id, organization_id],
+                )
+                row = cursor.fetchone()
+        if row is None:
+            raise HTTPException(status_code=404, detail="CV document not found")
+        candidate_id = row["candidate_id"]
+        verify_candidate(candidate_id, organization_id)
+        data = storage_client().storage.from_(row["storage_bucket"]).download(row["storage_path"])
+        text = extract_cv_text(data, row["content_type"])
+        profile = extract_cv_profile(text, row["original_filename"])
+        return {"filename": row["original_filename"], "candidate_id": str(candidate_id), "extracted_profile": profile}
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception("CV re-extraction failed for document %s", document_id)
+        raise HTTPException(status_code=503, detail="Could not re-extract this CV. Check document storage and try again.") from exc
 
 
 @router.post("/{document_id}/preview")
@@ -271,6 +307,11 @@ CV_SKILL_KEYWORDS = (
     "kubernetes", "machine learning", "deep learning", "tensorflow", "pytorch",
     "data analysis", "power bi", "tableau", "excel", "django", "fastapi",
     "project management", "salesforce", "account management", "recruitment",
+    "hadoop", "snowflake", "dbt", "oracle", "oracle e-business suite", "etl",
+    "data warehousing", "data engineering", "data modeling", "data modelling",
+    "apache spark", "spark", "airflow", "databricks", "redshift", "bigquery",
+    "financial applications", "business intelligence", "data governance",
+    "data quality", "aws cloud", "oracle ebs", "pl/sql", "linux", "git",
 )
 
 
@@ -292,31 +333,276 @@ def extract_cv_text(data: bytes, mime: str) -> str:
     return ""
 
 
-def cv_candidate_fields(text: str, filename: str) -> dict:
+def _cv_sections(text: str) -> dict:
+    """Conservative, review-first section extraction for common CV layouts."""
+    raw_lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
+    raw_lines = [line for line in raw_lines if line]
+    headings = {
+        "employment": re.compile(r"^(work experience|professional experience|employment history|experience|career history)$", re.I),
+        "education": re.compile(r"^(education|academic background|qualifications|academic qualifications)$", re.I),
+        "certifications": re.compile(r"^(certifications|certificates|licenses|licences|professional certifications)$", re.I),
+        "languages": re.compile(r"^(languages|language skills)$", re.I),
+        "skills": re.compile(r"^(skills|technical skills|core competencies|key skills|technologies)$", re.I),
+    }
+    sections: dict[str, list[str]] = {key: [] for key in headings}
+    current = None
+    for line in raw_lines:
+        matched = next((key for key, pattern in headings.items() if pattern.fullmatch(line.rstrip(":"))), None)
+        if matched:
+            current = matched
+            continue
+        if current and re.fullmatch(r"(projects|references|interests|hobbies|personal statement|summary|profile|contact details|achievements|publications|volunteering)", line, re.I):
+            current = None
+        elif current:
+            sections[current].append(line)
+
+    def date_range(line: str):
+        match = re.search(
+            r"\b((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(19\d{2}|20\d{2})\s*(?:-|–|—|to)\s*(Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19\d{2}|20\d{2}))\b",
+            line, re.I
+        )
+        if not match:
+            return None, None, False
+        def iso(value):
+            if not value:
+                return None
+            years = re.search(r"(19\d{2}|20\d{2})", value)
+            if not years:
+                return None
+            month_match = re.search(r"(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*", value, re.I)
+            months = {"jan":1,"feb":2,"mar":3,"apr":4,"may":5,"jun":6,"jul":7,"aug":8,"sep":9,"sept":9,"oct":10,"nov":11,"dec":12}
+            month = months.get(month_match.group(1).lower()) if month_match else 1
+            return f"{years.group(1)}-{month:02d}-01"
+        start = (match.group(1) or "") + match.group(2)
+        end = match.group(3)
+        is_current = end.lower() in {"present", "current", "now"}
+        return iso(start), None if is_current else iso(end), is_current
+
+    employment = []
+    # Recognise common "Title at Company", "Title | Company", and stacked title/company lines.
+    exp = sections["employment"]
+    title_pattern = re.compile(r"(?i)\b(?:senior|junior|lead|principal|staff|assistant|associate|head of\s+)?(?:software|full[ -]?stack|data|python|java|project|program|operations|marketing|recruitment|business|product|customer success|finance|sales|HR|human resources)?\s*(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|coordinator|administrator|specialist|director|officer|executive|technician|accountant|intern)\b")
+    role_header_indices = []
+    for index, candidate_line in enumerate(exp):
+        candidate_clean = re.sub(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b", "", candidate_line, flags=re.I).strip(" ,|–—-")
+        if title_pattern.search(candidate_clean) and any(sep in candidate_clean for sep in (" | ", " — ", " – ", " - ")) and len(candidate_clean.split()) <= 12:
+            role_header_indices.append(index)
+    for i, line in enumerate(exp):
+        if len(employment) >= 15:
+            break
+        start_date, end_date, current_role = date_range(line)
+        if not start_date:
+            for nearby in exp[i + 1:i + 4]:
+                nearby_start, nearby_end, nearby_current = date_range(nearby)
+                if nearby_start:
+                    start_date, end_date, current_role = nearby_start, nearby_end, nearby_current
+                    break
+        cleaned = re.sub(r"\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:Present|Current|Now|(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\b", "", line, flags=re.I).strip(" ,|–—-")
+        title_match = title_pattern.search(cleaned)
+        title = title_match.group(0).strip() if title_match else ""
+        company = ""
+        if title and re.search(r"\s(?:at|@)\s", cleaned, re.I):
+            company = re.split(r"\s(?:at|@)\s", cleaned, maxsplit=1, flags=re.I)[-1].strip(" ,|")
+        elif title and any(sep in cleaned for sep in (" | ", " — ", " – ", " - ")):
+            parts = re.split(r"\s(?:\||—|–|-)\s", cleaned)
+            if len(parts) >= 2:
+                title = parts[0].strip() if title_match.start() < len(parts[0]) else title
+                company = parts[1].strip()
+        elif title and i + 1 < len(exp):
+            next_line = exp[i + 1]
+            if len(next_line) <= 100 and not date_range(next_line)[0] and not re.search(r"(?i)\b(?:developer|engineer|analyst|manager|coordinator|consultant|intern)\b", next_line):
+                company = next_line
+        if title and company and len(company) <= 200:
+            description_lines = []
+            next_role_index = next((idx for idx in role_header_indices if idx > i), None)
+            description_end = min(i + 5, next_role_index) if next_role_index is not None else min(i + 5, len(exp))
+            # When multiple roles are listed as a cluster, bullets after the final role are
+            # ambiguous shared responsibilities. Do not attribute them to the final employer.
+            has_previous_role = any(idx < i for idx in role_header_indices)
+            final_role_in_cluster = has_previous_role and next_role_index is None
+            if not final_role_in_cluster:
+                for following in exp[i + 1:description_end]:
+                    if following != company and following != line and not date_range(following)[0]:
+                        description_lines.append(following)
+            employment.append({
+                "job_title": title[:200], "employer_name": company[:200],
+                "location": None, "employment_type": None, "start_date": start_date,
+                "end_date": end_date, "is_current": current_role,
+                "description": " ".join(description_lines)[:1500] or None,
+            })
+    education = []
+    edu = sections["education"]
+    qualification_pattern = re.compile(r"(?i)\b(Bachelor(?:'s)?|Master(?:'s)?|Ph\.?D\.?|Doctorate|B\.?Sc\.?|M\.?Sc\.?|B\.?Eng\.?|M\.?Eng\.?|B\.?Tech|M\.?Tech|MBA|Diploma|GCSE|A-level|degree)\b")
+    for i, line in enumerate(edu):
+        if len(education) >= 10:
+            break
+        qualification_match = qualification_pattern.search(line)
+        if not qualification_match:
+            continue
+        institution = ""
+        qualification_line = line
+        # CVs commonly put the institution on the line before the qualification.
+        if " | " in line or " — " in line or " - " in line:
+            parts = re.split(r"\s(?:\||—|-)\s", line)
+            if len(parts) > 1:
+                left, right = parts[0].strip(), parts[1].strip()
+                if qualification_pattern.search(left):
+                    qualification_line, institution = left, right
+                elif qualification_pattern.search(right):
+                    qualification_line, institution = right, left
+        if not institution and i > 0:
+            previous = edu[i - 1]
+            if not date_range(previous)[0] and not qualification_pattern.search(previous) and len(previous) <= 200:
+                institution = previous
+        if not institution and i + 1 < len(edu):
+            following = edu[i + 1]
+            if not date_range(following)[0] and not qualification_pattern.search(following):
+                institution = following
+        if institution and len(institution) <= 200:
+            start_date, end_date, _ = date_range(line)
+            if not start_date:
+                for nearby in edu[max(0, i - 1):i + 3]:
+                    nearby_start, nearby_end, _ = date_range(nearby)
+                    if nearby_start:
+                        start_date, end_date = nearby_start, nearby_end
+                        break
+            qualification = re.sub(
+                r"\s*((?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2}\s*(?:-|–|—|to)\s*(?:(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+)?(?:19|20)\d{2})\s*$",
+                "", qualification_line, flags=re.I,
+            ).strip(" ,|–—-")
+            education.append({
+                "institution_name": institution[:200], "qualification": (qualification or qualification_line)[:200],
+                "field_of_study": None, "start_date": start_date, "end_date": end_date,
+                "grade": None, "description": None,
+            })
+    certifications = []
+    for line in sections["certifications"][:20]:
+        name = re.sub(r"^[•*\-]\s*", "", line).strip()
+        if len(name) >= 3 and not re.fullmatch(r"\d{4}", name):
+            certifications.append({"name": name[:200], "issuing_organisation": None, "credential_id": None, "credential_url": None, "issued_on": None, "expires_on": None})
+    languages = []
+    language_names = ("English", "Hindi", "Telugu", "Tamil", "Kannada", "Malayalam", "Bengali", "Punjabi", "Gujarati", "Marathi", "Urdu", "Spanish", "French", "German", "Arabic", "Mandarin", "Chinese", "Japanese", "Portuguese", "Italian", "Dutch")
+    for line in sections["languages"]:
+        for language in language_names:
+            if re.search(r"(?<![A-Za-z])" + re.escape(language) + r"(?![A-Za-z])", line, re.I):
+                proficiency = None
+                for label, value in (("native", "native"), ("fluent", "fluent"), ("professional", "professional"), ("conversational", "conversational"), ("basic", "basic")):
+                    if re.search(r"\b" + label + r"\b", line, re.I):
+                        proficiency = value
+                        break
+                if not any(item["language"].lower() == language.lower() for item in languages):
+                    languages.append({"language": language, "proficiency": proficiency})
+    return {"employment": employment, "education": education, "certifications": certifications, "languages": languages}
+
+
+def extract_cv_profile(text: str, filename: str) -> dict:
+    """Extract reviewable profile suggestions from selectable CV text."""
+    # For profile suggestions, never infer a person's name from the uploaded filename.
+    # Keep filename-based naming only for the separate bulk-import workflow.
+    fields = cv_candidate_fields(text, filename, use_filename_fallback=False)
+    if not text.strip():
+        fields.update({"first_name": "", "last_name": None, "email": None, "phone": None, "skills": []})
+    lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
+    role_pattern = re.compile(
+        r"(?i)\b(?:(?:senior|junior|lead|principal|staff)\s+)?"
+        r"(?:(?:software|full[ -]?stack|java|python|data|machine learning|cloud|devops|program|project|"
+        r"operations|marketing|recruitment|hr|human resources|business|product|customer success|finance|sales)\s+)?"
+        r"(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|"
+        r"coordinator|administrator|specialist|director|officer|executive|technician|accountant|teacher|nurse|doctor|researcher|intern|assistant)\b"
+    )
+    title = None
+    for line in lines[:80]:
+        if len(line) <= 100:
+            match = role_pattern.search(line)
+            if match:
+                title = match.group(0)[:200]
+                break
+    links = []
+    for raw_url in re.findall(r"https?://[^\s<>]+", text, re.I):
+        url = raw_url.rstrip(".,;:)")
+        host = re.sub(r"^www\.", "", re.sub(r"^https?://", "", url, flags=re.I).split("/")[0], flags=re.I).lower()
+        kind = "linkedin" if "linkedin.com" in host else "github" if "github.com" in host else "portfolio"
+        if not any(item["url"] == url for item in links):
+            links.append({"type": kind, "url": url})
+    location = None
+    # Location inference is intentionally conservative: employer/technology lines such
+    # as "Snowflake, AWS" must not be presented as a candidate's city and region.
+    known_countries = r"(United Kingdom|United States of America|United States|Great Britain|England|Scotland|Wales|Northern Ireland|UK|USA|India|Australia)"
+    for line in lines[:15]:
+        if "@" in line or "http" in line.lower():
+            continue
+        labelled = re.match(r"(?i)^(?:location|based in|address)\s*[:\-]\s*(.+)$", line)
+        candidate_line = labelled.group(1).strip() if labelled else line
+        match = re.search(
+            rf"^([A-Z][A-Za-z .'-]{{1,30}}),\s*([A-Z][A-Za-z .'-]{{1,30}}),?\s*{known_countries}\s*$",
+            candidate_line,
+        )
+        if match:
+            location = {"city": match.group(1).strip(), "region": match.group(2).strip(), "country": match.group(3)}
+            break
+        # Accept explicitly labelled locations without a country, but do not infer
+        # a location from arbitrary capitalised pairs elsewhere in the CV.
+        if labelled and len(candidate_line) <= 100 and not re.search(r"\b(?:AWS|Azure|Snowflake|LinkedIn|Pinterest|Pandora)\b", candidate_line, re.I):
+            pieces = [part.strip() for part in re.split(r"[,|]", candidate_line) if part.strip()]
+            if 1 <= len(pieces) <= 3:
+                location = {"city": pieces[0], "region": pieces[1] if len(pieces) > 1 else None, "country": pieces[2] if len(pieces) > 2 else None}
+                break
+    return {**fields, "current_title": title, "location": location, "links": links[:20], **_cv_sections(text), "review_required": True, "ocr_required": not bool(text.strip())}
+
+def cv_candidate_fields(text: str, filename: str, *, use_filename_fallback: bool = True) -> dict:
     email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
     phone_match = re.search(r"(?<!\w)(?:\+?\d[\d ()\-.]{7,}\d)(?!\w)", text)
     excluded = {
         "curriculum vitae", "resume", "résumé", "cv", "professional summary",
         "summary", "profile", "contact", "contact details", "work experience",
-        "professional experience", "education", "skills", "experience",
+        "professional experience", "education", "skills", "experience", "objective",
+        "personal statement", "references", "key achievements", "technical skills",
+        "core skills", "key skills", "areas of expertise", "technical competencies",
+        "competencies", "professional profile", "personal details", "career summary",
     }
+    # A role heading is common near the top of a CV and must never be mistaken for a person's name.
+    role_heading = re.compile(
+        r"(?i)\b(?:(?:senior|junior|lead|principal|staff|assistant|associate|head of|chief)\s+)?"
+        r"(?:(?:software|full[ -]?stack|java|python|data|machine learning|cloud|devops|program|project|"
+        r"operations|marketing|recruitment|hr|human resources|business|product|customer success|finance|sales)\s+)?"
+        r"(?:developer|engineer|analyst|architect|consultant|designer|manager|recruiter|scientist|"
+        r"coordinator|administrator|specialist|director|officer|executive|technician|accountant|teacher|"
+        r"nurse|doctor|researcher|intern|assistant|student)\b"
+    )
     name = ""
-    for raw_line in text.splitlines()[:15]:
+    candidate_lines = text.splitlines()[:15]
+    for line_index, raw_line in enumerate(candidate_lines):
         line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
-        if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+        if not line or len(line) > 80 or "@" in line or "http" in line.lower() or re.search(r"\d{3}", line):
             continue
-        if line.casefold() in excluded or len(line.split()) > 5:
+        if line.casefold() in excluded or len(line.split()) > 5 or role_heading.search(line):
             continue
-        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
-            name = line
-            break
-    if not name:
+        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line):
+            tokens = [token.casefold() for token in line.split()]
+            known_skill_tokens = {skill.casefold() for skill in CV_SKILL_KEYWORDS}
+            if len(tokens) >= 2:
+                if all(token in known_skill_tokens for token in tokens):
+                    # A skills row such as "Python SQL AWS" is not a candidate name,
+                    # even when an email address appears on a following line.
+                    continue
+                name = line
+                break
+            # Some CVs use a single-word name; accept it only at the very top when contact details follow.
+            nearby = " ".join(candidate_lines[line_index + 1:line_index + 4])
+            nearby_has_email = bool(re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", nearby, re.I))
+            nearby_has_phone = bool(re.search(r"(?<!\w)(?:\+?\d[\d ().-]{7,}\d)(?!\w)", nearby))
+            known_skill_lines = {skill.casefold() for skill in CV_SKILL_KEYWORDS}
+            is_skill_heading = line.casefold() in known_skill_lines
+            if line_index <= 2 and (nearby_has_email or nearby_has_phone) and len(line) >= 2 and not is_skill_heading:
+                name = line
+                break
+    if not name and use_filename_fallback:
         stem = Path(filename).stem
         stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
         stem = re.sub(r"[_-]+", " ", stem)
         name = re.sub(r"\s+", " ", stem).strip(" .-_")
     parts = name.split()
-    first_name = (parts[0] if parts else "CV candidate")[:100]
+    first_name = (parts[0] if parts else ("CV candidate" if use_filename_fallback else ""))[:100]
     last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
     skills = [skill for skill in CV_SKILL_KEYWORDS if re.search(r"(?<![a-z0-9])" + re.escape(skill) + r"(?![a-z0-9])", text, re.I)]
     return {
