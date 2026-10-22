@@ -50,8 +50,6 @@ class ScorecardResponseInput(BaseModel):
     @field_validator("evidence")
     @classmethod
     def evidence_must_contain_text(cls, value: str) -> str:
-        if not value.strip():
-            raise ValueError("Evidence must contain job-related observations")
         return value.strip()
 
 
@@ -61,7 +59,7 @@ class InterviewFeedbackDraft(BaseModel):
     overall_summary: str | None = Field(default=None, max_length=4000)
     strengths: str | None = Field(default=None, max_length=4000)
     concerns: str | None = Field(default=None, max_length=4000)
-    responses: list[ScorecardResponseInput] = Field(min_length=1, max_length=30)
+    responses: list[ScorecardResponseInput] = Field(default_factory=list, max_length=30)
 
     @model_validator(mode="after")
     def unique_response_competencies(self):
