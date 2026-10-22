@@ -383,6 +383,9 @@ async def analytics_sources(
                                )::int as completed_interviews,
                                count(distinct o.id)::int as offers,
                                count(distinct o.id) filter (
+                                   where o.status in ('accepted','rejected')
+                               )::int as decided_offers,
+                               count(distinct o.id) filter (
                                    where o.status='accepted'
                                )::int as accepted_offers,
                                count(distinct a.id) filter (
@@ -402,7 +405,8 @@ async def analytics_sources(
                 rows = [dict(row) for row in cursor.fetchall()]
         for row in rows:
             row["offer_acceptance_rate"] = (
-                row["accepted_offers"] / row["offers"] if row["offers"] else None
+                row["accepted_offers"] / row["decided_offers"]
+                if row["decided_offers"] else None
             )
             row["conversion_rate"] = (
                 row["hires"] / row["applications"] if row["applications"] else None
