@@ -111,19 +111,72 @@ async def analytics_kpis(
                 hire_row = cursor.fetchone()
 
                 cursor.execute(
-                    """select count(*)::int as open_vacancies
+                    """select count(*) filter (where j.status='open')::int as open_vacancies,
+                              count(*) filter (where j.status='open'
+                                  and coalesce(j.opened_at,j.created_at)::date < current_date - 30)::int
+                                  as open_more_than_30_days,
+                              count(*) filter (where j.status='open' and j.opened_at is null)::int
+                                  as missing_opened_at,
+                              percentile_cont(0.5) within group (
+                                  order by current_date - coalesce(j.opened_at,j.created_at)::date
+                              ) filter (where j.status='open') as median_days_open
                        from public.jobs j
-                       where j.organization_id=%s and j.status='open'
+                       where j.organization_id=%s
+                         and j.status in ('open','on_hold')
                          and (%s::uuid is null or j.id=%s::uuid)
                          and (%s::uuid is null or j.recruiter_id=%s::uuid)""",
                     [organization_id, job_id, job_id, recruiter_id, recruiter_id],
                 )
                 vacancy_row = cursor.fetchone()
 
+                fill_clauses = [
+                    "jr.organization_id=%s",
+                    "jr.status='approved'",
+                    "jr.approved_at is not null",
+                    "j.organization_id=jr.organization_id",
+                    "j.id=jr.job_id",
+                ]
+                fill_params = [organization_id]
+                if date_from:
+                    fill_clauses.append("jr.approved_at >= %s::date")
+                    fill_params.append(date_from)
+                if date_to:
+                    fill_clauses.append("jr.approved_at < (%s::date + interval '1 day')")
+                    fill_params.append(date_to)
+                if job_id:
+                    fill_clauses.append("jr.job_id=%s")
+                    fill_params.append(job_id)
+                if recruiter_id:
+                    fill_clauses.append("coalesce(jr.recruiter_id,j.recruiter_id)=%s")
+                    fill_params.append(recruiter_id)
+                cursor.execute(
+                    f"""select percentile_cont(0.5) within group (
+                                  order by extract(epoch from (filled.accepted_at-jr.approved_at))/86400.0
+                               ) as median_days,
+                               count(*)::int as complete_requisitions
+                        from public.job_requisitions jr
+                        join public.jobs j on j.id=jr.job_id and j.organization_id=jr.organization_id
+                        join lateral (
+                            select min(o.responded_at) as accepted_at
+                            from public.applications a
+                            join public.offers o on o.application_id=a.id
+                               and o.organization_id=a.organization_id
+                            where a.organization_id=jr.organization_id
+                              and a.job_id=jr.job_id
+                              and o.status='accepted'
+                              and o.responded_at is not null
+                        ) filled on filled.accepted_at is not null
+                        where {' and '.join(fill_clauses)}
+                          and filled.accepted_at >= jr.approved_at""",
+                    fill_params,
+                )
+                fill_row = cursor.fetchone()
+
         applications = application_row["applications"]
         decided_offers = offer_row["decided_offers"]
         accepted_offers = offer_row["accepted_offers"]
         complete_records = hire_row["complete_records"]
+        fill_records = fill_row["complete_requisitions"]
         return {
             "definitions_version": "1.0",
             "filters": {
@@ -152,6 +205,19 @@ async def analytics_kpis(
                     "definition": "Median calendar days from application creation to accepted offer response",
                 },
                 "open_vacancies": {"value": vacancy_row["open_vacancies"], "status": "available"},
+                "median_time_to_fill_days": {
+                    "value": float(fill_row["median_days"]) if fill_row["median_days"] is not None else None,
+                    "complete_requisitions": fill_records,
+                    "status": "available" if fill_records else "insufficient_complete_requisitions",
+                    "definition": "Median calendar days from requisition approval to first accepted offer response for linked approved requisitions",
+                },
+                "vacancy_ageing": {
+                    "median_days_open": float(vacancy_row["median_days_open"]) if vacancy_row["median_days_open"] is not None else None,
+                    "open_more_than_30_days": vacancy_row["open_more_than_30_days"],
+                    "missing_opened_at": vacancy_row["missing_opened_at"],
+                    "age_anchor": "opened_at, falling back to job created_at",
+                    "status": "available" if vacancy_row["open_vacancies"] else "empty_open_vacancy_cohort",
+                },
             },
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
