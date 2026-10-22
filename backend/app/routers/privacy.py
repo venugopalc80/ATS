@@ -350,7 +350,7 @@ async def preview_retention(
                         "excluded_active_exception_count": counts["held_count"],
                         "previously_processed_count": counts["processed_count"],
                         "items": items,
-                        "items_truncated": counts["eligible_count"] > len(items),
+                        "items_truncated": counts["due_count"] > len(items),
                     })
 
                 cursor.execute(
