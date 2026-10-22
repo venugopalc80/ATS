@@ -145,6 +145,29 @@ create table if not exists public.import_row_results (
 create index if not exists import_row_results_batch_status_idx
   on public.import_row_results (organization_id, batch_id, status, row_number);
 
+-- Preserve source and import provenance on the canonical candidate row.
+alter table public.candidates add column if not exists source_id uuid;
+alter table public.candidates add column if not exists import_batch_id uuid;
+do $
+begin
+  if not exists (select 1 from pg_constraint where conname = 'candidates_source_org_fkey') then
+    alter table public.candidates add constraint candidates_source_org_fkey
+      foreign key (organization_id, source_id)
+      references public.candidate_sources(organization_id, id) on delete restrict;
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'candidates_import_batch_org_fkey') then
+    alter table public.candidates add constraint candidates_import_batch_org_fkey
+      foreign key (organization_id, import_batch_id)
+      references public.import_batches(organization_id, id) on delete restrict;
+  end if;
+end $;
+create index if not exists candidates_source_idx
+  on public.candidates (organization_id, source_id, created_at desc)
+  where source_id is not null;
+create index if not exists candidates_import_batch_idx
+  on public.candidates (organization_id, import_batch_id)
+  where import_batch_id is not null;
+
 create table if not exists public.recruitment_campaigns (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
