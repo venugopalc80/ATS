@@ -154,14 +154,26 @@ alter table public.assessment_reviews enable row level security;
 alter table public.assessment_assignment_events enable row level security;
 alter table public.assessment_provider_events enable row level security;
 
--- Browser clients receive no direct write access. The authenticated FastAPI service
--- validates organisation membership and uses the server-side database connection.
+-- Browser clients receive no direct access. The authenticated FastAPI service validates
+-- organisation membership and uses the server-side database connection.
 revoke all on public.assessment_templates, public.assessment_assignments, public.assessment_submissions,
   public.assessment_results, public.assessment_reviews, public.assessment_assignment_events,
   public.assessment_provider_events from anon, authenticated;
-grant select on public.assessment_templates, public.assessment_assignments, public.assessment_submissions,
-  public.assessment_results, public.assessment_reviews, public.assessment_assignment_events
-  to authenticated;
+
+create or replace function public.prevent_assessment_event_mutation()
+returns trigger
+language plpgsql
+set search_path = ''
+as $
+begin
+  raise exception 'assessment assignment events are append-only';
+end;
+$;
+
+drop trigger if exists assessment_assignment_events_append_only on public.assessment_assignment_events;
+create trigger assessment_assignment_events_append_only
+before update or delete on public.assessment_assignment_events
+for each row execute function public.prevent_assessment_event_mutation();
 
 comment on table public.assessment_provider_events is 'Webhook idempotency ledger; stores payload hash and processing metadata, not full raw payloads.';
 comment on column public.assessment_assignments.accommodation_arrangements is 'Record only practical arrangements needed to administer the assessment; do not record diagnoses.';
