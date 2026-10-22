@@ -1,6 +1,16 @@
 -- Idea 13: versioned recruitment documents and provider-backed e-signature audit trail.
 -- Content is stored in a private bucket. Each edit creates a new version row.
 
+-- Parent-record composite keys make tenant ownership enforceable by the database.
+-- These prerequisites are defined here because this migration sorts before later
+-- timestamped feature migrations that also use composite tenant-safe references.
+create unique index if not exists candidates_organization_id_id_uidx
+  on public.candidates (organization_id, id);
+create unique index if not exists applications_organization_id_id_uidx
+  on public.applications (organization_id, id);
+create unique index if not exists offers_organization_id_id_uidx
+  on public.offers (organization_id, id);
+
 create table if not exists public.recruitment_document_templates (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
@@ -39,9 +49,9 @@ create table if not exists public.recruitment_documents (
   document_group_id uuid not null default gen_random_uuid(),
   version integer not null default 1 check (version > 0),
   template_version_id uuid,
-  candidate_id uuid references public.candidates(id) on delete restrict,
-  application_id uuid references public.applications(id) on delete restrict,
-  offer_id uuid references public.offers(id) on delete restrict,
+  candidate_id uuid,
+  application_id uuid,
+  offer_id uuid,
   document_type text not null check (document_type in ('offer_letter','acknowledgement','policy','other')),
   jurisdiction_code text not null check (jurisdiction_code in ('GB','US','IN','AU','GLOBAL')),
   status text not null default 'draft'
@@ -64,6 +74,12 @@ create table if not exists public.recruitment_documents (
   updated_at timestamptz not null default now(),
   foreign key (template_version_id, organization_id)
     references public.recruitment_document_template_versions(id, organization_id) on delete restrict,
+  foreign key (organization_id, candidate_id)
+    references public.candidates(organization_id, id) on delete restrict,
+  foreign key (organization_id, application_id)
+    references public.applications(organization_id, id) on delete restrict,
+  foreign key (organization_id, offer_id)
+    references public.offers(organization_id, id) on delete restrict,
   unique (document_group_id, version),
   check (candidate_id is not null or application_id is not null or offer_id is not null),
   unique (id, organization_id)
