@@ -7,6 +7,8 @@ on:
       - "backend/app/routers/billing.py"
       - "backend/app/routers/billing_webhooks.py"
       - "backend/app/services/entitlement_policy.py"
+      - "backend/app/routers/organization_settings.py"
+      - "backend/tests/test_organization_settings.py"
       - "backend/tests/test_billing.py"
       - "backend/tests/test_billing_webhooks.py"
       - "backend/tests/test_entitlement_policy.py"
@@ -39,6 +41,9 @@ jobs:
       - name: Test billing API
         working-directory: backend
         run: python -m unittest discover -s tests -p "test_billing.py" -v
+      - name: Test organisation settings validation
+        working-directory: backend
+        run: python -m unittest discover -s tests -p "test_organization_settings.py" -v
       - name: Test Stripe webhook safeguards
         working-directory: backend
         run: python -m unittest discover -s tests -p "test_billing_webhooks.py" -v
