@@ -13,7 +13,7 @@
 - Separate organisation-scoped `job_requisitions` table with controlled status, salary/budget/headcount validation, approver metadata, and a unique optional job link
 - Authenticated API endpoints for list, create draft, update draft/rejected request, submit, approve, reject, and convert to job
 - Idempotent conversion: repeated conversion requests return the existing linked job
-- Requisition activity entries written to `audit_events`; edit events capture old/new values for changed fields
+- Requisition and job activity entries written to `audit_events`; edit events capture old/new values for changed fields, including recruiter/hiring-manager reassignment
 - Jobs & Requisitions page with draft creation/edit-resume, tenant-scoped recruiter and hiring-manager assignment controls, search/status filtering, sortable columns, visible pagination, submit/approve/reject/convert actions
 - Vacancy close action uses a soft close instead of deleting the job row, preserving application links
 - Server-side status-transition and role checks for job updates; organisation membership and eligible-role checks for job/requisition assignment links
@@ -30,11 +30,12 @@
 - [x] Add draft edit/resume in the UI for draft/rejected requisitions
 - [x] Add table sorting and visible pagination controls to the workspace (client-side over the API's 100-row result cap)
 - [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
-- [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new edit audit metadata, invalid job status transitions, and route ordering
+- [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new requisition and job assignment audit metadata, invalid job status transitions, and route ordering
 - [ ] Add/verify broader database-backed lifecycle and job status-transition tests (current regression tests mock persistence; staging/browser acceptance remains required)
 - [ ] Resolve Vercel preview build-rate limit (latest checks report deployment rate limited; retry after the limit window or use an approved build-capacity change)
 - [x] Latest backend unit-test run 39805425180 passed: 48 tests run, 4 skipped, including route ordering, job status-transition and assignment-role regression tests
-- [x] Latest full GitHub Actions run 39805425180 completed successfully: backend tests passed (48 tests, 4 skipped), frontend typecheck passed, and production build passed
+- [x] GitHub Actions run 39805425180 completed successfully on code commit `0f95b3e5c99d94e0fcbb8ea16d2d17ee2518f944`: backend tests passed (48 tests, 4 skipped), frontend typecheck passed, and production build passed
+- [ ] Re-run CI for the additional job reassignment audit metadata and test (latest code commits `38d1df5d3a5137c74dc5abdd525090673aa6561f` and `80303c5d81de39bf4419d19e5de2a210d5db0b15`)
 - [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
