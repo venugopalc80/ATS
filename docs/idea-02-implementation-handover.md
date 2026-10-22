@@ -32,9 +32,10 @@
 - [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
 - [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new edit audit metadata, invalid job status transitions, and route ordering
 - [ ] Add/verify broader database-backed lifecycle and job status-transition tests (current regression tests mock persistence; staging/browser acceptance remains required)
-- [x] Latest backend unit-test run 39800965630 passed: 44 tests run, 4 skipped, including the old/new recruiter assignment audit assertion
-- [x] Frontend typecheck and production build steps passed in run 39800730424; frontend code has not changed since that successful run
-- [ ] Latest overall workflow run 39800965630 to finalize its frontend job (queued at last check)
+- [ ] Resolve Vercel preview build-rate limit (latest checks report deployment rate limited; retry after the limit window or use an approved build-capacity change)
+- [x] Latest backend unit-test run 39805425180 passed: 48 tests run, 4 skipped, including route ordering, job status-transition and assignment-role regression tests
+- [ ] Confirm frontend typecheck and production build in latest workflow run 39805425180 (in progress at last check)
+- [x] Earlier frontend typecheck and production build passed in run 39800965630; frontend code has not changed since that successful run
 - [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
