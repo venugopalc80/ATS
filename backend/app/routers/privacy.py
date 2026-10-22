@@ -64,6 +64,17 @@ class RetentionPolicyCreate(BaseModel):
     effective_at: datetime
 
 
+class RetentionExceptionCreate(BaseModel):
+    organization_id: UUID
+    policy_id: UUID | None = None
+    target_table: Literal["candidates", "applications", "candidate_documents", "candidate_processing_records", "audit_events"]
+    target_record_id: UUID
+    exception_type: Literal["legal_hold", "legal_requirement", "dispute", "manual_review", "other"]
+    reason: str = Field(min_length=1, max_length=4000)
+    starts_at: datetime
+    ends_at: datetime | None = None
+
+
 class ProcessingRecordCreate(BaseModel):
     organization_id: UUID
     candidate_id: UUID
@@ -201,6 +212,77 @@ async def create_retention_policy(
                                  "action": payload.action, "retention_days": payload.retention_days})],
                 )
                 return row
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+
+
+@router.get("/retention-exceptions")
+async def list_retention_exceptions(
+    organization_id: UUID,
+    active_only: bool = True,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_admin(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select id, organization_id, policy_id, target_table, target_record_id,
+                              exception_type, reason, starts_at, ends_at, approved_by, created_at
+                       from public.retention_exceptions
+                       where organization_id = %s
+                         and (%s = false or (starts_at <= now() and (ends_at is null or ends_at > now())))
+                       order by starts_at desc""",
+                    [organization_id, active_only],
+                )
+                return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+
+
+@router.post("/retention-exceptions", status_code=201)
+async def create_retention_exception(
+    payload: RetentionExceptionCreate,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_admin(user_id, payload.organization_id)
+    if payload.ends_at is not None and payload.ends_at <= payload.starts_at:
+        raise HTTPException(status_code=422, detail="Exception end must be after its start")
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                if payload.policy_id is not None:
+                    cursor.execute(
+                        "select id from public.retention_policies where id = %s and organization_id = %s",
+                        [payload.policy_id, payload.organization_id],
+                    )
+                    if cursor.fetchone() is None:
+                        raise HTTPException(status_code=422, detail="Retention policy does not belong to this organisation")
+                cursor.execute(
+                    """insert into public.retention_exceptions
+                       (organization_id, policy_id, target_table, target_record_id,
+                        exception_type, reason, starts_at, ends_at, approved_by)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                       returning id, organization_id, policy_id, target_table, target_record_id,
+                                 exception_type, reason, starts_at, ends_at, approved_by, created_at""",
+                    [payload.organization_id, payload.policy_id, payload.target_table,
+                     payload.target_record_id, payload.exception_type, payload.reason,
+                     payload.starts_at, payload.ends_at, user_id],
+                )
+                row = cursor.fetchone()
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s, %s, 'privacy.retention_exception_created',
+                               'retention_exception', %s, %s::jsonb)""",
+                    [payload.organization_id, user_id, row["id"],
+                     json.dumps({"exception_type": payload.exception_type,
+                                 "target_table": payload.target_table,
+                                 "target_record_id": str(payload.target_record_id)})],
+                )
+                return row
+    except HTTPException:
+        raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _database_error(exc) from exc
 
