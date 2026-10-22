@@ -193,3 +193,15 @@ A further read-only inspection of ATS-Staging confirmed:
 - PR #69 head `846ba70ee5eae304569cd6aa62825e1beec00662`: GitHub Actions run #539 passed backend unit tests, frontend typecheck and frontend production build. Run: https://github.com/venugopalc80/ATS/actions/runs/39807441180
 - Read-only aggregate queries returned **zero application rows in both ATS-Staging and ATS production**. Therefore no existing live application data was available to validate status compatibility, baseline history seeding, or a realistic end-to-end stage transition.
 - This is a data-readiness gap, not proof that the schema is broken. Before staging acceptance, create isolated test fixtures under a controlled test organisation or use a disposable database, then verify create → transition → history, invalid transition rejection, and cross-tenant denial.
+
+
+## Idea 04 follow-up implementation hardening (2026-10-22, latest checked head)
+
+- PR #69 latest head: `4a8d7747442d0e28f5bc2a1a8f7d7aa0fa7c32b5`; still draft and unmerged.
+- Closed another stage-bypass path: `ApplicationCreate.status` is now restricted to `"new"`, so a caller cannot create an application directly as `hired`, `rejected`, or another later stage. Added schema regression tests for default stage and rejection of `status="hired"`.
+- Added defense in depth in `ApplicationService.transition_application`: reject non-string/missing, blank, and over-1,000-character reasons; trim valid reasons before setting the database audit context. Added service-layer tests for blank/overlong reasons and trimming.
+- These are committed changes, **not yet CI-verified**: the GitHub workflow/status lookup returned no run/status for latest head at audit time. Do not mark the new tests as passed until a run is visible and green.
+- The last known successful CI remains run #539 on the preceding head `846ba70ee5eae304569cd6aa62825e1beec00662` (backend unit tests, frontend typecheck, frontend production build).
+- Database release gates are unchanged: staging has the history table without the corresponding tracked migration-ledger entry; stage configuration is absent from staging and production. No migration or production write was made.
+- Idea 04 remains **41.7% evidenced / 58.3% pending** against the six provisional acceptance criteria. The new tests improve implementation hardening but do not substitute for isolated-database migration tests, authenticated tenant-isolation acceptance, bulk partial-failure handling, candidate/internal status separation, or SLA coverage.
+- Whole product completion remains **not yet verified**. Detailed criteria coverage remains 5 of 49 ideas (10.2%); the remaining 44 ideas need source-of-truth criteria and equivalent review. This is evidence coverage, not implementation completion.
