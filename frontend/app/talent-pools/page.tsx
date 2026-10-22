@@ -17,6 +17,7 @@ export default function TalentPoolsPage() {
   const [visibility, setVisibility] = useState<"restricted" | "organisation">("restricted");
   const [candidateId, setCandidateId] = useState("");
   const [purpose, setPurpose] = useState("Future recruitment opportunity");
+  const [processingBasis, setProcessingBasis] = useState("legitimate_interests");
   const [expiry, setExpiry] = useState("");
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
@@ -86,6 +87,7 @@ export default function TalentPoolsPage() {
           organization_id: organizationId,
           candidate_id: candidateId.trim(),
           purpose: purpose.trim(),
+          processing_basis: processingBasis,
           ...(expiry ? { expires_at: new Date(expiry).toISOString() } : {}),
         }),
       });
@@ -161,6 +163,7 @@ export default function TalentPoolsPage() {
             <form onSubmit={addMember}>
               <label>Candidate ID<input required value={candidateId} onChange={(event) => setCandidateId(event.target.value)} placeholder="Candidate UUID from candidate profile" /></label>
               <label>Purpose for retaining this membership<input required maxLength={500} value={purpose} onChange={(event) => setPurpose(event.target.value)} /></label>
+              <label>Processing basis<select required value={processingBasis} onChange={(event) => setProcessingBasis(event.target.value)}><option value="notice_and_consent">Notice and consent</option><option value="legitimate_interests">Legitimate interests</option><option value="contractual_necessity">Contractual necessity</option><option value="legal_obligation">Legal obligation</option><option value="public_task">Public task</option><option value="other_authorised_basis">Other authorised basis</option></select></label>
               <label>Membership expiry (optional)<input type="date" value={expiry} onChange={(event) => setExpiry(event.target.value)} /></label>
               <button className="btn primary" disabled={loading}>{loading ? "Saving…" : "Add to pool"}</button>
             </form>
@@ -170,11 +173,12 @@ export default function TalentPoolsPage() {
             {members.length === 0 ? <p className="muted-small">No active members in this pool yet.</p> : (
               <div style={{ overflowX: "auto" }}>
                 <table className="table">
-                  <thead><tr><th>Candidate</th><th>Current role</th><th>Location</th><th>Expiry</th><th>Action</th></tr></thead>
+                  <thead><tr><th>Candidate</th><th>Current role</th><th>Location</th><th>Processing basis</th><th>Expiry</th><th>Action</th></tr></thead>
                   <tbody>{members.map((member) => <tr key={member.id}>
                     <td>{[member.first_name, member.last_name].filter(Boolean).join(" ")}</td>
                     <td>{member.current_title || "Not specified"}</td>
                     <td>{[member.city, member.region].filter(Boolean).join(", ") || "—"}</td>
+                    <td>{member.processing_basis?.replaceAll("_", " ") || "Legacy record"}</td>
                     <td>{member.expires_at ? new Date(member.expires_at).toLocaleDateString() : "No membership expiry"}</td>
                     <td><button className="btn" disabled={loading} onClick={() => void removeMember(member)}>Remove</button></td>
                   </tr>)}</tbody>
