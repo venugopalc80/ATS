@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -690,8 +690,7 @@ async def analytics_forecast(
             confidence = "low" if nonzero_months < 3 else "medium"
             status = "baseline_only"
             forecast_value = round(average, 1) if average is not None else None
-        from datetime import date as date_type
-        next_month = (date_type.today().replace(day=28) + __import__("datetime").timedelta(days=4)).replace(day=1)
+        next_month = (date.today().replace(day=28) + timedelta(days=4)).replace(day=1)
         return {
             "organization_id": str(organization_id),
             "history_months": 6,
