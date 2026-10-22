@@ -37,9 +37,9 @@ class InterviewScorecardSchemaTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             InterviewFeedbackDraft(template_id=uuid4(), responses=[response, response])
 
-    def test_feedback_requires_evidence(self):
-        with self.assertRaises(ValidationError):
-            ScorecardResponseInput(competency_id=uuid4(), rating=4, evidence=" ")
+    def test_draft_evidence_can_be_blank_and_is_normalized(self):
+        response = ScorecardResponseInput(competency_id=uuid4(), rating=4, evidence=" ")
+        self.assertEqual(response.evidence, "")
 
 
 if __name__ == "__main__":
