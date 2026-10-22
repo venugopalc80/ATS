@@ -5,7 +5,7 @@ from uuid import uuid4
 
 from pydantic import ValidationError
 
-from app.schemas.candidates import CandidateOut, CandidateUpdate
+from app.schemas.candidates import CandidateCreate, CandidateOut, CandidateUpdate
 from app.services.candidate_service import CandidateService
 
 
@@ -106,6 +106,21 @@ class CandidateServiceTests(unittest.TestCase):
     def test_candidate_response_does_not_expose_raw_cv_content_or_storage_path(self):
         self.assertNotIn("resume_text", CandidateOut.model_fields)
         self.assertNotIn("resume_path", CandidateOut.model_fields)
+
+    def test_candidate_create_rejects_client_supplied_consent_metadata(self):
+        for field, value in (
+            ("consent_recorded_at", "2026-10-22T12:00:00Z"),
+            ("consent_purpose", "recruitment"),
+            ("retention_until", "2030-01-01T00:00:00Z"),
+        ):
+            with self.subTest(field=field):
+                payload = {
+                    "first_name": "Alex",
+                    "organization_id": str(self.organization_id),
+                    field: value,
+                }
+                with self.assertRaises(ValidationError):
+                    CandidateCreate.model_validate(payload)
 
     def test_candidate_update_rejects_client_supplied_consent_metadata(self):
         for field, value in (
