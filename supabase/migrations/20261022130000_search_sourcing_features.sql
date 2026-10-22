@@ -115,7 +115,7 @@ create table if not exists public.import_batches (
   started_at timestamptz,
   completed_at timestamptz,
   updated_at timestamptz not null default now(),
-  foreign key (organization_id, source_id) references public.candidate_sources(organization_id, id) on delete set null,
+  foreign key (organization_id, source_id) references public.candidate_sources(organization_id, id) on delete restrict,
   unique (organization_id, id)
 );
 create index if not exists import_batches_org_created_idx
@@ -195,8 +195,8 @@ create table if not exists public.referrals (
   updated_at timestamptz not null default now(),
   created_by uuid references public.profiles(id) on delete set null,
   unique (organization_id, id),
-  foreign key (organization_id, campaign_id) references public.recruitment_campaigns(organization_id, id) on delete set null,
-  foreign key (organization_id, channel_id) references public.campaign_channels(organization_id, id) on delete set null
+  foreign key (organization_id, campaign_id) references public.recruitment_campaigns(organization_id, id) on delete restrict,
+  foreign key (organization_id, channel_id) references public.campaign_channels(organization_id, id) on delete restrict
 );
 create index if not exists referrals_org_status_idx
   on public.referrals (organization_id, status, received_at desc);
@@ -316,7 +316,7 @@ do $$
 declare t text;
 begin
   foreach t in array array[
-    'saved_searches','talent_pools','talent_pool_memberships','talent_pool_membership_events',
+    'talent_pools','talent_pool_memberships','talent_pool_membership_events',
     'candidate_sources','import_batches','import_row_results','recruitment_campaigns',
     'campaign_channels','referrals','campaign_memberships','campaign_events'
   ] loop
@@ -326,6 +326,8 @@ begin
   end loop;
 end $$;
 
+alter table public.saved_searches enable row level security;
+drop policy if exists saved_searches_member_read on public.saved_searches;
 drop policy if exists saved_searches_owner_or_shared on public.saved_searches;
 create policy saved_searches_owner_or_shared on public.saved_searches
   for select to authenticated
