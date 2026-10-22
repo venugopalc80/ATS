@@ -369,7 +369,7 @@ create policy saved_searches_owner_or_shared on public.saved_searches
   for select to authenticated
   using (public.is_org_member(organization_id) and (owner_user_id = auth.uid() or is_shared));
 
-revoke all on public.saved_searches, public.talent_pools, public.talent_pool_memberships,
+revoke all on public.saved_searches, public.candidate_tags, public.candidate_tag_assignments, public.talent_pools, public.talent_pool_memberships,
   public.talent_pool_membership_events, public.candidate_sources, public.import_batches,
   public.import_row_results, public.recruitment_campaigns, public.campaign_channels,
   public.referrals, public.campaign_memberships, public.campaign_events from anon;
@@ -377,42 +377,6 @@ grant select on public.saved_searches, public.candidate_tags, public.candidate_t
   public.talent_pool_membership_events, public.candidate_sources, public.import_batches,
   public.import_row_results, public.recruitment_campaigns, public.campaign_channels,
   public.referrals, public.campaign_memberships, public.campaign_events to authenticated;
-),
-  created_by uuid references public.profiles(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (organization_id, id),
-  unique (organization_id, name)
-);
-create table if not exists public.candidate_tag_assignments (
-  organization_id uuid not null references public.organizations(id) on delete cascade,
-  candidate_id uuid not null references public.candidates(id) on delete cascade,
-  tag_id uuid not null,
-  assigned_by uuid references public.profiles(id) on delete set null,
-  created_at timestamptz not null default now(),
-  primary key (organization_id, candidate_id, tag_id),
-  foreign key (organization_id, tag_id) references public.candidate_tags(organization_id, id) on delete cascade
-);
-create index if not exists candidate_tag_assignments_tag_idx
-  on public.candidate_tag_assignments (organization_id, tag_id, candidate_id);
-create index if not exists candidate_tag_assignments_candidate_idx
-  on public.candidate_tag_assignments (organization_id, candidate_id, created_at desc);
-
-create table if not exists public.talent_pools (
-  id uuid primary key default gen_random_uuid(),
-  organization_id uuid not null references public.organizations(id) on delete cascade,
-  name text not null check (length(trim(name)) between 1 and 120),
-  description text,
-  owner_user_id uuid references public.profiles(id) on delete set null,
-  visibility text not null default 'restricted' check (visibility in ('restricted','organisation')),
-  created_by uuid references public.profiles(id) on delete set null,
-  created_at timestamptz not null default now(),
-  updated_at timestamptz not null default now(),
-  unique (organization_id, id),
-  unique (organization_id, name)
-);
-create index if not exists talent_pools_org_updated_idx
-  on public.talent_pools (organization_id, updated_at desc);
 
 create table if not exists public.talent_pool_memberships (
   id uuid primary key default gen_random_uuid(),
