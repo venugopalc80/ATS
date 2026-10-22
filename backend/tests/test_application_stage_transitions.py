@@ -6,7 +6,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from app.schemas.applications import ApplicationStageConfigUpdate, ApplicationTransition
+from app.schemas.applications import ApplicationCreate, ApplicationStageConfigUpdate, ApplicationTransition
 from app.services.application_service import ApplicationService
 
 
@@ -160,6 +160,19 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
     def test_stage_config_update_rejects_blank_label(self):
         with self.assertRaisesRegex(ValueError, "Stage label cannot be blank"):
             ApplicationStageConfigUpdate(label="   ")
+
+    def test_new_application_defaults_to_initial_stage(self):
+        payload = ApplicationCreate(organization_id=ORG, job_id=JOB, candidate_id=CANDIDATE)
+        self.assertEqual(payload.status, "new")
+
+    def test_new_application_cannot_skip_audited_transition(self):
+        with self.assertRaises(ValidationError):
+            ApplicationCreate(
+                organization_id=ORG,
+                job_id=JOB,
+                candidate_id=CANDIDATE,
+                status="hired",
+            )
 
     def test_transition_requires_a_reason(self):
         with self.assertRaises(ValidationError):
