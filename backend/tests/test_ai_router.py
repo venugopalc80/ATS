@@ -103,5 +103,48 @@ class TenantScopedEvidenceTests(unittest.TestCase):
 
 
 
+class AIRoleGuardTests(unittest.TestCase):
+    def test_viewer_cannot_summarize_candidate(self):
+        import asyncio
+        from unittest.mock import patch
+        from fastapi import HTTPException
+        from app.routers.ai import assistant
+
+        organization_id = uuid4()
+        user_id = uuid4()
+        payload = GenerateInput(
+            organization_id=organization_id,
+            task="summarize_candidate",
+            candidate_id=uuid4(),
+        )
+        with patch("app.routers.ai.assert_org_member") as member_check, \\
+             patch("app.routers.ai.get_org_role", return_value="viewer"):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(assistant(payload, user_id=user_id))
+
+        self.assertEqual(caught.exception.status_code, 403)
+        member_check.assert_called_once_with(user_id, organization_id)
+
+    def test_viewer_cannot_prepare_interview_questions(self):
+        import asyncio
+        from unittest.mock import patch
+        from fastapi import HTTPException
+        from app.routers.ai import assistant
+
+        organization_id = uuid4()
+        payload = GenerateInput(
+            organization_id=organization_id,
+            task="interview_questions",
+            job_id=uuid4(),
+        )
+        with patch("app.routers.ai.assert_org_member"), \\
+             patch("app.routers.ai.get_org_role", return_value="viewer"):
+            with self.assertRaises(HTTPException) as caught:
+                asyncio.run(assistant(payload, user_id=uuid4()))
+
+        self.assertEqual(caught.exception.status_code, 403)
+
+
+
 if __name__ == "__main__":
     unittest.main()
