@@ -1,4 +1,5 @@
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
+import math
 from typing import Any
 from uuid import UUID
 
@@ -41,16 +42,25 @@ class PublicApplicationIn(BaseModel):
 
 def _validate_answer(question: dict[str, Any], value: Any) -> bool:
     field_type = question["field_type"]
-    if value is None or value == "":
+    if value is None or value == "" or value == [] or (isinstance(value, str) and not value.strip()):
         return not question["required"]
     if field_type in {"text", "textarea", "email", "phone", "date"}:
         if not isinstance(value, str):
             return False
         if field_type == "email":
             return "@" in value and "." in value.rsplit("@", 1)[-1] and not any(ch.isspace() for ch in value)
+        if field_type == "date":
+            try:
+                date.fromisoformat(value)
+                return True
+            except ValueError:
+                return False
         return len(value) <= 12000
     if field_type == "number":
-        return isinstance(value, (int, float)) and not isinstance(value, bool)
+        if not isinstance(value, (int, float)) or isinstance(value, bool) or not math.isfinite(value):
+            return False
+        rules = question.get("validation") or {}
+        return (rules.get("min") is None or value >= rules["min"]) and (rules.get("max") is None or value <= rules["max"])
     if field_type in {"boolean", "checkbox"}:
         return isinstance(value, bool)
     if field_type in {"select", "radio"}:
