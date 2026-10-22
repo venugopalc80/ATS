@@ -188,7 +188,7 @@ async def approve_support_access(
                 cursor.execute(
                     """update public.support_access_grants
                        set approved_by_org_user_id=%s, approved_at=now()
-                       where id=%s and expires_at > now()
+                       where id=%s and approved_at is null and revoked_at is null and expires_at > now()
                        returning id, organization_id, approved_by_org_user_id, approved_at, expires_at""",
                     [user_id, grant_id],
                 )
@@ -280,14 +280,10 @@ async def platform_get_support_case(
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    """select id, organization_id, category, priority, status, subject,
-                              description, created_at, updated_at, resolved_at
-                       from public.support_cases where id=%s""",
-                    [case_id],
-                )
-                case = cursor.fetchone()
-                if case is None:
+                # Read only the tenant key before checking the customer's approval.
+                cursor.execute("select organization_id from public.support_cases where id=%s", [case_id])
+                case_ref = cursor.fetchone()
+                if case_ref is None:
                     raise HTTPException(status_code=404, detail="Support case not found")
                 cursor.execute(
                     """select id, purpose, scope, approved_by_org_user_id, expires_at
@@ -296,11 +292,18 @@ async def platform_get_support_case(
                          and approved_at is not null and revoked_at is null
                          and expires_at > now() and scope @> array['case_metadata']::text[]
                        order by approved_at desc limit 1""",
-                    [case["organization_id"], user_id],
+                    [case_ref["organization_id"], user_id],
                 )
                 grant = cursor.fetchone()
                 if grant is None:
                     raise HTTPException(status_code=403, detail="Active organisation-approved support access is required")
+                cursor.execute(
+                    """select id, organization_id, category, priority, status, subject,
+                              description, created_at, updated_at, resolved_at
+                       from public.support_cases where id=%s""",
+                    [case_id],
+                )
+                case = cursor.fetchone()
                 cursor.execute(
                     """insert into public.audit_events
                        (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
