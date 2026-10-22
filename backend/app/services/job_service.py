@@ -95,5 +95,5 @@ class JobService:
     async def delete_job(self, job_id: UUID) -> bool:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("delete from public.jobs where id = %s", [job_id])
+                cursor.execute("update public.jobs set status = 'closed', closed_at = coalesce(closed_at, now()), updated_at = now() where id = %s", [job_id])
                 return cursor.rowcount > 0
