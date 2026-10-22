@@ -5,7 +5,7 @@ from uuid import UUID
 
 from pydantic import ValidationError
 
-from app.routers.sourcing import SavedSearchCreate, SearchCriteria, _escape_like, _search_rows
+from app.routers.sourcing import SavedSearchCreate, SearchCriteria, _escape_like, _map_csv_row, _search_rows
 
 ORG_ID = UUID("11111111-1111-1111-1111-111111111111")
 
@@ -100,3 +100,22 @@ class SourcingSearchTests(TestCase):
         self.assertIn("j.organization_id=base.organization_id", sql)
         self.assertIn("base.organization_id = %s", sql)
         self.assertIn("base.status = %s", sql)
+
+    def test_csv_row_validation_requires_name_and_valid_email(self):
+        mapping = {"first_name": "First Name", "email": "Email", "country_code": "Country"}
+        data, errors = _map_csv_row(
+            {"First Name": "", "Email": "not-an-email", "Country": "GB"},
+            mapping,
+        )
+        self.assertIsNone(data["first_name"])
+        self.assertTrue(any("first_name is required" in error for error in errors))
+        self.assertTrue(any("email format is invalid" in error for error in errors))
+
+    def test_csv_row_maps_skills_and_normalises_country_code(self):
+        data, errors = _map_csv_row(
+            {"First Name": "Ada", "Skills": "Python; SQL, TypeScript", "Country": "gb"},
+            {"first_name": "First Name", "skills": "Skills", "country_code": "Country"},
+        )
+        self.assertEqual(errors, [])
+        self.assertEqual(data["skills"], ["Python", "SQL", "TypeScript"])
+        self.assertEqual(data["country_code"], "GB")
