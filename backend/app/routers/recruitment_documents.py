@@ -276,7 +276,11 @@ async def receive_normalized_signature_event(
                 )
                 doc_status = "signed" if cursor.fetchone()["pending"] == 0 else document["status"]
             elif event.event_type in {"sent", "viewed"}:
-                doc_status = event.event_type if event.event_type == "sent" or document["status"] == "sent" else document["status"]
+                doc_status = (
+                    "sent" if event.event_type == "sent" and document["status"] not in {"viewed", "signed"}
+                    else "viewed" if event.event_type == "viewed" and document["status"] in {"sent", "viewed"}
+                    else document["status"]
+                )
             else:
                 doc_status = document["status"]
             if doc_status != document["status"]:
@@ -314,7 +318,7 @@ RECRUITMENT_BUCKET = "recruitment-documents"
 MAX_RECRUITMENT_DOCUMENT_BYTES = 20 * 1024 * 1024
 RECRUITMENT_FILE_TYPES = {
     "application/pdf": (".pdf", b"%PDF-"),
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": (".docx", b"PK\\x03\\x04"),
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": (".docx", b"PK\x03\x04"),
 }
 
 
