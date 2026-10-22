@@ -227,7 +227,7 @@ async def analytics_funnel(
                 "recruiter_id": str(recruiter_id) if recruiter_id else None,
                 "cohort": "stage_event_created_at",
             },
-            "sample_size": len({stage["stage"] for stage in stages}),
+            "sample_size": cohort_size,
             "low_sample_size": total < 5,
             "stages": stages,
             "outcomes": outcomes,
