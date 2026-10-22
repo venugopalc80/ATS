@@ -31,4 +31,4 @@ jobs:
           cache: pip
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt pytest
-      - run: pytest -q tests/test_privacy_models.py tests/test_documents_validation.py tests/test_dashboard.py tests/test_recruitment_submission_workflow.py
+      - run: PYTHONPATH=. pytest -q tests/test_privacy_models.py tests/test_documents_validation.py tests/test_dashboard.py tests/test_recruitment_submission_workflow.py
