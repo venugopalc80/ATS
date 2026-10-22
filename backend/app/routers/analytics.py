@@ -791,3 +791,102 @@ async def analytics_export(
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/campaign-roi")
+async def analytics_campaign_roi(
+    organization_id: UUID,
+    date_from: date | None = Query(default=None),
+    date_to: date | None = Query(default=None),
+    job_id: UUID | None = Query(default=None),
+    recruiter_id: UUID | None = Query(default=None),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Report campaign/channel spend efficiency without claiming financial ROI without revenue data."""
+    assert_org_member(user_id, organization_id)
+    _validate_dates(date_from, date_to)
+    attribution_clauses = ["cm.organization_id=%s"]
+    attribution_params = [organization_id]
+    if date_from:
+        attribution_clauses.append("cm.attributed_at >= %s::date")
+        attribution_params.append(date_from)
+    if date_to:
+        attribution_clauses.append("cm.attributed_at < (%s::date + interval '1 day')")
+        attribution_params.append(date_to)
+    if job_id:
+        attribution_clauses.append("a.job_id=%s")
+        attribution_params.append(job_id)
+    if recruiter_id:
+        attribution_clauses.append("j.recruiter_id=%s")
+        attribution_params.append(recruiter_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"""with attributed as (
+                            select cm.channel_id,
+                                   count(distinct a.id)::int as applications,
+                                   count(distinct a.id) filter (
+                                       where a.status='hired'
+                                   )::int as hires,
+                                   count(distinct a.id) filter (
+                                       where o.status='accepted'
+                                   )::int as applications_with_accepted_offer
+                            from public.campaign_memberships cm
+                            left join public.applications a
+                              on a.id=cm.application_id and a.organization_id=cm.organization_id
+                            left join public.jobs j
+                              on j.id=a.job_id and j.organization_id=a.organization_id
+                            left join public.offers o
+                              on o.application_id=a.id and o.organization_id=a.organization_id
+                            where {' and '.join(attribution_clauses)}
+                            group by cm.channel_id
+                        )
+                        select c.id as campaign_id, c.name as campaign_name,
+                               c.status as campaign_status, c.budget_amount,
+                               c.budget_currency, ch.id as channel_id,
+                               ch.channel_key, ch.source_label, ch.spend_amount,
+                               ch.spend_currency, coalesce(at.applications,0)::int as applications,
+                               coalesce(at.hires,0)::int as hires,
+                               coalesce(at.applications_with_accepted_offer,0)::int as applications_with_accepted_offer
+                        from public.campaign_channels ch
+                        join public.recruitment_campaigns c
+                          on c.id=ch.campaign_id and c.organization_id=ch.organization_id
+                        left join attributed at on at.channel_id=ch.id
+                        where ch.organization_id=%s
+                        order by c.name, ch.channel_key""",
+                    [*attribution_params, organization_id],
+                )
+                rows = [dict(row) for row in cursor.fetchall()]
+        for row in rows:
+            spend = float(row["spend_amount"]) if row["spend_amount"] is not None else None
+            hires = row["hires"]
+            applications = row["applications"]
+            row["cost_per_application"] = spend / applications if spend is not None and applications else None
+            row["cost_per_hire"] = spend / hires if spend is not None and hires else None
+            row["sample_warning"] = applications < 5
+            row["financial_roi"] = None
+            row["financial_roi_status"] = "revenue_data_not_available"
+            if row["budget_amount"] is not None:
+                row["budget_amount"] = float(row["budget_amount"])
+        return {
+            "definitions_version": "1.0",
+            "filters": {
+                "organization_id": str(organization_id),
+                "date_from": date_from.isoformat() if date_from else None,
+                "date_to": date_to.isoformat() if date_to else None,
+                "job_id": str(job_id) if job_id else None,
+                "recruiter_id": str(recruiter_id) if recruiter_id else None,
+                "cohort": "campaign_membership_attributed_at",
+            },
+            "campaign_channels": rows,
+            "limitations": [
+                "Spend and budget remain in their recorded currencies; amounts across different currencies are never summed or compared.",
+                "Cost per application and cost per hire are efficiency measures, not financial ROI.",
+                "Financial ROI is unavailable until attributable placement revenue or an approved value proxy is recorded.",
+                "Only applications linked through campaign memberships are attributed; unattributed applications are not assigned to a campaign.",
+                "Small cohorts are flagged when fewer than five distinct applications are attributed.",
+            ],
+        }
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
