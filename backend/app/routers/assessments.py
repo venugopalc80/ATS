@@ -358,6 +358,7 @@ async def submit_assessment(assignment_id: UUID, payload: AssessmentSubmissionCr
                 if deadline and deadline < datetime.now(timezone.utc):
                     cur.execute("update public.assessment_assignments set status='expired', updated_at=now() where id=%s", [assignment_id])
                     record_event(cur, organization_id, assignment_id, user_id, "assessment_expired", {"deadline": deadline.isoformat()})
+                    conn.commit()
                     raise HTTPException(status_code=409, detail="The assessment deadline has passed")
                 if payload.submission_type != assignment["assessment_type"]:
                     raise HTTPException(status_code=422, detail="Submission type must match the assigned assessment")
