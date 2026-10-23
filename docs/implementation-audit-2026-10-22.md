@@ -231,3 +231,8 @@ The earlier follow-up entry above was superseded by additional commits after tha
 - Updated tests to retain coverage for ordinary source edits and explicitly assert that direct service-level status updates fail before database access.
 - Commit: `ce979fa5fa4201f07863baf3e2f3f9b42b3e7178`. No workflow/status result was returned at the time of this check; this latest change is pending CI. The preceding head `bc72513a5358265fc495f35c7b9b405caa5a94c6` passed run #574.
 - No database writes or deployment occurred. Idea 04 remains **41.7% evidenced / 58.3% pending** until CI and the remaining database/authenticated acceptance gates pass.
+
+
+### Latest CI checkpoint for service-boundary fix (2026-10-23)
+
+Run #576 is executing on commit `ce979fa5fa4201f07863baf3e2f3f9b42b3e7178`: the backend unit-test step completed successfully; frontend dependency installation is still running and typecheck/build are pending. Full CI is not yet green. Track: https://github.com/venugopalc80/ATS/actions/runs/39942271580.
