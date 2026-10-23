@@ -161,8 +161,8 @@ class PublicCareersSubmissionTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_stage_update_is_written_and_visible_to_a_fresh_read(self):
-        """Exercise the service's UPDATE then fresh SELECT contract using an isolated fake DB."""
+    async def test_non_stage_update_is_written_and_visible_to_a_fresh_read(self):
+        """Non-stage application edits remain supported through the generic update service."""
         state = {
             "id": APPLICATION,
             "organization_id": ORG,
@@ -196,10 +196,11 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 self.params = params or []
                 executed.append((self.sql, self.params))
                 if self.sql.startswith("update public.applications set"):
-                    state["status"] = self.params[0]
+                    if "source = %s" in self.sql:
+                        state["source"] = self.params[0]
+                    if "status = %s" in self.sql:
+                        state["status"] = self.params[0]
                     state["updated_at"] = NOW
-                if self.sql.startswith("select set_config"):
-                    return None
 
             def fetchone(self):
                 if "select status, organization_id from public.applications" in self.sql:
@@ -223,18 +224,25 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
         service = ApplicationService()
         with patch("app.services.application_service.get_connection", fake_connection):
             updated = await service.update_application(
-                APPLICATION, ApplicationUpdate(status="screening"), USER
+                APPLICATION, ApplicationUpdate(source="referral"), USER
             )
-            # A new service read simulates the Inbox being reloaded after refresh.
             after_refresh = await service.get_application(APPLICATION)
 
-        self.assertEqual(updated["status"], "screening")
-        self.assertEqual(after_refresh["status"], "screening")
+        self.assertEqual(updated["source"], "referral")
+        self.assertEqual(after_refresh["source"], "referral")
+        self.assertEqual(after_refresh["status"], "new")
         self.assertEqual(after_refresh["id"], APPLICATION)
         self.assertTrue(any(sql.startswith("update public.applications set") for sql, _ in executed))
         self.assertTrue(any("select set_config('app.actor_user_id'" in sql for sql, _ in executed))
-        # Tenant membership is enforced at the router boundary; service queries are ID-scoped.
         self.assertTrue(any("where id=%s" in sql for sql, _ in executed))
+
+    async def test_service_rejects_all_direct_stage_updates_before_database_access(self):
+        with patch("app.services.application_service.get_connection") as connection:
+            with self.assertRaisesRegex(ValueError, "must use transition_application with a reason"):
+                await ApplicationService().update_application(
+                    APPLICATION, ApplicationUpdate(status="screening"), USER
+                )
+        connection.assert_not_called()
 
     async def test_invalid_stage_transition_is_rejected_without_update(self):
         state = {"status": "new", "organization_id": ORG}
