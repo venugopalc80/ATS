@@ -222,3 +222,12 @@ A further read-only inspection of ATS-Staging confirmed:
 ## Correction to previous Idea 04 snapshot (2026-10-23)
 
 The earlier follow-up entry above was superseded by additional commits after that snapshot. The latest inspected PR #69 head is `bc72513a5358265fc495f35c7b9b405caa5a94c6`, not `4a8d7747442d0e28f5bc2a1a8f7d7aa0fa7c32b5`. Run #574 passed backend unit tests, frontend typecheck, and frontend production build on the newer head: https://github.com/venugopalc80/ATS/actions/runs/39844638048. The additional stage-configuration dead-end invariants and tests are included. Vercel checks still fail because of the team build-rate limit; no preview deployment was verified. The migration, authenticated tenant-isolation, and remaining workflow acceptance gates are unchanged.
+
+
+## New service-boundary finding (2026-10-23, pending CI)
+
+- A code-path review found that the HTTP PATCH endpoint rejected stage changes, but `ApplicationService.update_application()` itself still accepted status updates if called by another internal route/service. That could bypass the required transition reason and write an incomplete audit event.
+- Fixed by rejecting any `ApplicationUpdate` payload containing `status` at the service boundary before opening a database connection. Stage changes must call `transition_application()`.
+- Updated tests to retain coverage for ordinary source edits and explicitly assert that direct service-level status updates fail before database access.
+- Commit: `ce979fa5fa4201f07863baf3e2f3f9b42b3e7178`. No workflow/status result was returned at the time of this check; this latest change is pending CI. The preceding head `bc72513a5358265fc495f35c7b9b405caa5a94c6` passed run #574.
+- No database writes or deployment occurred. Idea 04 remains **41.7% evidenced / 58.3% pending** until CI and the remaining database/authenticated acceptance gates pass.
