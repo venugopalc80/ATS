@@ -205,3 +205,15 @@ A further read-only inspection of ATS-Staging confirmed:
 - Database release gates are unchanged: staging has the history table without the corresponding tracked migration-ledger entry; stage configuration is absent from staging and production. No migration or production write was made.
 - Idea 04 remains **41.7% evidenced / 58.3% pending** against the six provisional acceptance criteria. The new tests improve implementation hardening but do not substitute for isolated-database migration tests, authenticated tenant-isolation acceptance, bulk partial-failure handling, candidate/internal status separation, or SLA coverage.
 - Whole product completion remains **not yet verified**. Detailed criteria coverage remains 5 of 49 ideas (10.2%); the remaining 44 ideas need source-of-truth criteria and equivalent review. This is evidence coverage, not implementation completion.
+
+
+## Idea 04 follow-up verification (2026-10-23)
+
+- Latest inspected PR #69 head: `bc72513a5358265fc495f35c7b9b405caa5a94c6`; PR remains draft and unmerged.
+- GitHub Actions run #574 completed successfully on this head: backend unit tests, frontend TypeScript typecheck, and frontend production build passed. Run: https://github.com/venugopalc80/ATS/actions/runs/39844638048.
+- Added stage-configuration invariant checks: enabled non-terminal stages must have at least one next stage; disabled non-terminal stages may have none; terminal stages cannot have outgoing transitions. Regression tests cover each case.
+- The application-creation guard and service-level transition-reason validation remain present in the inspected branch. This closes two bypass paths at schema and service layers, with the latest unit suite green.
+- Vercel checks remain failed due to the team's build-rate limit; no preview acceptance is available from those checks.
+- Database gates remain open: staging contains `application_stage_history` without a corresponding tracked migration-ledger entry; `application_stage_config` is absent in staging and production. No migration was applied.
+- Idea 04 stays **41.7% evidenced / 58.3% pending** against the provisional six-criterion score. Passing unit/CI checks improves confidence in code but does not replace disposable-database migration testing, authenticated tenant-isolation testing, bulk partial-failure handling, candidate-facing/internal status separation, or SLA coverage.
+- Whole-product completion remains **not yet verified**. Detailed acceptance criteria coverage remains 5/49 ideas (**10.2% evidence coverage**, not implementation completion); the full roadmap still needs source-of-truth reconciliation and audit.
