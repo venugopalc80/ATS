@@ -151,6 +151,8 @@ class ApplicationService:
 
     async def update_application(self, application_id: UUID, payload: ApplicationUpdate, actor_user_id: UUID) -> dict[str, Any] | None:
         data = payload.model_dump(mode="python", exclude_unset=True)
+        if "status" in data:
+            raise ValueError("Application stage changes must use transition_application with a reason")
         if not data:
             return await self.get_application(application_id)
         with get_connection() as connection:
@@ -159,9 +161,6 @@ class ApplicationService:
                 existing = cursor.fetchone()
                 if existing is None:
                     return None
-                if "status" in data and data["status"] != existing["status"]:
-                    stage_config = _load_stage_config(cursor, existing["organization_id"])
-                    _validate_configured_transition(stage_config, existing["status"], data["status"])
                 cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
                 assignments = ", ".join(f"{column} = %s" for column in data)
                 cursor.execute("update public.applications set " + assignments + ", updated_at=now() where id=%s returning " + APPLICATION_COLUMNS, list(data.values()) + [application_id])
