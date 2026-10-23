@@ -217,3 +217,8 @@ A further read-only inspection of ATS-Staging confirmed:
 - Database gates remain open: staging contains `application_stage_history` without a corresponding tracked migration-ledger entry; `application_stage_config` is absent in staging and production. No migration was applied.
 - Idea 04 stays **41.7% evidenced / 58.3% pending** against the provisional six-criterion score. Passing unit/CI checks improves confidence in code but does not replace disposable-database migration testing, authenticated tenant-isolation testing, bulk partial-failure handling, candidate-facing/internal status separation, or SLA coverage.
 - Whole-product completion remains **not yet verified**. Detailed acceptance criteria coverage remains 5/49 ideas (**10.2% evidence coverage**, not implementation completion); the full roadmap still needs source-of-truth reconciliation and audit.
+
+
+## Correction to previous Idea 04 snapshot (2026-10-23)
+
+The earlier follow-up entry above was superseded by additional commits after that snapshot. The latest inspected PR #69 head is `bc72513a5358265fc495f35c7b9b405caa5a94c6`, not `4a8d7747442d0e28f5bc2a1a8f7d7aa0fa7c32b5`. Run #574 passed backend unit tests, frontend typecheck, and frontend production build on the newer head: https://github.com/venugopalc80/ATS/actions/runs/39844638048. The additional stage-configuration dead-end invariants and tests are included. Vercel checks still fail because of the team build-rate limit; no preview deployment was verified. The migration, authenticated tenant-isolation, and remaining workflow acceptance gates are unchanged.
