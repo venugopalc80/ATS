@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.routers import applications, public_jobs
-from app.schemas.applications import ApplicationUpdate
+from app.schemas.applications import ApplicationStageConfigUpdate, ApplicationTransition, ApplicationUpdate
 from app.services.application_service import ApplicationService
 
 
@@ -17,6 +17,19 @@ CANDIDATE = UUID("66666666-6666-4666-8666-666666666666")
 APPLICATION = UUID("77777777-7777-4777-8777-777777777777")
 USER = UUID("22222222-2222-4222-8222-222222222222")
 NOW = datetime(2026, 10, 14, 12, tzinfo=timezone.utc)
+
+DEFAULT_STAGE_CONFIG = [
+    {"stage_key": "new", "enabled": True, "allowed_next_stages": ["screening", "rejected", "withdrawn"]},
+    {"stage_key": "screening", "enabled": True, "allowed_next_stages": ["shortlisted", "submitted", "interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "shortlisted", "enabled": True, "allowed_next_stages": ["interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "submitted", "enabled": True, "allowed_next_stages": ["interview", "assessment", "rejected", "withdrawn"]},
+    {"stage_key": "interview", "enabled": True, "allowed_next_stages": ["assessment", "offer", "rejected", "withdrawn"]},
+    {"stage_key": "assessment", "enabled": True, "allowed_next_stages": ["interview", "offer", "rejected", "withdrawn"]},
+    {"stage_key": "offer", "enabled": True, "allowed_next_stages": ["hired", "rejected", "withdrawn"]},
+    {"stage_key": "hired", "enabled": True, "allowed_next_stages": []},
+    {"stage_key": "rejected", "enabled": True, "allowed_next_stages": []},
+    {"stage_key": "withdrawn", "enabled": True, "allowed_next_stages": []},
+]
 
 
 class PublicApplyCursor:
@@ -148,8 +161,8 @@ class PublicCareersSubmissionTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
-    async def test_stage_update_is_written_and_visible_to_a_fresh_read(self):
-        """Exercise the service's UPDATE then fresh SELECT contract using an isolated fake DB."""
+    async def test_non_stage_update_is_written_and_visible_to_a_fresh_read(self):
+        """Non-stage application edits remain supported through the generic update service."""
         state = {
             "id": APPLICATION,
             "organization_id": ORG,
@@ -183,19 +196,25 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 self.params = params or []
                 executed.append((self.sql, self.params))
                 if self.sql.startswith("update public.applications set"):
-                    state["status"] = self.params[0]
+                    if "source = %s" in self.sql:
+                        state["source"] = self.params[0]
+                    if "status = %s" in self.sql:
+                        state["status"] = self.params[0]
                     state["updated_at"] = NOW
-                if self.sql.startswith("select set_config"):
-                    return None
 
             def fetchone(self):
-                if "select status from public.applications" in self.sql:
-                    return {"status": state["status"]}
+                if "select status, organization_id from public.applications" in self.sql:
+                    return {"status": state["status"], "organization_id": state["organization_id"]}
                 if "from public.applications where id=%s" in self.sql:
                     return dict(state)
                 if self.sql.startswith("update public.applications set"):
                     return dict(state)
                 raise AssertionError(f"Unexpected fetchone query: {self.sql}")
+
+            def fetchall(self):
+                if "from public.application_stage_config" in self.sql:
+                    return list(DEFAULT_STAGE_CONFIG)
+                return []
 
         @contextmanager
         def fake_connection():
@@ -205,21 +224,28 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
         service = ApplicationService()
         with patch("app.services.application_service.get_connection", fake_connection):
             updated = await service.update_application(
-                APPLICATION, ApplicationUpdate(status="screening"), USER
+                APPLICATION, ApplicationUpdate(source="referral"), USER
             )
-            # A new service read simulates the Inbox being reloaded after refresh.
             after_refresh = await service.get_application(APPLICATION)
 
-        self.assertEqual(updated["status"], "screening")
-        self.assertEqual(after_refresh["status"], "screening")
+        self.assertEqual(updated["source"], "referral")
+        self.assertEqual(after_refresh["source"], "referral")
+        self.assertEqual(after_refresh["status"], "new")
         self.assertEqual(after_refresh["id"], APPLICATION)
         self.assertTrue(any(sql.startswith("update public.applications set") for sql, _ in executed))
         self.assertTrue(any("select set_config('app.actor_user_id'" in sql for sql, _ in executed))
-        # Tenant membership is enforced at the router boundary; service queries are ID-scoped.
         self.assertTrue(any("where id=%s" in sql for sql, _ in executed))
 
+    async def test_service_rejects_all_direct_stage_updates_before_database_access(self):
+        with patch("app.services.application_service.get_connection") as connection:
+            with self.assertRaisesRegex(ValueError, "must use transition_application with a reason"):
+                await ApplicationService().update_application(
+                    APPLICATION, ApplicationUpdate(status="screening"), USER
+                )
+        connection.assert_not_called()
+
     async def test_invalid_stage_transition_is_rejected_without_update(self):
-        state = {"status": "new"}
+        state = {"status": "new", "organization_id": ORG}
         updates = []
 
         class StateCursor:
@@ -232,9 +258,13 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
                 if self.sql.startswith("update public.applications set"):
                     updates.append(self.sql)
             def fetchone(self):
-                if "select status from public.applications" in self.sql:
+                if "select status, organization_id from public.applications" in self.sql:
                     return dict(state)
                 raise AssertionError(f"Unexpected query: {self.sql}")
+            def fetchall(self):
+                if "from public.application_stage_config" in self.sql:
+                    return list(DEFAULT_STAGE_CONFIG)
+                return []
 
         @contextmanager
         def fake_connection():
@@ -302,6 +332,77 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
                         )
 
         self.assertEqual(error.exception.status_code, 403)
+        update.assert_not_awaited()
+
+    async def test_transition_application_denies_non_member_before_transition(self):
+        row = {
+            "id": APPLICATION,
+            "organization_id": ORG,
+            "job_id": JOB,
+            "candidate_id": CANDIDATE,
+            "source": "careers_page",
+            "status": "new",
+            "match_score": None,
+            "match_explanation": None,
+            "human_reviewed": False,
+            "human_reviewed_by": None,
+            "human_reviewed_at": None,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+                with patch.object(applications.service, "transition_application", new_callable=AsyncMock) as transition:
+                    with self.assertRaises(HTTPException) as error:
+                        await applications.transition_application(
+                            APPLICATION,
+                            ApplicationTransition(status="screening", reason="CV reviewed"),
+                            USER,
+                        )
+
+        self.assertEqual(error.exception.status_code, 403)
+        transition.assert_not_awaited()
+
+    async def test_stage_config_update_requires_org_admin(self):
+        with patch.object(applications, "assert_org_admin", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+            with patch.object(applications.service, "update_stage_config", new_callable=AsyncMock) as update:
+                with self.assertRaises(HTTPException) as error:
+                    await applications.update_application_stage(
+                        "screening",
+                        ORG,
+                        ApplicationStageConfigUpdate(label="Screening"),
+                        USER,
+                    )
+
+        self.assertEqual(error.exception.status_code, 403)
+        update.assert_not_awaited()
+
+    async def test_update_application_requires_transition_endpoint_for_status_changes(self):
+        row = {
+            "id": APPLICATION,
+            "organization_id": ORG,
+            "job_id": JOB,
+            "candidate_id": CANDIDATE,
+            "source": "careers_page",
+            "status": "new",
+            "match_score": None,
+            "match_explanation": None,
+            "human_reviewed": False,
+            "human_reviewed_by": None,
+            "human_reviewed_at": None,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+            with patch.object(applications, "assert_org_member"):
+                with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
+                    with self.assertRaises(HTTPException) as error:
+                        await applications.update_application(
+                            APPLICATION, ApplicationUpdate(status="screening"), USER
+                        )
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("transition endpoint", error.exception.detail)
         update.assert_not_awaited()
 
 
