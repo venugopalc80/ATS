@@ -92,8 +92,9 @@ create table if not exists public.assessment_results (
   created_by uuid references public.profiles(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (organization_id, id),
+  unique (organization_id, assignment_id, id),
   foreign key (organization_id, assignment_id) references public.assessment_assignments(organization_id, id) on delete cascade,
-  foreign key (organization_id, submission_id) references public.assessment_submissions(organization_id, id) on delete set null (submission_id),
+  foreign key (organization_id, assignment_id, submission_id) references public.assessment_submissions(organization_id, assignment_id, id) on delete set null (submission_id),
   check ((score is null and max_score is null) or (score >= 0 and max_score > 0 and score <= max_score)),
   check (summary is null or length(summary) <= 8000)
 );
@@ -109,7 +110,7 @@ create table if not exists public.assessment_reviews (
   reviewed_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   foreign key (organization_id, assignment_id) references public.assessment_assignments(organization_id, id) on delete cascade,
-  foreign key (organization_id, result_id) references public.assessment_results(organization_id, id) on delete set null (result_id)
+  foreign key (organization_id, assignment_id, result_id) references public.assessment_results(organization_id, assignment_id, id) on delete set null (result_id)
 );
 
 -- Append-only operational history for assignment, deadline, accommodation and provider events.
