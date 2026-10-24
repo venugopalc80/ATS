@@ -28,7 +28,7 @@
 - [x] Vacancy closure preserves existing job/application rows
 - [x] Apply migrations to ATS-Staging and verify table columns, RLS, policies, and foreign-key indexes against the live staging schema
 - [x] Add draft edit/resume in the UI for draft/rejected requisitions
-- [x] Add table sorting and visible pagination controls to the workspace (client-side over the API's 100-row result cap)
+- [x] Add table sorting and visible pagination controls to the workspace; fetch additional 100-row API chunks as users advance, so records beyond the first 100 can be reached without loading the entire register up front
 - [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
 - [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new requisition and job assignment audit metadata, invalid job status transitions, and route ordering
 - [ ] Add/verify broader database-backed lifecycle and job status-transition tests (current regression tests mock persistence; staging/browser acceptance remains required)
