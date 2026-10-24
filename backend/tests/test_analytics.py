@@ -371,5 +371,20 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["cost_metrics_status"], "period_spend_history_not_available")
 
 
+    async def test_campaign_cost_ratios_are_unavailable_for_job_or_recruiter_slices(self):
+        result = await analytics_router.analytics_campaign_roi(
+            organization_id=ORG,
+            date_from=None,
+            date_to=None,
+            job_id=UUID("33333333-3333-4333-8333-333333333333"),
+            recruiter_id=None,
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        row = result["campaign_channels"][0]
+        self.assertIsNone(row["cost_per_application"])
+        self.assertIsNone(row["cost_per_hire"])
+        self.assertEqual(row["cost_metrics_status"], "spend_not_segmented_for_filters")
+
+
 if __name__ == "__main__":
     unittest.main()
