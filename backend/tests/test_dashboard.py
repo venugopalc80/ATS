@@ -22,6 +22,7 @@ class FakeCursor:
         self.params = []
         self.queries = []
         self.job_status = "open"
+        self.task_rows = []
 
     def __enter__(self):
         return self
@@ -84,6 +85,8 @@ class FakeCursor:
                 "entity_id": "candidate-1", "metadata": {}, "created_at": datetime(2026, 10, 13, 9, tzinfo=timezone.utc),
                 "actor_user_id": USER, "actor_name": "Recruiter",
             }]
+        if "from public.recruiter_tasks" in self.sql:
+            return self.task_rows
         raise AssertionError(f"Unexpected fetchall query: {self.sql}")
 
 
