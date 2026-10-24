@@ -170,6 +170,16 @@ async def dashboard(
                 )
                 awaiting_decision = cursor.fetchone()["total"]
 
+                cursor.execute(
+                    """select id,title,task_type,priority,status,due_at,candidate_id,job_id
+                       from public.recruiter_tasks
+                       where organization_id=%s and status in ('open','in_progress')
+                         and due_at is not null and due_at < now() + interval '3 days'
+                       order by due_at asc limit 20""",
+                    [organization_id],
+                )
+                due_tasks = list(cursor.fetchall())
+
         priorities = []
         for row in todays_interviews:
             priorities.append({
@@ -215,6 +225,21 @@ async def dashboard(
                 "description": f"{job['title']}: " + "; ".join(job["reasons"]),
                 "href": f"/jobs?job_id={job['id']}",
                 "due_at": None,
+            })
+
+        for task in due_tasks:
+            task_type = task["task_type"]
+            task_id = str(task["id"])
+            label = "Candidate follow-up due" if task_type == "candidate_follow_up" else (
+                "Vacancy follow-up due" if task_type == "vacancy_follow_up" else "Recruiter task due"
+            )
+            priorities.append({
+                "id": task_id,
+                "type": "task_due",
+                "title": label if task["priority"] not in ("high", "urgent") else f"{task['priority'].title()} priority: {label.lower()}",
+                "description": task["title"],
+                "href": f"/tasks?task_id={task_id}",
+                "due_at": task["due_at"],
             })
 
         return {
