@@ -262,3 +262,13 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 3. Add authenticated API integration tests for cross-tenant denial and admin-only configuration changes.
 4. Inspect deployment checks again when they complete; do not trigger extra deployments merely to force a preview.
 5. Once Idea 04 gates are satisfied, reconcile PR #70 and then move to the next roadmap idea with its source-of-truth acceptance criteria.
+
+
+### Additional route-level authorization regression coverage (2026-10-25)
+
+- Added `backend/tests/test_application_pipeline_api_authorization.py` on PR #69 at commit `5d860ead241bf19d65a88922dd685f550bdd5f68`.
+- The new tests exercise the route functions and assert that a non-member is denied before the transition service is called, and a non-admin is denied before stage configuration is updated. These are mocked route-guard tests; they do not replace authenticated HTTP/database integration tests.
+- CI run #604 is in progress on this commit. Backend dependency installation and frontend dependency installation were still running at the latest check; no pass is claimed for the new tests until the run completes.
+- A fresh read-only staging check reconfirmed the history table's `application_stage_history_reason_length` constraint and the two stage-history triggers. The migration ledger query returned no rows for versions `014`, `015`, or `20261022120000`. Table grants show `service_role` and `postgres`, with no direct grants shown for `anon` or `authenticated`.
+- This strengthens the drift diagnosis: staging's history objects and constraint exist but are not represented in the migration ledger. It is still unsafe to blindly reapply the migration or edit the ledger without a documented reconciliation plan.
+- No database writes, migration, merge, or deployment occurred.
