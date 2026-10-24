@@ -272,3 +272,11 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - A fresh read-only staging check reconfirmed the history table's `application_stage_history_reason_length` constraint and the two stage-history triggers. The migration ledger query returned no rows for versions `014`, `015`, or `20261022120000`. Table grants show `service_role` and `postgres`, with no direct grants shown for `anon` or `authenticated`.
 - This strengthens the drift diagnosis: staging's history objects and constraint exist but are not represented in the migration ledger. It is still unsafe to blindly reapply the migration or edit the ledger without a documented reconciliation plan.
 - No database writes, migration, merge, or deployment occurred.
+
+
+### CI result for route-level authorization tests (2026-10-25)
+
+- Run #604 completed successfully on PR #69 head `5d860ead241bf19d65a88922dd685f550bdd5f68`: backend unit tests, frontend TypeScript typecheck, and frontend production build all passed. Run: https://github.com/venugopalc80/ATS/actions/runs/40144207046.
+- The new tests cover route-level guard behaviour with mocked service methods: non-members cannot proceed to transition writes and non-admins cannot proceed to stage configuration writes. They are useful regression tests but are not full authenticated HTTP/database integration tests.
+- Vercel `ats-staging-api` is successful for this commit; `ats` and `aqerith` status checks remain pending at the latest check.
+- PR #69 description now reflects current head and CI #604. PR remains draft/unmerged; no database migration or deployment occurred.
