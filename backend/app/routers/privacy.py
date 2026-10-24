@@ -116,6 +116,12 @@ class RetentionPolicyCreate(BaseModel):
     version: int = Field(ge=1)
     effective_at: datetime
 
+    @model_validator(mode="after")
+    def validate_effective_at_timezone(self):
+        if self.effective_at.tzinfo is None or self.effective_at.utcoffset() is None:
+            raise ValueError("Retention policy effective_at must include a timezone")
+        return self
+
 
 class RetentionExceptionCreate(BaseModel):
     organization_id: UUID
@@ -126,6 +132,16 @@ class RetentionExceptionCreate(BaseModel):
     reason: str = Field(min_length=1, max_length=4000)
     starts_at: datetime
     ends_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_exception_timestamps(self):
+        for field_name in ("starts_at", "ends_at"):
+            value = getattr(self, field_name)
+            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+                raise ValueError(f"Retention exception {field_name} must include a timezone")
+        if self.ends_at is not None and self.ends_at <= self.starts_at:
+            raise ValueError("Exception end must be after its start")
+        return self
 
 
 class ProcessingRecordCreate(BaseModel):
@@ -429,7 +445,7 @@ async def list_retention_exceptions(
             with connection.cursor() as cursor:
                 cursor.execute(
                     """select id, organization_id, policy_id, target_table, target_record_id,
-                              exception_type, reason, starts_at, ends_at, approved_by, created_at
+                              exception_type, reason, starts_at, ends_at, created_by, approved_by, created_at
                        from public.retention_exceptions
                        where organization_id = %s
                          and (%s = false or (starts_at <= now() and (ends_at is null or ends_at > now())))
