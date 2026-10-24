@@ -38,6 +38,8 @@
 - [x] Latest backend suite in GitHub Actions run 39805687840 passed on code commit `80303c5d81de39bf4419d19e5de2a210d5db0b15`: 49 tests run, 4 skipped, including old/new job reassignment audit metadata
 - [x] Full automated checks in GitHub Actions run 39805687840 passed: 49 backend tests (4 skipped), frontend typecheck, and production build
 - [x] Latest automated checks in [GitHub Actions run 39807839661](https://github.com/venugopalc80/ATS/actions/runs/39807839661) passed on commit `8b0363251bf2697df8f3468096c05b22b7982fd3`: 51 backend tests (4 skipped), frontend typecheck, and production build
+- [x] GitHub Actions run [39843992295](https://github.com/venugopalc80/ATS/actions/runs/39843992295) passed on commit `edbecae3b60919c4bd3a9b8f6dfb4ff6f02db1e7`: all 51 backend tests passed with disposable PostgreSQL enabled (including four PostgreSQL recruitment integration tests; no tests skipped), plus frontend typecheck and production build
+- [ ] Add PostgreSQL-backed requisition lifecycle tests (create → submit → approve/reject → convert) and job status-transition persistence tests; current database integration tests cover application listing, public submission persistence, duplicate active application protection, and tenant boundary protection
 - [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
