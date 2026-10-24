@@ -69,6 +69,7 @@ create table if not exists public.assessment_submissions (
   submitted_at timestamptz not null default now(),
   created_at timestamptz not null default now(),
   unique (organization_id, id),
+  unique (organization_id, assignment_id, id),
   foreign key (organization_id, assignment_id) references public.assessment_assignments(organization_id, id) on delete cascade,
   check (text_content is null or length(text_content) <= 100000),
   check (storage_path is null or length(storage_path) <= 1000)
