@@ -7,7 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 
 from app.schemas.applications import ApplicationCreate, ApplicationStageConfigUpdate, ApplicationTransition
-from app.services.application_service import ApplicationService, _validate_stage_config_shape
+from app.services.application_service import ApplicationService, _validate_stage_config_graph, _validate_stage_config_shape
 
 
 ORG = UUID("11111111-1111-4111-8111-111111111111")
@@ -194,6 +194,52 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(next_stages, [])
         self.assertFalse(terminal)
         self.assertFalse(enabled)
+
+    def test_disabling_last_enabled_target_is_rejected(self):
+        stage_config = {
+            "new": {
+                "enabled": True,
+                "allowed_next_stages": ["screening"],
+                "is_terminal": False,
+            },
+            "screening": {
+                "enabled": False,
+                "allowed_next_stages": ["hired"],
+                "is_terminal": False,
+            },
+            "hired": {
+                "enabled": True,
+                "allowed_next_stages": [],
+                "is_terminal": True,
+            },
+        }
+        with self.assertRaisesRegex(ValueError, "at least one enabled next stage"):
+            _validate_stage_config_graph(stage_config)
+
+    def test_enabled_stage_with_an_enabled_path_passes_graph_validation(self):
+        stage_config = {
+            "new": {
+                "enabled": True,
+                "allowed_next_stages": ["screening", "rejected"],
+                "is_terminal": False,
+            },
+            "screening": {
+                "enabled": True,
+                "allowed_next_stages": ["hired"],
+                "is_terminal": False,
+            },
+            "hired": {
+                "enabled": True,
+                "allowed_next_stages": [],
+                "is_terminal": True,
+            },
+            "rejected": {
+                "enabled": True,
+                "allowed_next_stages": [],
+                "is_terminal": True,
+            },
+        }
+        _validate_stage_config_graph(stage_config)
 
     def test_terminal_stage_cannot_have_next_stages(self):
         existing = {
