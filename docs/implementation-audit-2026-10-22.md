@@ -236,3 +236,29 @@ The earlier follow-up entry above was superseded by additional commits after tha
 ### Latest CI checkpoint for service-boundary fix (2026-10-23)
 
 Run #576 is executing on commit `ce979fa5fa4201f07863baf3e2f3f9b42b3e7178`: the backend unit-test step completed successfully; frontend dependency installation is still running and typecheck/build are pending. Full CI is not yet green. Track: https://github.com/venugopalc80/ATS/actions/runs/39942271580.
+
+
+## Current checkpoint (2026-10-25) — PR #69
+
+This checkpoint supersedes the older pending-CI notes above where they describe the latest state. Earlier entries are retained as historical audit trail.
+
+- Current PR #69 head is `b214379e5a09819360ecc74328102da341222f43`, base `main`; PR remains open, draft, and unmerged.
+- GitHub Actions run #603 passed both jobs on the current head: backend unit tests and frontend checks (TypeScript typecheck and production build). Run: https://github.com/venugopalc80/ATS/actions/runs/40144082517.
+- Current Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` are pending. No preview or production behaviour is being claimed from these pending checks.
+- PR #69 description was refreshed to reflect the current head, green CI, and remaining release gates.
+- Duplicate PR #70 remains open/draft. File comparison confirms overlapping router, schema, service and stage-history migration changes; PR #69 has additional configurable transition graph enforcement, frontend changes, and the second stage-config migration. Do not merge both; retain #70 as a reference until its unique changes are reconciled.
+- The latest source still requires isolated database migration tests, authenticated tenant-isolation tests, backend role/grant verification, candidate-facing confidentiality review, and bulk/SLA acceptance. ATS-Staging has an existing history table/triggers without a corresponding tracked migration-ledger entry; stage config remains absent in staging and production.
+- No migration, production write, merge, or deployment was performed.
+
+### Current score and reporting
+
+- **Idea 04:** remains **41.7% evidenced / 58.3% pending** against the six provisional acceptance criteria. Green CI improves code confidence but does not close the outstanding acceptance criteria.
+- **AQERITH overall:** **not yet verified**. Detailed criteria coverage remains **5/49 ideas (10.2% evidence coverage)**; this must not be presented as product implementation completion.
+
+### Next actions
+
+1. Keep PR #69 draft and verify migration 014/015 against an isolated PostgreSQL/Supabase instance.
+2. Resolve staging schema/migration-ledger drift without blindly rerunning migration 014.
+3. Add authenticated API integration tests for cross-tenant denial and admin-only configuration changes.
+4. Inspect deployment checks again when they complete; do not trigger extra deployments merely to force a preview.
+5. Once Idea 04 gates are satisfied, reconcile PR #70 and then move to the next roadmap idea with its source-of-truth acceptance criteria.
