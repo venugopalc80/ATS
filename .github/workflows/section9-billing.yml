@@ -14,6 +14,7 @@ on:
       - "backend/app/routers/platform_ops.py"
       - "backend/tests/test_platform_ops.py"
       - "supabase/migrations/20261022160000_section9_platform_support.sql"
+      - "supabase/migrations/20261025010000_section9_stripe_event_ordering.sql"
       - "frontend/app/platform/ops/page.tsx"
       - "frontend/package.json"
       - "frontend/tsconfig.json"

@@ -34,6 +34,14 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
                 await billing_webhooks.stripe_webhook(FakeRequest(), "bad-signature")
         self.assertEqual(raised.exception.status_code, 400)
 
+    def test_older_subscription_event_is_ignored(self):
+        self.assertFalse(billing_webhooks.should_apply_subscription_event(200, 199))
+
+    def test_newer_or_equal_subscription_event_is_applied(self):
+        self.assertTrue(billing_webhooks.should_apply_subscription_event(200, 200))
+        self.assertTrue(billing_webhooks.should_apply_subscription_event(200, 201))
+        self.assertTrue(billing_webhooks.should_apply_subscription_event(None, 1))
+
     def test_deleted_subscription_cannot_remain_active(self):
         self.assertEqual(
             billing_webhooks._normalise_status("active", "customer.subscription.deleted"),

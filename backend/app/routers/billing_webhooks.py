@@ -40,6 +40,11 @@ def _from_epoch(value: Any) -> datetime | None:
     return datetime.fromtimestamp(int(value), tz=timezone.utc)
 
 
+def should_apply_subscription_event(stored_created: int | None, incoming_created: int) -> bool:
+    """Apply provider events monotonically; older events must not roll back newer state."""
+    return stored_created is None or incoming_created >= stored_created
+
+
 def _normalise_status(status: str, event_type: str) -> str:
     if event_type == "customer.subscription.deleted":
         return "canceled"
@@ -69,6 +74,7 @@ async def stripe_webhook(
 
     event_id = str(event["id"])
     event_type = str(event["type"])
+    event_created = int(event.get("created") or 0)
     payload_hash = hashlib.sha256(payload).hexdigest()
     data_object = event.get("data", {}).get("object", {})
 
@@ -141,13 +147,25 @@ async def stripe_webhook(
                     cancel_at_period_end = bool(data_object.get("cancel_at_period_end", False))
 
                     cursor.execute(
-                        """select id, organization_id, plan_id, status
+                        """select id, organization_id, plan_id, status, provider_event_created_at
                            from public.organization_subscriptions
                            where billing_provider='stripe' and provider_subscription_id=%s
                            for update""",
                         [provider_subscription_id],
                     )
                     existing = cursor.fetchone()
+                    if existing and not should_apply_subscription_event(
+                        existing.get("provider_event_created_at"), event_created
+                    ):
+                        cursor.execute(
+                            """update public.billing_webhook_events
+                               set organization_id=%s, processing_status='processed',
+                                   processed_at=now(), failure_code='stale_provider_event'
+                               where id=%s""",
+                            [organization_id, receipt["id"]],
+                        )
+                        return {"received": True, "processed": False, "stale": True}
+
                     previous_state = {}
                     if existing:
                         # Provider IDs are permanently bound to the original tenant.
@@ -163,10 +181,10 @@ async def stripe_webhook(
                                set plan_id=%s, status=%s, provider_customer_id=%s,
                                    current_period_start=%s, current_period_end=%s,
                                    trial_ends_at=%s, cancel_at_period_end=%s,
-                                   canceled_at=%s, updated_at=now()
+                                   canceled_at=%s, provider_event_created_at=%s, updated_at=now()
                                where id=%s returning id""",
                             [plan_id, status, customer, period_start, period_end, trial_end,
-                             cancel_at_period_end, canceled_at, existing["id"]],
+                             cancel_at_period_end, canceled_at, event_created, existing["id"]],
                         )
                         subscription_id = cursor.fetchone()["id"]
                     else:
@@ -175,11 +193,12 @@ async def stripe_webhook(
                                (organization_id, plan_id, status, billing_provider,
                                 provider_customer_id, provider_subscription_id,
                                 current_period_start, current_period_end, trial_ends_at,
-                                cancel_at_period_end, canceled_at)
-                               values (%s, %s, %s, 'stripe', %s, %s, %s, %s, %s, %s, %s)
+                                cancel_at_period_end, canceled_at, provider_event_created_at)
+                               values (%s, %s, %s, 'stripe', %s, %s, %s, %s, %s, %s, %s, %s)
                                returning id""",
                             [organization_id, plan_id, status, customer, provider_subscription_id,
-                             period_start, period_end, trial_end, cancel_at_period_end, canceled_at],
+                             period_start, period_end, trial_end, cancel_at_period_end, canceled_at,
+                             event_created],
                         )
                         subscription_id = cursor.fetchone()["id"]
 

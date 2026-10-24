@@ -46,14 +46,14 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Verified the newly added tables have RLS enabled and policies in place for their intended browser roles.
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - No production database changes, merges or production deployments were performed.
-- GitHub Actions Section 9 billing/unit-test workflow passed on commit f61738e78ad0a875ea0a7cb8cfa4e04e196ed369: entitlement policy, billing API, organisation settings validation, onboarding payload validation, platform support validation and Stripe webhook safeguards all passed. A separate acceptance workflow passed backend tests, frontend typecheck and production build on the prior code snapshot. The newest platform operations UI commit still requires a fresh run; end-to-end Stripe checkout/webhook tests remain pending.
+- GitHub Actions Section 9 billing/unit-test workflow and Dashboard Update 1 Acceptance workflow passed on commit 2985a4c3f9355803aa599383faaa50cf8333ae96: Section 9 backend unit tests, backend acceptance tests, frontend typecheck and production build passed. The subsequent monotonic webhook event-ordering patch requires a fresh run; end-to-end Stripe checkout/webhook tests remain pending.
 - Vercel preview deployments reported the account's daily deployment limit has been reached; preview deployment validation is blocked until the limit resets or the account limit changes.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
 
 ## Main remaining work
 
 - Seed and approve commercial plan/pricing decisions; configure Stripe test secrets and plan price IDs.
-- Harden provider event ordering/reconciliation, checkout retry behaviour and payment-failure/cancellation edge cases.
+- Added monotonic Stripe subscription event ordering: stale provider events are recorded but cannot roll back newer subscription state. Checkout idempotency, provider reconciliation and payment-failure/cancellation edge cases remain pending.
 - Wire entitlement enforcement into real job, candidate, seat and AI operations; add race-safe quota enforcement.
 - Finish subscription and usage UI, settings/help/support UX and role-based access acceptance checks.
 - Add integration tests for tenant isolation, access grant expiry/revocation, webhook idempotency and settings version concurrency.
