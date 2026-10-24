@@ -266,3 +266,55 @@ def test_retention_preview_rejects_naive_as_of_before_database_access(monkeypatc
             user_id=uuid4(),
         ))
     assert error.value.status_code == 422
+
+
+
+def test_retention_exception_approval_cannot_be_self_approved(monkeypatch):
+    from fastapi import HTTPException
+
+    organization_id = uuid4()
+    exception_id = uuid4()
+    user_id = uuid4()
+    state = {"queries": []}
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, query, params=None):
+            state["queries"].append((query, params))
+
+        def fetchone(self):
+            return {
+                "organization_id": organization_id,
+                "created_by": user_id,
+                "approved_by": None,
+                "exception_type": "manual_review",
+            }
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+    class FakeConnectionContext:
+        def __enter__(self):
+            return FakeConnection()
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(privacy_module, "get_connection", lambda: FakeConnectionContext())
+    monkeypatch.setattr(privacy_module, "assert_org_admin", lambda user, org: None)
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(privacy_module.approve_retention_exception(
+            exception_id=exception_id,
+            user_id=user_id,
+        ))
+
+    assert error.value.status_code == 409
+    assert "cannot approve their own" in error.value.detail
+    assert not any("update public.retention_exceptions" in query.lower() for query, _ in state["queries"])
