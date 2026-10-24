@@ -97,6 +97,14 @@ Duration KPIs are grouped by completion event date unless a report explicitly se
 7. Add versioned forecast runs, then report definitions, asynchronous exports and scheduled permission rechecks.
 8. Run unit, integration, cross-tenant, permission, performance and UI acceptance checks in staging before production release.
 
+## Staging schema provenance audit (2026-10-25)
+
+A read-only check of the connected staging database confirmed that the analytics dependencies below exist and have row-level security enabled: `application_stage_history`, `job_requisitions`, `recruiter_tasks`, `recruitment_campaigns`, `campaign_channels`, and `campaign_memberships`. The inspected policies scope reads to organisation members; the stage-history insert policy also constrains the actor, and requisition/task policies validate related organisation membership.
+
+**Release blocker:** the current repository migration tree does not contain creation migrations for several of these tables (including stage history, requisitions, recruiter tasks and campaign tables). Staging therefore cannot be reproduced from the committed migration history alone. Do not infer that production has the same objects or policies from staging existence. Recover and review the authoritative migrations or create reconciled, idempotent migrations from a schema diff before release. No staging writes or schema changes were made during this audit.
+
+The staging analytics tables also contain no recruitment/campaign rows suitable for metric-level numerical reconciliation. Keep the numerical acceptance gate open until deterministic synthetic fixtures can be run in an isolated test database or a dedicated non-production tenant.
+
 ## Known schema gaps to validate before implementation
 
 - Stage history stores transition timestamps, but not explicit stage-entry/exit intervals. Derive visits from ordered events only after checking initial-stage semantics.
