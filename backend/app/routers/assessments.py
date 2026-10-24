@@ -356,7 +356,7 @@ async def submit_assessment(assignment_id: UUID, payload: AssessmentSubmissionCr
                     raise HTTPException(status_code=409, detail="This assessment is not accepting submissions")
                 deadline = assignment["extended_due_at"] or assignment["due_at"]
                 if deadline and deadline < datetime.now(timezone.utc):
-                    cur.execute("update public.assessment_assignments set status='expired', updated_at=now() where id=%s", [assignment_id])
+                    cur.execute("update public.assessment_assignments set status='expired', updated_at=now() where id=%s and organization_id=%s", [assignment_id, organization_id])
                     record_event(cur, organization_id, assignment_id, user_id, "assessment_expired", {"deadline": deadline.isoformat()})
                     conn.commit()
                     raise HTTPException(status_code=409, detail="The assessment deadline has passed")
@@ -371,8 +371,8 @@ async def submit_assessment(assignment_id: UUID, payload: AssessmentSubmissionCr
                      payload.provider_submission_ref, json.dumps(payload.metadata)],
                 )
                 submission = cur.fetchone()
-                cur.execute("update public.assessment_assignments set status='submitted', submitted_at=now(), updated_at=now() where id=%s",
-                            [assignment_id])
+                cur.execute("update public.assessment_assignments set status='submitted', submitted_at=now(), updated_at=now() where id=%s and organization_id=%s",
+                            [assignment_id, organization_id])
                 record_event(cur, organization_id, assignment_id, user_id, "assessment_submitted",
                              {"submission_id": str(submission["id"]), "submission_type": payload.submission_type})
                 return submission
@@ -411,8 +411,8 @@ async def add_result(assignment_id: UUID, payload: AssessmentResultCreate, organ
                      json.dumps(payload.result_payload), user_id],
                 )
                 result = cur.fetchone()
-                cur.execute("update public.assessment_assignments set status='under_review', updated_at=now() where id=%s",
-                            [assignment_id])
+                cur.execute("update public.assessment_assignments set status='under_review', updated_at=now() where id=%s and organization_id=%s",
+                            [assignment_id, organization_id])
                 record_event(cur, organization_id, assignment_id, user_id, "assessment_result_recorded",
                              {"result_id": str(result["id"]), "source": payload.source, "methodology": payload.methodology})
                 return result
@@ -555,8 +555,8 @@ async def provider_webhook(provider_key: str, request: Request,
                      payload.max_score, payload.summary, json.dumps(payload.evidence),
                      json.dumps({"provider": provider_key}), provider_key, payload.provider_result_ref],
                 )
-                cur.execute("update public.assessment_assignments set status='under_review', updated_at=now() where id=%s",
-                            [payload.assignment_id])
+                cur.execute("update public.assessment_assignments set status='under_review', updated_at=now() where id=%s and organization_id=%s",
+                            [payload.assignment_id, assignment["organization_id"]])
                 cur.execute("update public.assessment_provider_events set processing_status='processed',processed_at=now() where id=%s",
                             [event["id"]])
                 record_event(cur, assignment["organization_id"], payload.assignment_id, None,
