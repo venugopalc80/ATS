@@ -879,17 +879,22 @@ async def analytics_campaign_roi(
             spend = float(row["spend_amount"]) if row["spend_amount"] is not None else None
             hires = row["hires"]
             applications = row["applications"]
-            comparable_spend_period = date_from is None and date_to is None
+            comparable_spend_period = (
+                date_from is None and date_to is None
+                and job_id is None and recruiter_id is None
+            )
             row["cost_per_application"] = (
                 spend / applications if comparable_spend_period and spend is not None and applications else None
             )
             row["cost_per_hire"] = (
                 spend / hires if comparable_spend_period and spend is not None and hires else None
             )
-            row["cost_metrics_status"] = (
-                "all_time_channel_spend_snapshot" if comparable_spend_period
-                else "period_spend_history_not_available"
-            )
+            if date_from is not None or date_to is not None:
+                row["cost_metrics_status"] = "period_spend_history_not_available"
+            elif job_id is not None or recruiter_id is not None:
+                row["cost_metrics_status"] = "spend_not_segmented_for_filters"
+            else:
+                row["cost_metrics_status"] = "all_time_channel_spend_snapshot"
             row["sample_warning"] = applications < 5
             row["financial_roi"] = None
             row["financial_roi_status"] = "revenue_data_not_available"
