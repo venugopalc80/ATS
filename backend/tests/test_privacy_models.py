@@ -318,3 +318,36 @@ def test_retention_exception_approval_cannot_be_self_approved(monkeypatch):
     assert error.value.status_code == 409
     assert "cannot approve their own" in error.value.detail
     assert not any("update public.retention_exceptions" in query.lower() for query, _ in state["queries"])
+
+
+
+def test_retention_policy_rejects_timezone_naive_effective_at():
+    with pytest.raises(ValidationError, match="must include a timezone"):
+        RetentionPolicyCreate(
+            organization_id=uuid4(), data_category="candidate_profile", purpose="recruitment",
+            jurisdiction="GB", retention_days=365, action="review", version=1,
+            effective_at=datetime(2026, 10, 22),
+        )
+
+
+def test_retention_exception_rejects_timezone_naive_clock():
+    from app.routers.privacy import RetentionExceptionCreate
+
+    with pytest.raises(ValidationError, match="starts_at must include a timezone"):
+        RetentionExceptionCreate(
+            organization_id=uuid4(), target_table="candidates", target_record_id=uuid4(),
+            exception_type="legal_hold", reason="Active litigation hold",
+            starts_at=datetime(2026, 10, 22),
+        )
+
+
+def test_retention_exception_rejects_end_before_start():
+    from app.routers.privacy import RetentionExceptionCreate
+
+    with pytest.raises(ValidationError, match="end must be after its start"):
+        RetentionExceptionCreate(
+            organization_id=uuid4(), target_table="candidates", target_record_id=uuid4(),
+            exception_type="manual_review", reason="Manual review",
+            starts_at=datetime(2026, 10, 22, tzinfo=timezone.utc),
+            ends_at=datetime(2026, 10, 21, tzinfo=timezone.utc),
+        )
