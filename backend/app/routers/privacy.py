@@ -459,10 +459,10 @@ async def create_retention_exception(payload: RetentionExceptionCreate, user_id:
                 cursor.execute(
                     """insert into public.retention_exceptions
                        (organization_id, policy_id, target_table, target_record_id,
-                        exception_type, reason, starts_at, ends_at, approved_by)
-                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                        exception_type, reason, starts_at, ends_at, created_by, approved_by)
+                       values (%s, %s, %s, %s, %s, %s, %s, %s, %s, null)
                        returning id, organization_id, policy_id, target_table, target_record_id,
-                                 exception_type, reason, starts_at, ends_at, approved_by, created_at""",
+                                 exception_type, reason, starts_at, ends_at, created_by, approved_by, created_at""",
                     [payload.organization_id, payload.policy_id, payload.target_table,
                      payload.target_record_id, payload.exception_type, payload.reason,
                      payload.starts_at, payload.ends_at, user_id],
@@ -477,6 +477,54 @@ async def create_retention_exception(payload: RetentionExceptionCreate, user_id:
                      json.dumps({"exception_type": payload.exception_type,
                                  "target_table": payload.target_table,
                                  "target_record_id": str(payload.target_record_id)})],
+                )
+                return row
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+
+
+@router.post("/retention-exceptions/{exception_id}/approve")
+async def approve_retention_exception(
+    exception_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Explicitly approve an exception; the requester cannot approve their own exception."""
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select organization_id, created_by, approved_by, exception_type from public.retention_exceptions where id = %s",
+                    [exception_id],
+                )
+                existing = cursor.fetchone()
+                if existing is None:
+                    raise HTTPException(status_code=404, detail="Retention exception not found")
+                assert_org_admin(user_id, existing["organization_id"])
+                if existing["approved_by"] is not None:
+                    raise HTTPException(status_code=409, detail="Retention exception has already been approved")
+                if existing["created_by"] == user_id:
+                    raise HTTPException(status_code=409, detail="The requester cannot approve their own retention exception")
+                cursor.execute(
+                    """update public.retention_exceptions
+                       set approved_by = %s
+                       where id = %s and organization_id = %s and approved_by is null
+                         and (created_by is null or created_by <> %s)
+                       returning id, organization_id, policy_id, target_table, target_record_id,
+                                 exception_type, reason, starts_at, ends_at, created_by, approved_by, created_at""",
+                    [user_id, exception_id, existing["organization_id"], user_id],
+                )
+                row = cursor.fetchone()
+                if row is None:
+                    raise HTTPException(status_code=409, detail="Retention exception could not be approved; refresh and retry")
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s, %s, 'privacy.retention_exception_approved',
+                               'retention_exception', %s, %s::jsonb)""",
+                    [existing["organization_id"], user_id, exception_id,
+                     json.dumps({"exception_type": existing["exception_type"]})],
                 )
                 return row
     except HTTPException:
