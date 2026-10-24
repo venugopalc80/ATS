@@ -558,8 +558,16 @@ async def complete_evaluation(
             if evaluation["status"] != "running":
                 raise HTTPException(status_code=409, detail="Evaluation run is already complete")
             criteria = evaluation["pass_criteria"] or {}
-            minimum_cases = max(1, int(criteria.get("minimum_cases", 1)))
-            max_failure_rate = float(criteria.get("max_failure_rate", 0))
+            raw_minimum_cases = criteria.get("minimum_cases", 1)
+            raw_max_failure_rate = criteria.get("max_failure_rate", 0)
+            if isinstance(raw_minimum_cases, bool) or not isinstance(raw_minimum_cases, int) or raw_minimum_cases < 1:
+                raise HTTPException(status_code=409, detail="Evaluation criteria must define minimum_cases as a positive integer")
+            if isinstance(raw_max_failure_rate, bool) or not isinstance(raw_max_failure_rate, (int, float)):
+                raise HTTPException(status_code=409, detail="Evaluation criteria must define max_failure_rate as a number between 0 and 1")
+            minimum_cases = raw_minimum_cases
+            max_failure_rate = float(raw_max_failure_rate)
+            if not 0 <= max_failure_rate <= 1:
+                raise HTTPException(status_code=409, detail="Evaluation criteria must define max_failure_rate as a number between 0 and 1")
             failed_count = sum(1 for result in payload.results if not result.passed)
             case_count = len(payload.results)
             failure_rate = failed_count / case_count
