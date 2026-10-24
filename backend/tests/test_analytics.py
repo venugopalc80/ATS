@@ -1,6 +1,6 @@
 import unittest
 from contextlib import contextmanager
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 from datetime import date
 from uuid import UUID
 
@@ -336,6 +336,37 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("approved_headcount", body)
         self.assertIn("expected_approved_headcount", body)
 
+
+    async def test_export_endpoint_sanitizes_untrusted_source_labels(self):
+        payload = {
+            "sources": [{
+                "source": "=HYPERLINK(\"https://example.com\")",
+                "applications": 1,
+                "qualified_applications": 0,
+                "completed_interviews": 0,
+                "offers": 0,
+                "decided_offers": 0,
+                "accepted_offers": 0,
+                "hires": 0,
+                "offer_acceptance_rate": None,
+                "conversion_rate": None,
+                "sample_warning": True,
+            }]
+        }
+        with patch.object(analytics_router, "analytics_sources", new=AsyncMock(return_value=payload)):
+            response = await analytics_router.analytics_export(
+                organization_id=ORG,
+                report_type="sources",
+                date_from=None,
+                date_to=None,
+                job_id=None,
+                recruiter_id=None,
+                user_id=UUID("22222222-2222-4222-8222-222222222222"),
+            )
+        chunks = [chunk async for chunk in response.body_iterator]
+        body = b"".join(chunk.encode() if isinstance(chunk, str) else chunk for chunk in chunks).decode()
+        self.assertIn("'=HYPERLINK", body)
+        self.assertNotIn('"=HYPERLINK', body)
 
     async def test_campaign_efficiency_reports_costs_without_inventing_financial_roi(self):
         result = await analytics_router.analytics_campaign_roi(
