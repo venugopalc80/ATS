@@ -284,5 +284,47 @@ class FairnessAuditCautionTests(unittest.TestCase):
         self.assertEqual(audit_metadata["small_sample_groups"], ["group_a"])
 
 
+class EvaluationCriteriaValidationTests(unittest.TestCase):
+    def test_invalid_pass_criteria_are_rejected_before_results_are_written(self):
+        import asyncio
+        from unittest.mock import MagicMock, patch
+        from fastapi import HTTPException
+        from app.routers.ai import EvaluationResultInput, EvaluationResultsInput, complete_evaluation
+
+        invalid_criteria = [
+            {"minimum_cases": 0, "max_failure_rate": 0},
+            {"minimum_cases": 2, "max_failure_rate": 1.5},
+            {"minimum_cases": True, "max_failure_rate": 0.2},
+            {"minimum_cases": 2, "max_failure_rate": "not-a-number"},
+        ]
+        for criteria in invalid_criteria:
+            with self.subTest(criteria=criteria):
+                organization_id = uuid4()
+                evaluation_id = uuid4()
+                cursor = MagicMock()
+                cursor.fetchone.return_value = {
+                    "id": evaluation_id,
+                    "status": "running",
+                    "pass_criteria": criteria,
+                }
+                cursor_cm = MagicMock()
+                cursor_cm.__enter__.return_value = cursor
+                connection = MagicMock()
+                connection.__enter__.return_value = connection
+                connection.cursor.return_value = cursor_cm
+                payload = EvaluationResultsInput(
+                    organization_id=organization_id,
+                    results=[EvaluationResultInput(test_case_key="case-1", passed=True)],
+                )
+
+                with patch("app.routers.ai.assert_org_admin"):
+                    with patch("app.routers.ai.get_connection", return_value=connection):
+                        with self.assertRaises(HTTPException) as caught:
+                            asyncio.run(complete_evaluation(evaluation_id, payload, user_id=uuid4()))
+
+                self.assertEqual(caught.exception.status_code, 409)
+                self.assertEqual(cursor.execute.call_count, 1)
+
+
 if __name__ == "__main__":
     unittest.main()
