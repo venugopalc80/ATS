@@ -84,6 +84,25 @@ def _validate_related_records(organization_id: UUID, candidate_id: UUID | None, 
         raise _unavailable(exc) from exc
 
 
+
+def _validate_assignee(organization_id: UUID, assigned_to: UUID | None) -> None:
+    if assigned_to is None:
+        return
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select 1 from public.organization_members where organization_id=%s and user_id=%s",
+                    [organization_id, assigned_to],
+                )
+                if cursor.fetchone() is None:
+                    raise HTTPException(status_code=422, detail="Assignee must be a member of this organization")
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _unavailable(exc) from exc
+
+
 def _task_dict(row: dict) -> dict:
     result = dict(row)
     for key in ("id", "organization_id", "candidate_id", "job_id", "assigned_to", "created_by"):
@@ -132,6 +151,7 @@ async def list_tasks(
 async def create_task(payload: TaskCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, payload.organization_id)
     _validate_related_records(payload.organization_id, payload.candidate_id, payload.job_id)
+    _validate_assignee(payload.organization_id, payload.assigned_to)
     title = payload.title.strip()
     try:
         with get_connection() as connection:
@@ -163,6 +183,8 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
                 if "title" in changes and changes["title"] is not None:
                     changes["title"] = changes["title"].strip()
                 _validate_related_records(organization_id, changes.get("candidate_id"), changes.get("job_id"))
+                if "assigned_to" in changes:
+                    _validate_assignee(organization_id, changes["assigned_to"])
                 if not changes:
                     cursor.execute(
                         """select t.*, c.first_name as candidate_first_name, c.last_name as candidate_last_name,
