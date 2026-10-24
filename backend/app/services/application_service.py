@@ -59,6 +59,22 @@ def _validate_stage_config_shape(
     return list(next_stages), bool(terminal), bool(enabled)
 
 
+def _validate_stage_config_graph(stage_config: dict[str, dict[str, Any]]) -> None:
+    """Ensure every enabled non-terminal stage can reach at least one enabled next stage."""
+    for stage_key, stage in stage_config.items():
+        next_stages = stage.get("allowed_next_stages") or []
+        if stage.get("is_terminal", False) and next_stages:
+            raise ValueError("Terminal stages cannot have allowed next stages")
+        missing = set(next_stages) - set(stage_config)
+        if missing:
+            raise ValueError("Allowed next stages must exist in this organisation")
+        if stage.get("enabled", False) and not stage.get("is_terminal", False):
+            if not any(stage_config[target].get("enabled", False) for target in next_stages):
+                raise ValueError(
+                    "Every enabled non-terminal stage must have at least one enabled next stage"
+                )
+
+
 class ApplicationService:
     async def list_stage_config(self, organization_id: UUID) -> list[dict[str, Any]]:
         with get_connection() as connection:
@@ -89,16 +105,26 @@ class ApplicationService:
                 if any(value is None for value in data.values()):
                     raise ValueError("Stage configuration fields cannot be null")
 
-                next_stages, _terminal, _enabled = _validate_stage_config_shape(stage_key, data, existing)
-                if next_stages:
-                    cursor.execute(
-                        "select stage_key from public.application_stage_config "
-                        "where organization_id=%s and stage_key = any(%s)",
-                        [organization_id, next_stages],
-                    )
-                    available = {row["stage_key"] for row in cursor.fetchall()}
-                    if available != set(next_stages):
-                        raise ValueError("Allowed next stages must exist in this organisation")
+                next_stages, terminal, enabled = _validate_stage_config_shape(stage_key, data, existing)
+                cursor.execute(
+                    "select stage_key, enabled, allowed_next_stages, is_terminal "
+                    "from public.application_stage_config where organization_id=%s",
+                    [organization_id],
+                )
+                stage_config = {
+                    row["stage_key"]: {
+                        "enabled": bool(row["enabled"]),
+                        "allowed_next_stages": list(row["allowed_next_stages"] or []),
+                        "is_terminal": bool(row.get("is_terminal", False)),
+                    }
+                    for row in cursor.fetchall()
+                }
+                stage_config[stage_key] = {
+                    "enabled": enabled,
+                    "allowed_next_stages": next_stages,
+                    "is_terminal": terminal,
+                }
+                _validate_stage_config_graph(stage_config)
 
                 assignments = ", ".join(f"{column}=%s" for column in data)
                 cursor.execute(
