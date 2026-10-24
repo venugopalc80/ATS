@@ -61,7 +61,7 @@ export default function RequisitionsPage() {
    const data:Req[]=await response.json();
    setRows(current=>[...current,...data]);
    setHasMore(data.length===100);
-   setPage(current=>current+1);
+   if(data.length>0)setPage(current=>current+1);
   }catch(e){setMessage(e instanceof Error?e.message:"Unable to load more requisitions.");}
   finally{setLoading(false);}
  }
