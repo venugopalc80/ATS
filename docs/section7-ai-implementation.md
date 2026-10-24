@@ -87,4 +87,6 @@ Do not send real candidate data to an external provider before these gates have 
 
 - Added model-approval gate tests: a model cannot be approved without recorded data-processing approval, and cannot be approved without a passing evaluation run.
 - Added a fairness-audit test verifying groups with fewer than 10 observations are flagged in uncertainty notes and audit metadata.
-- The latest branch commits do not yet expose a verifiable CI run through the connected GitHub status/run results. Treat these latest tests as committed but unverified until a fresh GitHub Actions result is visible.
+- The Section 7 workflow passed on commit `25fcc5060398b6fae2af0d23ce036291e64a9f33` (run #44: backend tests and frontend TypeScript checks succeeded), including model-approval gates and small-sample fairness warnings.
+- Follow-up hardening validates evaluation pass criteria before recording results: `minimum_cases` must be a positive integer and `max_failure_rate` must be numeric and between 0 and 1. Invalid criteria return HTTP 409 before evaluation result rows are written.
+- Added regression coverage for zero/invalid minimum case counts, out-of-range failure rates, booleans and non-numeric failure-rate values. The code/test commit is `809b5cdbb9c8812909b96fd38d23fffbde291a60`; its Section 7 Actions run #48 was still in progress at the time of this note, so this newest change remains unverified until that run completes.
