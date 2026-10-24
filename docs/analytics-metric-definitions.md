@@ -61,7 +61,7 @@ Duration KPIs are grouped by completion event date unless a report explicitly se
 - Preserve raw application source and source events. Normalise display labels without deleting original values.
 - Unknown, blank and unmapped sources remain visible as “Unknown / not recorded”.
 - Initial attribution model: application source recorded at application creation. If multi-touch events exist, expose them under a separate configurable model; do not imply attribution proves causation.
-- Campaign/channel spend is reportable only when amount and currency exist. Do not sum unlike currencies without a documented conversion rate and date.
+- Campaign/channel spend is reportable only when amount and currency exist. Do not sum unlike currencies without a documented conversion rate and date. Because current spend is not segmented by period, job or recruiter, cost ratios must be unavailable when those filters are applied.
 - Cost per qualified application, interview, offer or hire is unavailable unless both cost and outcome count exist and the currency basis is comparable.
 - Deduplicate by application ID for application outcomes and by candidate ID only for explicitly candidate-level measures. One candidate applying to multiple jobs can legitimately produce multiple applications.
 - Document qualification rules and attribution model/version on reports and exports.
