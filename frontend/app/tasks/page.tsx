@@ -44,6 +44,12 @@ export default function TasksPage() {
     setOrganizationId(getActiveOrganizationId(process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? ""));
   }, []);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("create") === "1") {
+      setShowForm(true);
+    }
+  }, []);
+
   const loadTasks = useCallback(async () => {
     if (!API_BASE || !organizationId) {
       setLoading(false);
