@@ -15,6 +15,7 @@ const labels:Record<string,string> = { draft:"Draft",pending_approval:"Awaiting 
 
 export default function RequisitionsPage() {
  const [rows,setRows]=useState<Req[]>([]);
+ const [hasMore,setHasMore]=useState(false);
  const [assignees,setAssignees]=useState<Assignee[]>([]);
  const [form,setForm]=useState<FormState>(initial);
  const [showForm,setShowForm]=useState(false);
@@ -33,18 +34,37 @@ export default function RequisitionsPage() {
   if(!API_BASE||!org){setMessage("Connect the API and select an organisation to manage requisitions.");setLoading(false);return;}
   setLoading(true);
   try{
-   const params=new URLSearchParams({organization_id:org,limit:"100"});
+   const params=new URLSearchParams({organization_id:org,limit:"100",offset:"0"});
    if(filter!=="all")params.set("status",filter);
    if(search.trim())params.set("search",search.trim());
    const response=await apiFetch(API_BASE+"/api/requisitions?"+params.toString());
    if(!response.ok)throw new Error((await response.json().catch(()=>null))?.detail||"Unable to load requisitions ("+response.status+")");
-   setRows(await response.json());
+   const data:Req[]=await response.json();
+   setRows(data);
+   setHasMore(data.length===100);
    const teamResponse=await apiFetch(API_BASE+"/api/requisitions/assignees?organization_id="+encodeURIComponent(org));
    if(teamResponse.ok)setAssignees(await teamResponse.json());
    setMessage("");
   }catch(e){setMessage(e instanceof Error?e.message:"Unable to load requisitions.");}
   finally{setLoading(false);}
  },[filter,search]);
+ async function loadMore(){
+  const org=getActiveOrganizationId(FALLBACK_ORG);
+  if(!API_BASE||!org||loading||!hasMore)return;
+  setLoading(true);setMessage("");
+  try{
+   const params=new URLSearchParams({organization_id:org,limit:"100",offset:String(rows.length)});
+   if(filter!=="all")params.set("status",filter);
+   if(search.trim())params.set("search",search.trim());
+   const response=await apiFetch(API_BASE+"/api/requisitions?"+params.toString());
+   if(!response.ok)throw new Error((await response.json().catch(()=>null))?.detail||"Unable to load more requisitions ("+response.status+")");
+   const data:Req[]=await response.json();
+   setRows(current=>[...current,...data]);
+   setHasMore(data.length===100);
+   setPage(current=>current+1);
+  }catch(e){setMessage(e instanceof Error?e.message:"Unable to load more requisitions.");}
+  finally{setLoading(false);}
+ }
  useEffect(()=>{setPage(1);void load();},[load]);
  function change<K extends keyof FormState>(key:K,value:FormState[K]){setForm(old=>({...old,[key]:value}));}
  function startEdit(row:Req){
@@ -92,7 +112,7 @@ export default function RequisitionsPage() {
   </aside>
   <main className="main"><header className="topbar"><input className="search" placeholder="Search requisitions..." value={search} onChange={e=>setSearch(e.target.value)}/><div className="profile"><span>Recruitment workspace</span><div className="avatar">AQ</div></div></header>
    <section className="content"><div className="header-row"><div><div className="eyebrow">Recruitment operations</div><h1>Jobs &amp; Requisitions</h1><p className="subtitle">Move hiring demand through approval and into an operational vacancy.</p></div><button className="btn primary" onClick={()=>{setShowForm(v=>!v);setEditingId(null);setForm(initial);setMessage("");}}>{showForm?"Close form":"+ New requisition"}</button></div>
-    <div className="stats-grid"><div className="stat-card"><div className="stat-label">Total in view</div><div className="stat-value">{loading?"—":count}</div></div><div className="stat-card"><div className="stat-label">Awaiting approval</div><div className="stat-value">{loading?"—":pending}</div></div><div className="stat-card"><div className="stat-label">Drafts / revisions</div><div className="stat-value">{loading?"—":drafts}</div></div><div className="stat-card"><div className="stat-label">Approved to convert</div><div className="stat-value">{loading?"—":approved}</div></div></div>
+    <div className="stats-grid"><div className="stat-card"><div className="stat-label">{hasMore?"Loaded in view":"Total in view"}</div><div className="stat-value">{loading?"—":count}</div></div><div className="stat-card"><div className="stat-label">Awaiting approval</div><div className="stat-value">{loading?"—":pending}</div></div><div className="stat-card"><div className="stat-label">Drafts / revisions</div><div className="stat-value">{loading?"—":drafts}</div></div><div className="stat-card"><div className="stat-label">Approved to convert</div><div className="stat-value">{loading?"—":approved}</div></div></div>
     {showForm&&<form className="card" onSubmit={create} style={{marginBottom:18}}><div className="card-head"><span className="card-title">{editingId?"Edit requisition draft":"New requisition draft"}</span><span className="muted-small">Approval is a separate action</span></div><div className="form-grid">
      <label>Job title<input required maxLength={200} value={form.title} onChange={e=>change("title",e.target.value)}/></label>
      <label>Department / team<input maxLength={160} value={form.department} onChange={e=>change("department",e.target.value)}/></label>
@@ -109,7 +129,7 @@ export default function RequisitionsPage() {
      <label className="span-2">Business justification<textarea required minLength={1} maxLength={10000} value={form.justification} onChange={e=>change("justification",e.target.value)} rows={3} placeholder="Explain the business need, backfill or growth rationale."/></label>
     </div><div style={{display:"flex",gap:8,marginTop:16}}><button className="btn primary" disabled={saving}>{saving?(editingId?"Updating...":"Saving..."):(editingId?"Update draft":"Save draft")}</button><button type="button" className="btn" onClick={()=>setShowForm(false)}>Cancel</button></div></form>}
     {message&&<div className="notice" role="status">{message}</div>}
-    <div className="card" style={{marginBottom:18}}><div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}><select className="filter" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option><option value="draft">Draft</option><option value="pending_approval">Awaiting approval</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="converted">Converted</option><option value="cancelled">Cancelled</option></select><span className="muted-small">{loading?"Loading…":count+" requisition"+(count===1?"":"s")+" in this view"}</span><button className="btn" onClick={()=>void load()} disabled={loading}>Refresh</button></div></div>
+    <div className="card" style={{marginBottom:18}}><div style={{display:"flex",gap:10,alignItems:"center",flexWrap:"wrap"}}><select className="filter" value={filter} onChange={e=>setFilter(e.target.value)}><option value="all">All statuses</option><option value="draft">Draft</option><option value="pending_approval">Awaiting approval</option><option value="approved">Approved</option><option value="rejected">Rejected</option><option value="converted">Converted</option><option value="cancelled">Cancelled</option></select><span className="muted-small">{loading?"Loading…":(hasMore?"At least ":"")+count+" requisition"+(count===1?"":"s")+" loaded"}</span><button className="btn" onClick={()=>void load()} disabled={loading}>Refresh</button></div></div>
     <div className="card"><div className="card-head"><span className="card-title">Requisition register</span><span className="muted-small">{API_BASE?(loading?"Loading...":"Connected to API"):"API not configured"}</span></div><div style={{overflowX:"auto"}}><table className="table"><thead><tr><th><button className="btn" onClick={()=>sort("title")}>Requisition {sortBy==="title"?(sortDirection==="asc"?"↑":"↓"):"↕"}</button></th><th><button className="btn" onClick={()=>sort("department")}>Department {sortBy==="department"?(sortDirection==="asc"?"↑":"↓"):"↕"}</button></th><th><button className="btn" onClick={()=>sort("location")}>Location {sortBy==="location"?(sortDirection==="asc"?"↑":"↓"):"↕"}</button></th><th><button className="btn" onClick={()=>sort("headcount")}>Headcount {sortBy==="headcount"?(sortDirection==="asc"?"↑":"↓"):"↕"}</button></th><th><button className="btn" onClick={()=>sort("status")}>Status {sortBy==="status"?(sortDirection==="asc"?"↑":"↓"):"↕"}</button></th><th><button className="btn" onClick={()=>sort("updated_at")}>Updated {sortBy==="updated_at"?(sortDirection==="asc"?"↑":"↓"):"↕"}</button></th><th>Actions</th></tr></thead><tbody>
      {loading?<tr><td colSpan={7}>Loading requisitions…</td></tr>:rows.length===0?<tr><td colSpan={7}>No requisitions match this view.</td></tr>:visibleRows.map(row=><tr key={row.id}><td><strong>{row.title}</strong><div className="muted-small">{row.requisition_code}</div>{row.rejection_reason&&<div className="muted-small">Reason: {row.rejection_reason}</div>}</td><td>{row.department||"—"}</td><td>{row.location||"Not specified"}</td><td>{row.headcount}</td><td><span className={"badge "+(row.status==="approved"||row.status==="converted"?"green":row.status==="pending_approval"?"amber":row.status==="rejected"?"red":"blue")}>{labels[row.status]||row.status}</span></td><td>{new Date(row.updated_at).toLocaleDateString()}</td><td><div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
       {(row.status==="draft"||row.status==="rejected")&&<><button className="btn" disabled={busyId===row.id} onClick={()=>startEdit(row)}>Edit draft</button><button className="btn" disabled={busyId===row.id} onClick={()=>void act(row,"submit")}>Submit</button></>}
@@ -117,7 +137,7 @@ export default function RequisitionsPage() {
       {row.status==="approved"&&<button className="btn primary" disabled={busyId===row.id} onClick={()=>void act(row,"convert-to-job")}>Create job</button>}
       {row.job_id&&<Link className="btn" href={"/jobs?job_id="+row.job_id}>Open job</Link>}
      </div></td></tr>)}
-    </tbody></table></div><div style={{display:"flex",gap:10,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",paddingTop:14}}><span className="muted-small">Showing {count===0?0:(page-1)*pageSize+1}–{Math.min(page*pageSize,count)} of {count} requisitions · Sorted by {sortBy.replace("_"," ")} ({sortDirection})</span><div style={{display:"flex",gap:8,alignItems:"center"}}><button className="btn" disabled={page<=1} onClick={()=>setPage(p=>Math.max(1,p-1))}>Previous</button><span className="muted-small">Page {page} of {totalPages}</span><button className="btn" disabled={page>=totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}>Next</button></div></div></div><p className="muted-small" style={{marginTop:12}}>Approvals are enforced by the API. This first release uses organisation owners/admins as approvers; configurable multi-step approval chains are a later phase.</p>
+    </tbody></table></div><div style={{display:"flex",gap:10,alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",paddingTop:14}}><span className="muted-small">Showing {count===0?0:(page-1)*pageSize+1}–{Math.min(page*pageSize,count)} of {hasMore?"at least ":""}{count} loaded requisitions · Sorted by {sortBy.replace("_"," ")} ({sortDirection})</span><div style={{display:"flex",gap:8,alignItems:"center"}}><button className="btn" disabled={page<=1||loading} onClick={()=>setPage(p=>Math.max(1,p-1))}>Previous</button><span className="muted-small">Page {page} of {hasMore&&page>=totalPages?"…":totalPages}</span><button className="btn" disabled={loading||(!hasMore&&page>=totalPages)} onClick={()=>{if(page>=totalPages&&hasMore)void loadMore();else setPage(p=>Math.min(totalPages,p+1));}}>Next</button></div></div></div><p className="muted-small" style={{marginTop:12}}>Approvals are enforced by the API. This first release uses organisation owners/admins as approvers; configurable multi-step approval chains are a later phase.</p>
    </section>
   </main>
  </div>;
