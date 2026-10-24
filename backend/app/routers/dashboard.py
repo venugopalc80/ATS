@@ -177,7 +177,7 @@ async def dashboard(
                 "type": "interview_today",
                 "title": "Interview scheduled today",
                 "description": f"Application {row['application_id']}",
-                "href": f"/interviews/{row['id']}",
+                "href": f"/interviews?interview_id={row['id']}",
                 "due_at": row["scheduled_at"],
             })
         for row in pending_feedback:
@@ -186,7 +186,7 @@ async def dashboard(
                 "type": "feedback_pending",
                 "title": "Interview feedback outstanding",
                 "description": f"Application {row['application_id']}",
-                "href": f"/interviews/{row['id']}",
+                "href": f"/interviews?interview_id={row['id']}",
                 "due_at": row["scheduled_at"],
             })
         for row in expiring_offers:
@@ -195,7 +195,7 @@ async def dashboard(
                 "type": "offer_expiring",
                 "title": "Offer approaching expiry",
                 "description": row["title"],
-                "href": f"/offers/{row['id']}",
+                "href": f"/offers?offer_id={row['id']}",
                 "due_at": row["expires_at"],
             })
         if awaiting_decision:
