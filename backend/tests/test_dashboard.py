@@ -126,8 +126,8 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["pipeline"]["new"], 2)
         self.assertEqual(result["pipeline"]["rejected"], 1)
         self.assertEqual(result["date_range"], {"from": "2026-10-01", "to": "2026-10-13"})
-        self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews/{INTERVIEW}" for item in result["priorities"]))
-        self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers/{OFFER}" for item in result["priorities"]))
+        self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews?interview_id={INTERVIEW}" for item in result["priorities"]))
+        self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers?offer_id={OFFER}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "vacancy_health" and item["href"] == f"/jobs?job_id={JOB}" for item in result["priorities"]))
         self.assertEqual(result["activity"][0]["actor_name"], "Recruiter")
         # Every data query must include the requested organisation scope.
