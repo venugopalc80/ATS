@@ -150,6 +150,7 @@ export default function Dashboard() {
           ["Candidates", "/candidates", "♙"],
           ["Submissions", "/submissions", "↗"],
           ["Interviews", "/interviews", "◷"],
+          ["Recruiter tasks", "/tasks", "✓"],
           ["Clients", "/clients", "□"],
           ["Onboarding", "/onboarding", "✓"],
           ["Offers", "/offers", "＄"],
