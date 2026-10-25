@@ -56,6 +56,7 @@ create table if not exists public.competencies (
   rating_guidance jsonb not null default '{}'::jsonb check (jsonb_typeof(rating_guidance) = 'object'),
   display_order integer not null default 0,
   unique (organization_id, id),
+  unique (organization_id, template_id, id),
   unique (template_id, competency_key),
   foreign key (organization_id, template_id) references public.scorecard_templates(organization_id, id) on delete cascade
 );
@@ -69,7 +70,7 @@ create table if not exists public.interview_kit_questions (
   evaluation_guidance text,
   display_order integer not null default 0,
   foreign key (organization_id, template_id) references public.scorecard_templates(organization_id, id) on delete cascade,
-  foreign key (organization_id, competency_id) references public.competencies(organization_id, id) on delete cascade
+  foreign key (organization_id, template_id, competency_id) references public.competencies(organization_id, template_id, id) on delete cascade
 );
 
 create table if not exists public.interview_feedback (
@@ -287,13 +288,14 @@ revoke all on function public.prevent_submitted_scorecard_response_mutation() fr
 create table if not exists public.interview_scorecard_decisions (
   id uuid primary key default gen_random_uuid(),
   organization_id uuid not null references public.organizations(id) on delete cascade,
-  interview_id uuid not null references public.interviews(id) on delete cascade,
+  interview_id uuid not null,
   reviewer_id uuid not null references public.profiles(id) on delete restrict,
   decision text not null check (decision in ('proceed','decline','additional_interview','hold')),
   rationale text not null check (length(trim(rationale)) between 20 and 4000),
   evidence_snapshot jsonb not null check (jsonb_typeof(evidence_snapshot) = 'array' and jsonb_array_length(evidence_snapshot) > 0),
   created_at timestamptz not null default now(),
-  unique (organization_id, id)
+  unique (organization_id, id),
+  foreign key (organization_id, interview_id) references public.interviews(organization_id, id) on delete cascade
 );
 create index if not exists interview_scorecard_decisions_interview_idx
   on public.interview_scorecard_decisions(organization_id, interview_id, created_at desc);
