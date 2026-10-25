@@ -142,5 +142,7 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
                 return TaskOut.model_validate(row)
     except HTTPException:
         raise
+    except IntegrityError as exc:
+        raise HTTPException(status_code=422, detail="Task references or status are invalid") from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Database operation failed") from exc
