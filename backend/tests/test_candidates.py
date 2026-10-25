@@ -142,18 +142,32 @@ class CandidateServiceTests(unittest.TestCase):
                 with self.assertRaises(ValidationError):
                     CandidateUpdate.model_validate(payload)
 
-    def test_permanent_delete_is_blocked_when_candidate_has_applications(self):
+    def test_permanent_delete_is_blocked_when_any_linked_records_exist(self):
         candidate_id = uuid4()
         self.cursor.rowcount = 0
         with patch("app.services.candidate_service.get_connection", return_value=self.connection):
             deleted = asyncio.run(self.service.delete_candidate(candidate_id, self.organization_id))
 
         query, params = self.cursor.calls[0]
-        self.assertIn("not exists", query.lower())
-        self.assertIn("public.applications", query)
+        normalized_query = " ".join(query.lower().split())
+        for table in ("public.applications", "public.candidate_documents", "public.recruiter_notes"):
+            with self.subTest(table=table):
+                self.assertIn(f"not exists ( select 1 from {table}", normalized_query)
         self.assertIn("application.candidate_id = candidate.id", query)
+        self.assertIn("document.candidate_id = candidate.id", query)
+        self.assertIn("note.candidate_id = candidate.id", query)
         self.assertEqual(params, [candidate_id, self.organization_id])
         self.assertFalse(deleted)
+
+    def test_permanent_delete_can_proceed_when_no_linked_records_exist(self):
+        candidate_id = uuid4()
+        self.cursor.rowcount = 1
+        with patch("app.services.candidate_service.get_connection", return_value=self.connection):
+            deleted = asyncio.run(self.service.delete_candidate(candidate_id, self.organization_id))
+
+        self.assertTrue(deleted)
+        self.assertEqual(len(self.cursor.calls), 1)
+        self.assertEqual(self.cursor.calls[0][1], [candidate_id, self.organization_id])
 
 
 if __name__ == "__main__":
