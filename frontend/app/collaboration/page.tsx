@@ -76,6 +76,18 @@ export default function CollaborationPage() {
 
   useEffect(() => { setMessages([]); if (activeId) void loadMessages(activeId); }, [activeId, loadMessages]);
 
+  // Poll the active thread until server-side realtime delivery is introduced.
+  useEffect(() => {
+    if (!activeId || !organizationId) return;
+    const timer = window.setInterval(() => {
+      void loadMessages(activeId);
+      void request("/api/collaboration/conversations?organization_id=" + encodeURIComponent(organizationId))
+        .then((data) => setConversations(data))
+        .catch(() => undefined);
+    }, 8000);
+    return () => window.clearInterval(timer);
+  }, [activeId, organizationId, loadMessages, request]);
+
   const filteredConversations = useMemo(() => {
     const base = tab === "pins" ? conversations.filter((c) => c.is_pinned) : conversations;
     const term = search.trim().toLowerCase();
@@ -219,7 +231,7 @@ export default function CollaborationPage() {
               {messages.length === 0 && <div style={{ margin: "auto", textAlign: "center", maxWidth: 300, color: "#7b8595" }}><div style={{ fontSize: 30, marginBottom: 8 }}>✳</div><strong style={{ color: "#344054" }}>Start a useful conversation</strong><p style={{ fontSize: 13, lineHeight: 1.6 }}>Coordinate a vacancy, share an update or agree on the next step.</p></div>}
               {messages.map((m) => <div key={m.id} style={{ alignSelf: m.sender_user_id === currentUserId ? "flex-end" : "flex-start", maxWidth: "80%" }}><div style={{ padding: "11px 14px", borderRadius: 14, background: "#f1f3f7", fontSize: 14, lineHeight: 1.55, overflowWrap: "anywhere" }}>{m.body}</div><div style={{ fontSize: 10, color: "#8a94a3", marginTop: 5 }}>{timeLabel(m.created_at)}</div></div>)}
             </div>
-            <form onSubmit={sendMessage} style={{ padding: 16, borderTop: "1px solid #edf0f4" }}><div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}><textarea aria-label="Write a message" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as FormEvent); } }} placeholder="Write a message… (Enter to send)" rows={2} maxLength={10000} style={{ flex: 1, resize: "vertical", minWidth: 0, border: "1px solid #dfe4eb", borderRadius: 12, padding: 12, font: "inherit", fontSize: 13, outlineColor: "#5468e8" }} /><button type="submit" disabled={!draft.trim() || busy} style={{ border: 0, borderRadius: 11, padding: "12px 17px", background: "#3549c7", color: "#fff", fontWeight: 650, cursor: busy ? "wait" : "pointer", opacity: !draft.trim() || busy ? .55 : 1 }}>Send ↗</button></div><div style={{ fontSize: 11, color: "#929baa", marginTop: 8 }}>Internal AQERITH conversation · Keep candidate details within authorised workflows.</div></form>
+            <form onSubmit={sendMessage} style={{ padding: 16, borderTop: "1px solid #edf0f4" }}><div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}><textarea aria-label="Write a message" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as FormEvent); } }} placeholder="Write a message… (Enter to send)" rows={2} maxLength={10000} style={{ flex: 1, resize: "vertical", minWidth: 0, border: "1px solid #dfe4eb", borderRadius: 12, padding: 12, font: "inherit", fontSize: 13, outlineColor: "#5468e8" }} /><button type="submit" disabled={!draft.trim() || busy} style={{ border: 0, borderRadius: 11, padding: "12px 17px", background: "#3549c7", color: "#fff", fontWeight: 650, cursor: busy ? "wait" : "pointer", opacity: !draft.trim() || busy ? .55 : 1 }}>Send ↗</button></div><div style={{ fontSize: 11, color: "#929baa", marginTop: 8 }}>Internal AQERITH conversation · Updates every 8 seconds · Keep candidate details within authorised workflows.</div></form>
           </> : <div style={{ display: "grid", placeContent: "center", textAlign: "center", flex: 1, padding: 24 }}><div style={{ fontSize: 34, color: "#5265d7" }}>✳</div><h2 style={{ margin: "12px 0 6px", fontSize: 20 }}>Your team, in sync.</h2><p style={{ maxWidth: 320, color: "#7b8595", fontSize: 13, lineHeight: 1.6 }}>Select a conversation or choose Contacts to start messaging a colleague.</p><button onClick={() => setTab("contacts")} style={{ justifySelf: "center", marginTop: 10, padding: "10px 14px", border: 0, borderRadius: 9, background: "#3549c7", color: "white", cursor: "pointer" }}>Find a colleague</button></div>}
         </div>
       </section>
