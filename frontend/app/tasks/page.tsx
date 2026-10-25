@@ -120,7 +120,7 @@ export default function TasksPage() {
     }
   }
 
-  const openTasks = tasks.filter((task) => task.status === "open" || task.status === "in_progress");
+  const openTasks = tasks.filter((task) => task.status === "open");
   const completedTasks = tasks.filter((task) => task.status === "completed");
 
   return (
