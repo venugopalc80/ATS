@@ -41,7 +41,7 @@ class MessageCreate(BaseModel):
 
 def _member(cursor, conversation_id: UUID, user_id: UUID):
     cursor.execute("""
-      select 1
+      select cm.joined_at
       from public.conversation_members cm
       join public.conversations c on c.id = cm.conversation_id
       join public.organization_members om
@@ -49,8 +49,10 @@ def _member(cursor, conversation_id: UUID, user_id: UUID):
       where cm.conversation_id=%s and cm.user_id=%s
         and cm.left_at is null and c.archived_at is null
     """, [conversation_id, user_id])
-    if cursor.fetchone() is None:
+    membership = cursor.fetchone()
+    if membership is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
+    return membership
 
 def _check_org_members(cursor, organization_id: UUID, user_ids: list[UUID]):
     cursor.execute("""
@@ -144,19 +146,21 @@ async def list_messages(conversation_id: UUID, before: datetime | None = None,
                         user_id: UUID = Depends(get_current_user_id)):
     with get_connection() as connection:
         with connection.cursor() as cursor:
-            _member(cursor, conversation_id, user_id)
+            membership = _member(cursor, conversation_id, user_id)
+            joined_at = membership["joined_at"]
             if before:
                 cursor.execute("""
                   select id,sender_user_id,body,created_at,edited_at,deleted_at
-                  from public.messages where conversation_id=%s and created_at < %s
+                  from public.messages
+                  where conversation_id=%s and created_at >= %s and created_at < %s
                   order by created_at desc,id desc limit %s
-                """, [conversation_id, before, limit])
+                """, [conversation_id, joined_at, before, limit])
             else:
                 cursor.execute("""
                   select id,sender_user_id,body,created_at,edited_at,deleted_at
-                  from public.messages where conversation_id=%s
+                  from public.messages where conversation_id=%s and created_at >= %s
                   order by created_at desc,id desc limit %s
-                """, [conversation_id, limit])
+                """, [conversation_id, joined_at, limit])
             rows = cursor.fetchall()
             return [{"id":str(r["id"]), "sender_user_id":str(r["sender_user_id"]),
                      "body":"This message was deleted" if r["deleted_at"] else r["body"],
