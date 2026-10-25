@@ -101,6 +101,8 @@ async def create_conversation(payload: ConversationCreate, user_id: UUID = Depen
     members = sorted(set(payload.member_ids + [user_id]), key=str)
     if payload.kind == "direct" and len(members) != 2:
         raise HTTPException(status_code=422, detail="Direct conversations require one other user")
+    if payload.kind == "group" and len(members) < 2:
+        raise HTTPException(status_code=422, detail="Group conversations require at least one other member")
     direct_key = ":".join(map(str, members)) if payload.kind == "direct" else None
     title = payload.title.strip() if payload.title else None
     if payload.kind == "group" and not title:
