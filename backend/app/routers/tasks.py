@@ -9,16 +9,16 @@ from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/tasks", tags=["recruiter tasks"])
-TaskStatus = Literal["open", "in_progress", "completed", "cancelled"]
+TaskStatus = Literal["open", "completed", "cancelled"]
 TaskPriority = Literal["low", "normal", "high", "urgent"]
-TaskType = Literal["general", "candidate_follow_up", "vacancy_follow_up", "interview_follow_up"]
+TaskType = Literal["task", "candidate_follow_up"]
 
 
 class TaskCreate(BaseModel):
     organization_id: UUID
-    title: str = Field(min_length=1, max_length=200)
+    title: str = Field(min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=5000)
-    task_type: TaskType = "general"
+    task_type: TaskType = "task"
     priority: TaskPriority = "normal"
     due_at: datetime | None = None
     candidate_id: UUID | None = None
@@ -35,7 +35,7 @@ class TaskCreate(BaseModel):
 
 
 class TaskUpdate(BaseModel):
-    title: str | None = Field(default=None, min_length=1, max_length=200)
+    title: str | None = Field(default=None, min_length=1, max_length=240)
     description: str | None = Field(default=None, max_length=5000)
     task_type: TaskType | None = None
     status: TaskStatus | None = None
@@ -202,8 +202,11 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
                 values = list(changes.values())
                 if changes.get("status") == "completed":
                     assignments.append("completed_at=coalesce(completed_at,now())")
-                elif changes.get("status") in ("open", "in_progress", "cancelled"):
+                    assignments.append("completed_by=%s")
+                    values.append(user_id)
+                elif changes.get("status") in ("open", "cancelled"):
                     assignments.append("completed_at=null")
+                    assignments.append("completed_by=null")
                 assignments.append("updated_at=now()")
                 values.extend([task_id, organization_id])
                 cursor.execute(
