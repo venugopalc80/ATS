@@ -28,8 +28,13 @@ class MessageCreate(BaseModel):
 
 def _member(cursor, conversation_id: UUID, user_id: UUID):
     cursor.execute("""
-      select 1 from public.conversation_members
-      where conversation_id=%s and user_id=%s and left_at is null
+      select 1
+      from public.conversation_members cm
+      join public.conversations c on c.id = cm.conversation_id
+      join public.organization_members om
+        on om.organization_id = c.organization_id and om.user_id = cm.user_id
+      where cm.conversation_id=%s and cm.user_id=%s
+        and cm.left_at is null and c.archived_at is null
     """, [conversation_id, user_id])
     if cursor.fetchone() is None:
         raise HTTPException(status_code=404, detail="Conversation not found")
