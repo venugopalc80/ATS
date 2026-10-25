@@ -93,7 +93,9 @@ async def list_conversations(organization_id: UUID, user_id: UUID = Depends(get_
                 (select count(*) from public.messages m where m.conversation_id=c.id and m.deleted_at is null
                  and m.sender_user_id <> %s and (cm.last_read_at is null or m.created_at > cm.last_read_at)) as unread_count,
                 (select coalesce(json_agg(json_build_object('id',p.id,'full_name',p.full_name,'role',m2.member_role)), '[]'::json)
-                 from public.conversation_members m2 join public.profiles p on p.id=m2.user_id
+                 from public.conversation_members m2
+                 join public.profiles p on p.id=m2.user_id
+                 join public.organization_members om2 on om2.organization_id=c.organization_id and om2.user_id=m2.user_id
                  where m2.conversation_id=c.id and m2.left_at is null) as members
               from public.conversation_members cm join public.conversations c on c.id=cm.conversation_id
               where cm.user_id=%s and cm.left_at is null and c.organization_id=%s and c.archived_at is null
@@ -282,9 +284,11 @@ async def leave_group(conversation_id: UUID, user_id: UUID = Depends(get_current
             cursor.execute("update public.conversation_members set left_at=now() where conversation_id=%s and user_id=%s", [conversation_id,user_id])
             if was_owner:
                 cursor.execute("""
-                  select user_id from public.conversation_members
-                  where conversation_id=%s and left_at is null
-                  order by joined_at asc limit 1
+                  select cm.user_id from public.conversation_members cm
+                  join public.organization_members om on om.user_id=cm.user_id
+                  join public.conversations c on c.organization_id=om.organization_id and c.id=cm.conversation_id
+                  where cm.conversation_id=%s and cm.left_at is null
+                  order by cm.joined_at asc limit 1
                 """, [conversation_id])
                 successor = cursor.fetchone()
                 if successor:
