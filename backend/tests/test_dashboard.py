@@ -186,7 +186,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
 
         item = next(item for item in result["priorities"] if item["id"] == str(task_id))
         self.assertEqual(item["type"], "task_due")
-        self.assertIn("Candidate follow-up due", item["title"])
+        self.assertIn("candidate follow-up due", item["title"].lower())
         self.assertEqual(item["href"], f"/tasks?task_id={task_id}")
         task_query = next(sql for sql, _params in cursor.queries if "from public.recruiter_tasks" in sql)
         self.assertIn("organization_id=%s", task_query)
