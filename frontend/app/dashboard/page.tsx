@@ -153,7 +153,7 @@ export default function Dashboard() {
       return;
     }
     if (taskType === "candidate_follow_up" && !taskCandidateId.trim()) {
-      setTasksError("Enter the candidate ID for a candidate follow-up.");
+      setTasksError("Choose a candidate for this follow-up.");
       return;
     }
     setTaskSaving(true);
