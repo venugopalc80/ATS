@@ -133,8 +133,8 @@ async def create_conversation(payload: ConversationCreate, user_id: UUID = Depen
             conversation_id = cursor.fetchone()["id"]
             for member_id in members:
                 cursor.execute("""
-                  insert into public.conversation_members (conversation_id,user_id,member_role)
-                  values (%s,%s,%s) on conflict (conversation_id,user_id) do nothing
+                  insert into public.conversation_members (conversation_id,user_id,member_role,last_read_at)
+                  values (%s,%s,%s,now()) on conflict (conversation_id,user_id) do nothing
                 """, [conversation_id, member_id, "owner" if member_id == user_id else "member"])
             return {"id": str(conversation_id), "kind": payload.kind, "title": title}
 
@@ -230,9 +230,9 @@ async def add_group_members(conversation_id: UUID, payload: GroupMembersAdd,
             _check_org_members(cursor, conversation["organization_id"], member_ids)
             for target_id in member_ids:
                 cursor.execute("""
-                  insert into public.conversation_members (conversation_id,user_id,member_role)
-                  values (%s,%s,'member')
-                  on conflict (conversation_id,user_id) do update set left_at=null, joined_at=now()
+                  insert into public.conversation_members (conversation_id,user_id,member_role,last_read_at)
+                  values (%s,%s,'member',now())
+                  on conflict (conversation_id,user_id) do update set left_at=null, joined_at=now(), last_read_at=now()
                 """, [conversation_id, target_id])
                 cursor.execute("""
                   insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
@@ -265,16 +265,36 @@ async def leave_group(conversation_id: UUID, user_id: UUID = Depends(get_current
     with get_connection() as connection:
         with connection.cursor() as cursor:
             _member(cursor, conversation_id, user_id)
-            cursor.execute("select kind from public.conversations where id=%s", [conversation_id])
+            cursor.execute("""
+              select c.kind, cm.member_role
+              from public.conversations c
+              join public.conversation_members cm on cm.conversation_id=c.id
+              where c.id=%s and cm.user_id=%s and cm.left_at is null
+            """, [conversation_id, user_id])
             row = cursor.fetchone()
             if row is None or row["kind"] != "group":
                 raise HTTPException(status_code=422, detail="Only group conversations can be left")
+            was_owner = row["member_role"] == "owner"
             cursor.execute("update public.conversation_members set left_at=now() where conversation_id=%s and user_id=%s", [conversation_id,user_id])
+            if was_owner:
+                cursor.execute("""
+                  select user_id from public.conversation_members
+                  where conversation_id=%s and left_at is null
+                  order by joined_at asc limit 1
+                """, [conversation_id])
+                successor = cursor.fetchone()
+                if successor:
+                    cursor.execute("""
+                      update public.conversation_members set member_role='owner'
+                      where conversation_id=%s and user_id=%s
+                    """, [conversation_id, successor["user_id"]])
+                else:
+                    cursor.execute("update public.conversations set archived_at=now() where id=%s", [conversation_id])
             cursor.execute("""
               insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
               values (%s,%s,'member_left',%s)
             """, [conversation_id,user_id,user_id])
-            return {"left": True}
+            return {"left": True, "ownership_transferred": was_owner}
 
 @router.patch("/conversations/{conversation_id}/title")
 async def update_group_title(conversation_id: UUID, payload: GroupTitleUpdate,
