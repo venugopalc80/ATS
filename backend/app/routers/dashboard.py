@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -241,6 +241,8 @@ async def dashboard(
                 "href": f"/tasks?task_id={task_id}",
                 "due_at": task["due_at"],
             })
+
+        priorities.sort(key=lambda item: item["due_at"].timestamp() if isinstance(item.get("due_at"), datetime) else float("inf"))
 
         return {
             "metrics": {
