@@ -98,7 +98,7 @@ export default function CollaborationPage() {
     try {
       await request("/api/collaboration/conversations/" + activeId + "/messages", {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ body: draft.trim() }),
+        body: JSON.stringify({ body: draft.trim(), client_message_id: crypto.randomUUID() }),
       });
       setDraft(""); await loadMessages(activeId); await refresh();
     } catch (e) { setError(e instanceof Error ? e.message : "Message could not be sent."); }
