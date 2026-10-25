@@ -210,12 +210,12 @@ $$;
 
 drop trigger if exists competency_template_immutable on public.competencies;
 create trigger competency_template_immutable
-before insert or update on public.competencies
+before insert or update or delete on public.competencies
 for each row execute function public.prevent_published_scorecard_child_mutation();
 
 drop trigger if exists interview_question_template_immutable on public.interview_kit_questions;
 create trigger interview_question_template_immutable
-before insert or update on public.interview_kit_questions
+before insert or update or delete on public.interview_kit_questions
 for each row execute function public.prevent_published_scorecard_child_mutation();
 
 revoke all on function public.prevent_published_scorecard_template_mutation() from public;
@@ -317,6 +317,6 @@ end;
 $$;
 drop trigger if exists interview_scorecard_decision_immutable on public.interview_scorecard_decisions;
 create trigger interview_scorecard_decision_immutable
-before update on public.interview_scorecard_decisions
+before update or delete on public.interview_scorecard_decisions
 for each row execute function public.prevent_interview_scorecard_decision_mutation();
 revoke all on function public.prevent_interview_scorecard_decision_mutation() from public;
