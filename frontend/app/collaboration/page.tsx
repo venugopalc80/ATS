@@ -35,6 +35,7 @@ export default function CollaborationPage() {
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
   const [manageMembers, setManageMembers] = useState(false);
   const [addMemberIds, setAddMemberIds] = useState<string[]>([]);
+  const [editedGroupTitle, setEditedGroupTitle] = useState("");
 
   const request = useCallback(async (path: string, init?: RequestInit) => {
     if (!API_BASE) throw new Error("AQERITH API is not configured.");
@@ -136,6 +137,30 @@ export default function CollaborationPage() {
     finally { setBusy(false); }
   }
 
+  async function removeGroupMember(memberId: string) {
+    if (!activeId || busy || !window.confirm("Remove this teammate from the group?")) return;
+    setBusy(true); setError("");
+    try {
+      await request("/api/collaboration/conversations/" + activeId + "/members/" + memberId, { method: "DELETE" });
+      await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not remove group member."); }
+    finally { setBusy(false); }
+  }
+
+  async function saveGroupTitle() {
+    const title = editedGroupTitle.trim();
+    if (!activeId || !title || busy) return;
+    setBusy(true); setError("");
+    try {
+      await request("/api/collaboration/conversations/" + activeId + "/title", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      setEditedGroupTitle(""); await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not update group title."); }
+    finally { setBusy(false); }
+  }
+
   async function leaveGroup() {
     if (!activeId || busy || !window.confirm("Leave this group conversation?")) return;
     setBusy(true); setError("");
@@ -220,8 +245,10 @@ export default function CollaborationPage() {
             <header style={{ padding: "17px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, borderBottom: "1px solid #edf0f4" }}><div><strong style={{ fontSize: 15 }}>{activeTitle}</strong><div style={{ fontSize: 12, color: "#7b8595", marginTop: 4 }}>{active.kind === "group" ? "Group conversation" : "Direct conversation"} · {active.members.length} member{active.members.length === 1 ? "" : "s"}</div></div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>{active.kind === "group" && <><button onClick={() => setManageMembers((v) => !v)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>Members</button><button onClick={() => void leaveGroup()} disabled={busy} style={{ border: "1px solid #f0d6d3", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#9d3024", fontSize: 12 }}>Leave</button></>}<button onClick={() => void togglePin(active)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 12px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>{active.is_pinned ? "Unpin" : "Pin conversation"}</button></div></header>
             {manageMembers && active.kind === "group" && <div style={{ padding: 14, borderBottom: "1px solid #edf0f4", background: "#fafbfc" }}>
               <strong style={{ fontSize: 12 }}>Group members</strong>
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>{active.members.map((m) => <span key={m.id} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 8, padding: "6px 8px", fontSize: 12 }}>{m.full_name || "AQERITH user"}{m.id === currentUserId ? " (you)" : ""}</span>)}</div>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>{active.members.map((m) => <span key={m.id} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 8, padding: "6px 8px", fontSize: 12, display: "inline-flex", gap: 6, alignItems: "center" }}>{m.full_name || "AQERITH user"}{m.id === currentUserId ? " (you)" : ""}{active.members.some((x) => x.id === currentUserId && x.role === "owner") && m.id !== currentUserId && <button disabled={busy} onClick={() => void removeGroupMember(m.id)} aria-label={"Remove " + (m.full_name || "member")} style={{ border: 0, background: "transparent", color: "#9d3024", cursor: "pointer", padding: 0 }}>×</button>}</span>)}</div>
               {active.members.some((m) => m.id === currentUserId && m.role === "owner") && <>
+                <div style={{ marginTop: 12, fontSize: 12, fontWeight: 650 }}>Rename group</div>
+                <div style={{ display: "flex", gap: 8, marginTop: 6 }}><input value={editedGroupTitle} onChange={(e) => setEditedGroupTitle(e.target.value)} placeholder={active.title || "Group name"} maxLength={120} style={{ flex: 1, minWidth: 0, border: "1px solid #e0e5ec", borderRadius: 8, padding: 8, fontSize: 12 }} /><button disabled={busy || !editedGroupTitle.trim()} onClick={() => void saveGroupTitle()} style={{ border: 0, borderRadius: 8, padding: "8px 10px", background: "#3549c7", color: "#fff", opacity: busy || !editedGroupTitle.trim() ? .5 : 1, cursor: "pointer", fontSize: 12 }}>Save</button></div>
                 <div style={{ marginTop: 12, fontSize: 12, fontWeight: 650 }}>Add teammates</div>
                 <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 7 }}>{contacts.filter((contact) => !active.members.some((m) => m.id === contact.id)).map((contact) => <label key={contact.id} style={{ fontSize: 12, display: "flex", gap: 5, alignItems: "center" }}><input type="checkbox" checked={addMemberIds.includes(contact.id)} onChange={(e) => setAddMemberIds((ids) => e.target.checked ? [...ids, contact.id] : ids.filter((id) => id !== contact.id))} />{contact.full_name}</label>)}</div>
                 <button onClick={() => void addGroupMembers()} disabled={busy || addMemberIds.length === 0} style={{ marginTop: 10, border: 0, borderRadius: 8, padding: "8px 11px", background: "#3549c7", color: "#fff", opacity: busy || addMemberIds.length === 0 ? .5 : 1, cursor: "pointer", fontSize: 12 }}>Add selected members</button>
