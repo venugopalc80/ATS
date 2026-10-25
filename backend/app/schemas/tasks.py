@@ -38,6 +38,9 @@ class TaskUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_update(self):
+        for field in ("title", "priority", "status"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
         if self.title is not None:
             self.title = self.title.strip()
             if not self.title:
