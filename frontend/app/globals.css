@@ -315,3 +315,22 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
 .dashboard-user-dropdown button { width:100%; text-align:left; border:0; border-radius:7px; background:transparent; padding:10px; color:var(--ink); font-size:13px; }
 .dashboard-user-dropdown button:hover { background:var(--bg); }
 .dashboard-user-dropdown button:disabled { opacity:.6; cursor:wait; }
+
+
+/* Recruiter tasks workspace */
+.task-form,.task-list { margin-bottom:18px; }
+.task-form { display:grid; gap:14px; }
+.task-form h2,.task-list h2 { margin:0; }
+.task-form label { display:grid; gap:6px; color:var(--ink); font-size:12px; font-weight:650; }
+.task-form input,.task-form textarea,.task-form select { width:100%; min-width:0; border:1px solid var(--line); border-radius:8px; padding:10px 11px; background:#fff; color:var(--ink); font:inherit; font-size:13px; }
+.task-form textarea { resize:vertical; }
+.task-form-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:12px; }
+.task-row { grid-template-columns:auto minmax(0,1fr) auto; align-items:center; }
+.task-row .dashboard-priority-copy { display:grid; gap:5px; min-width:0; }
+.task-row .dashboard-priority-copy span { overflow-wrap:anywhere; }
+.dashboard-success { border:1px solid #b7e4c7; background:#f1fbf4; color:#176b38; border-radius:8px; padding:10px 12px; }
+@media (max-width:650px) {
+ .task-form-grid { grid-template-columns:1fr; }
+ .task-row { grid-template-columns:1fr; align-items:stretch; }
+ .task-row .btn { justify-self:start; }
+}
