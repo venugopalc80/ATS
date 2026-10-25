@@ -351,3 +351,45 @@ def test_retention_exception_rejects_end_before_start():
             starts_at=datetime(2026, 10, 22, tzinfo=timezone.utc),
             ends_at=datetime(2026, 10, 21, tzinfo=timezone.utc),
         )
+
+
+
+def test_notice_rejects_timezone_naive_effective_at():
+    from app.routers.privacy import NoticeCreate
+
+    with pytest.raises(ValidationError, match="effective_at must include a timezone"):
+        NoticeCreate(
+            organization_id=uuid4(), version="v1", purpose="recruitment",
+            notice_text="Candidate privacy notice",
+            effective_at=datetime(2026, 10, 25),
+        )
+
+
+def test_notice_rejects_blank_required_text():
+    from app.routers.privacy import NoticeCreate
+
+    with pytest.raises(ValidationError, match="must not be blank"):
+        NoticeCreate(
+            organization_id=uuid4(), version="  ", purpose="recruitment",
+            notice_text="Candidate privacy notice",
+            effective_at=datetime(2026, 10, 25, tzinfo=timezone.utc),
+        )
+
+
+def test_retention_exception_rejects_blank_reason():
+    from app.routers.privacy import RetentionExceptionCreate
+
+    with pytest.raises(ValidationError, match="reason must not be blank"):
+        RetentionExceptionCreate(
+            organization_id=uuid4(), target_table="candidates", target_record_id=uuid4(),
+            exception_type="manual_review", reason="   ",
+            starts_at=datetime(2026, 10, 25, tzinfo=timezone.utc),
+        )
+
+
+def test_consent_evidence_timestamps_must_be_timezone_aware():
+    with pytest.raises(ValidationError, match="consent_captured_at must include a timezone"):
+        ProcessingRecordCreate(**base_processing_record(
+            legal_basis="consent", consent_status="granted",
+            consent_captured_at=datetime(2026, 10, 25),
+        ))
