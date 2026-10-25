@@ -1,0 +1,249 @@
+"use client";
+
+import Link from "next/link";
+import { FormEvent, useCallback, useEffect, useState } from "react";
+import { apiFetch, API_BASE } from "@/lib/api";
+import { getActiveOrganizationId } from "@/lib/organization";
+
+type RecruiterTask = {
+  id: string;
+  organization_id: string;
+  title: string;
+  description: string | null;
+  task_type: "task" | "candidate_follow_up";
+  status: "open" | "completed" | "cancelled";
+  priority: "low" | "normal" | "high" | "urgent";
+  due_at: string | null;
+  candidate_id: string | null;
+  job_id: string | null;
+  candidate_first_name?: string | null;
+  candidate_last_name?: string | null;
+  job_title?: string | null;
+  assignee_name?: string | null;
+};
+
+type CandidateOption = { id: string; first_name: string; last_name?: string | null };
+type JobOption = { id: string; title: string };
+
+
+const blank = { title: "", description: "", task_type: "task", priority: "normal", due_at: "", candidate_id: "", job_id: "" };
+
+function localDateTimeToIso(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+export default function TasksPage() {
+  const [organizationId, setOrganizationId] = useState("");
+  const [tasks, setTasks] = useState<RecruiterTask[]>([]);
+  const [candidates, setCandidates] = useState<CandidateOption[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
+  const [form, setForm] = useState(blank);
+  const [showForm, setShowForm] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    setOrganizationId(getActiveOrganizationId(process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? ""));
+  }, []);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("create") === "1") {
+      setShowForm(true);
+    }
+  }, []);
+
+  const loadTasks = useCallback(async () => {
+    if (!API_BASE || !organizationId) {
+      setLoading(false);
+      setError("Choose an organisation to view recruiter tasks.");
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/tasks?organization_id=" + encodeURIComponent(organizationId));
+      if (!response.ok) throw new Error(response.status === 403 ? "You do not have access to these tasks." : "Tasks could not be loaded (HTTP " + response.status + ").");
+      setTasks(await response.json());
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Tasks could not be loaded.");
+    } finally {
+      setLoading(false);
+    }
+  }, [organizationId]);
+
+  useEffect(() => { if (organizationId) void loadTasks(); }, [organizationId, loadTasks]);
+
+  useEffect(() => {
+    if (!API_BASE || !organizationId) return;
+    let cancelled = false;
+    async function loadRelatedRecords() {
+      try {
+        const [candidateResponse, jobResponse] = await Promise.all([
+          apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId)),
+          apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(organizationId)),
+        ]);
+        if (!candidateResponse.ok || !jobResponse.ok) return;
+        const [candidateRows, jobRows] = await Promise.all([candidateResponse.json(), jobResponse.json()]);
+        if (!cancelled) {
+          setCandidates(candidateRows.map((row: CandidateOption) => ({ id: row.id, first_name: row.first_name, last_name: row.last_name })));
+          setJobs(jobRows.map((row: JobOption) => ({ id: row.id, title: row.title })));
+        }
+      } catch {
+        // The task workspace remains usable if optional record lists cannot load.
+      }
+    }
+    void loadRelatedRecords();
+    return () => { cancelled = true; };
+  }, [organizationId]);
+
+  async function createTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!API_BASE || !organizationId || !form.title.trim()) return;
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organization_id: organizationId,
+          title: form.title.trim(),
+          description: form.description.trim() || null,
+          task_type: form.task_type,
+          priority: form.priority,
+          due_at: localDateTimeToIso(form.due_at),
+          candidate_id: form.candidate_id || null,
+          job_id: form.job_id || null,
+        }),
+      });
+      if (!response.ok) throw new Error("Task could not be saved (HTTP " + response.status + ").");
+      setForm(blank);
+      setShowForm(false);
+      setMessage("Task created.");
+      await loadTasks();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Task could not be saved.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function setStatus(task: RecruiterTask, status: "completed" | "open") {
+    if (!API_BASE) return;
+    setError("");
+    setMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/tasks/" + encodeURIComponent(task.id), {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status }),
+      });
+      if (!response.ok) throw new Error("Task status could not be updated (HTTP " + response.status + ").");
+      setMessage(status === "completed" ? "Task marked complete." : "Task reopened.");
+      await loadTasks();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Task status could not be updated.");
+    }
+  }
+
+  const openTasks = tasks.filter((task) => task.status === "open");
+  const completedTasks = tasks.filter((task) => task.status === "completed");
+
+  return (
+    <div className="shell">
+      <aside className="sidebar">
+        <Link href="/dashboard" className="brand">AQERITH</Link>
+        <div className="nav-label">Workspace</div>
+        <Link href="/dashboard" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
+        <Link href="/jobs" className="nav-item"><span>▣</span><span>Jobs</span></Link>
+        <Link href="/candidates" className="nav-item"><span>♙</span><span>Candidates</span></Link>
+        <Link href="/submissions" className="nav-item"><span>↗</span><span>Submissions</span></Link>
+        <Link href="/interviews" className="nav-item"><span>◷</span><span>Interviews</span></Link>
+        <Link href="/clients" className="nav-item"><span>□</span><span>Clients</span></Link>
+        <Link href="/offers" className="nav-item"><span>$</span><span>Offers</span></Link>
+        <Link href="/placements" className="nav-item"><span>◇</span><span>Placements</span></Link>
+        <div className="nav-label">Work management</div>
+        <div className="nav-item active"><span>✓</span><span>Recruiter tasks</span></div>
+      </aside>
+      <main className="main">
+        <header className="topbar">
+          <Link href="/candidates" className="search" style={{ textDecoration: "none" }}>Search candidates...</Link>
+          <div className="profile"><span>AQERITH workspace</span><div className="avatar">A</div></div>
+        </header>
+        <section className="content dashboard-content">
+      <div className="header-row">
+        <div>
+          <div className="eyebrow">Recruitment operations</div>
+          <h1>Recruiter tasks</h1>
+          <p className="subtitle">Track due work and candidate or vacancy follow-ups for your organisation.</p>
+        </div>
+        <div className="actions dashboard-actions">
+          <Link href="/dashboard" className="btn">Back to dashboard</Link>
+          <button type="button" className="btn primary" onClick={() => setShowForm((value) => !value)}>{showForm ? "Cancel" : "+ Add task"}</button>
+        </div>
+      </div>
+
+      {error && <div className="dashboard-error" role="alert"><strong>Task action failed</strong><p>{error}</p><button className="btn" onClick={() => void loadTasks()}>Retry</button></div>}
+      {message && <p role="status" className="dashboard-success">{message}</p>}
+
+      {showForm && (
+        <form className="card task-form" onSubmit={createTask}>
+          <h2>Create a recruiter task</h2>
+          <label>Task title<input required maxLength={200} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="e.g. Follow up with candidate after interview" /></label>
+          <label>Details<textarea maxLength={5000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} /></label>
+          <div className="task-form-grid">
+            <label>Task type<select value={form.task_type} onChange={(event) => setForm({ ...form, task_type: event.target.value })}>
+              <option value="task">General task</option><option value="candidate_follow_up">Candidate follow-up</option>
+            </select></label>
+            <label>Priority<select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
+              <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+            </select></label>
+            <label>Candidate<select value={form.candidate_id} required={form.task_type === "candidate_follow_up"} onChange={(event) => setForm({ ...form, candidate_id: event.target.value })}>
+              <option value="">No candidate linked</option>{candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.first_name} {candidate.last_name || ""}</option>)}
+            </select></label>
+            <label>Vacancy<select value={form.job_id} onChange={(event) => setForm({ ...form, job_id: event.target.value })}>
+              <option value="">No vacancy linked</option>{jobs.map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}
+            </select></label>
+            <label>Due date and time<input type="datetime-local" value={form.due_at} onChange={(event) => setForm({ ...form, due_at: event.target.value })} /></label>
+          </div>
+          <button className="btn primary" type="submit" disabled={saving || !form.title.trim()}>{saving ? "Saving…" : "Create task"}</button>
+        </form>
+      )}
+
+      <div className="metrics dashboard-metrics">
+        <div className="card dashboard-metric-card"><div className="metric-title">Open tasks</div><div className="metric-value">{loading ? "—" : openTasks.length}</div></div>
+        <div className="card dashboard-metric-card"><div className="metric-title">Completed tasks</div><div className="metric-value">{loading ? "—" : completedTasks.length}</div></div>
+        <div className="card dashboard-metric-card"><div className="metric-title">Due or overdue</div><div className="metric-value">{loading ? "—" : openTasks.filter((task) => task.due_at && new Date(task.due_at) < new Date()).length}</div></div>
+      </div>
+
+      <section className="card task-list">
+        <div className="card-head"><h2 className="card-title">Open and upcoming</h2><button type="button" className="btn" onClick={() => void loadTasks()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button></div>
+        {loading ? <p>Loading tasks…</p> : openTasks.length === 0 ? <div className="dashboard-empty"><strong>No open tasks</strong><p>Create a task or follow-up to have it appear here and in dashboard priorities when due.</p></div> : (
+          <div className="dashboard-priority-list">{openTasks.map((task) => (
+            <article key={task.id} className="dashboard-priority-row task-row">
+              <span className={"badge " + (task.priority === "urgent" || task.priority === "high" ? "amber" : "blue")}>{task.priority}</span>
+              <div className="dashboard-priority-copy"><strong>{task.title}</strong><span>{task.description || task.task_type.replaceAll("_", " ")}</span><span>{task.due_at ? "Due " + new Date(task.due_at).toLocaleString() : "No due date"}{task.candidate_first_name ? " · " + task.candidate_first_name + " " + (task.candidate_last_name || "") : ""}{task.job_title ? " · " + task.job_title : ""}</span></div>
+              <button type="button" className="btn" onClick={() => void setStatus(task, "completed")}>Mark complete</button>
+            </article>
+          ))}</div>
+        )}
+      </section>
+
+      <section className="card task-list">
+        <div className="card-head"><h2 className="card-title">Recently completed</h2></div>
+        {loading ? <p>Loading tasks…</p> : completedTasks.length === 0 ? <div className="dashboard-empty"><p>Completed tasks will appear here.</p></div> : (
+          <div className="dashboard-priority-list">{completedTasks.slice(0, 20).map((task) => (
+            <article key={task.id} className="dashboard-priority-row task-row"><span className="badge green">Complete</span><div className="dashboard-priority-copy"><strong>{task.title}</strong><span>{task.description || task.task_type.replaceAll("_", " ")}</span></div><button type="button" className="btn" onClick={() => void setStatus(task, "open")}>Reopen</button></article>
+          ))}</div>
+        )}
+      </section>
+        </section>
+      </main>
+    </div>
+  );
+}

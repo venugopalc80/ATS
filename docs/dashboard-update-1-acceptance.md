@@ -15,7 +15,7 @@
 
 - [ ] **NOT VERIFIED** — Open jobs, active candidates, interviews today, and active placements reconcile with scoped database records.
 - [ ] **REVIEW REQUIRED** — Date-range behaviour is consistent and documented. The dashboard passes dates to the API, but the current KPI queries for open jobs, active candidates, interviews today, and active placements do not use the selected date range; pipeline and recent activity do.
-- [ ] **REVIEW REQUIRED** — Priority rules correctly cover today's interviews, missing interview feedback, expiring offers, overdue decisions, and any recruiter tasks that are in scope. Current API code includes interviews, missing feedback, offers expiring within three days, applications awaiting a decision for over three days, and vacancy-health items; no recruiter-task query was identified in the inspected dashboard router.
+- [ ] **REVIEW REQUIRED** — Priority rules correctly cover today's interviews, missing interview feedback, expiring offers, overdue decisions, and due recruiter tasks/candidate follow-ups. The API now queries the existing organisation-scoped `public.recruiter_tasks` table for open tasks due within three days and adds them to priorities. Task creation requires a candidate link when type is `candidate_follow_up`.
 - [ ] **NOT VERIFIED** — Vacancy-health thresholds are approved, consistently applied, and clearly explained. Current rules flag open vacancies older than 30 days or with fewer than 3 applications.
 
 ## 3. Security and activity
@@ -30,6 +30,12 @@
 - [ ] **NOT VERIFIED** — Desktop, tablet, and mobile layouts are checked at representative viewport sizes.
 - [ ] **NOT VERIFIED** — Automated tests cover dashboard calculations, Match Lab skill-overlap logic, critical navigation/interaction, and access control. A file at `backend/tests/test_dashboard.py` was not found; inspect the full existing test layout before adding tests.
 - [ ] **NOT VERIFIED** — Production smoke tests are run and the results are recorded against the criteria above.
+
+## Current task/follow-up implementation
+
+- The ATS-Staging database already contains `public.recruiter_tasks` with RLS and hardened column grants (migrations 017–023); this PR reuses it and does not add a duplicate migration.
+- Draft PR #82 adds an authenticated API and a task workspace. Candidate/vacancy/assignee organisation membership is checked by the API.
+- Live browser acceptance and cross-tenant checks remain outstanding.
 
 ## Initial code-review evidence
 

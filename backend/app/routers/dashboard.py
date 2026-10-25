@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -76,7 +76,8 @@ async def dashboard(
                        left join public.applications a on a.job_id=j.id and a.organization_id=j.organization_id
                        where j.organization_id=%s and j.status in ('open','on_hold')
                        group by j.id,j.title,c.name,j.status,j.created_at,j.opened_at
-                       order by j.created_at asc limit 10""",
+                       order by case when j.status='on_hold' then 0 else 1 end,
+                                coalesce(j.opened_at,j.created_at) asc limit 10""",
                     [organization_id],
                 )
                 job_rows = list(cursor.fetchall())
@@ -85,6 +86,8 @@ async def dashboard(
                 for job in job_rows:
                     job = dict(job)
                     reasons = []
+                    if job["status"] == "on_hold":
+                        reasons.append("Role is on hold")
                     if job["status"] == "open" and job["days_open"] > VACANCY_TARGET_DAYS:
                         reasons.append(f"Open for more than {VACANCY_TARGET_DAYS} days")
                     if job["status"] == "open" and job["applicants"] < VACANCY_MIN_APPLICATIONS:
@@ -167,6 +170,16 @@ async def dashboard(
                 )
                 awaiting_decision = cursor.fetchone()["total"]
 
+                cursor.execute(
+                    """select id,title,task_type,priority,status,due_at,candidate_id,job_id
+                       from public.recruiter_tasks
+                       where organization_id=%s and status='open'
+                         and due_at is not null and due_at < now() + interval '3 days'
+                       order by due_at asc limit 20""",
+                    [organization_id],
+                )
+                due_tasks = list(cursor.fetchall())
+
         priorities = []
         for row in todays_interviews:
             priorities.append({
@@ -174,7 +187,7 @@ async def dashboard(
                 "type": "interview_today",
                 "title": "Interview scheduled today",
                 "description": f"Application {row['application_id']}",
-                "href": f"/interviews/{row['id']}",
+                "href": f"/interviews?interview_id={row['id']}",
                 "due_at": row["scheduled_at"],
             })
         for row in pending_feedback:
@@ -183,7 +196,7 @@ async def dashboard(
                 "type": "feedback_pending",
                 "title": "Interview feedback outstanding",
                 "description": f"Application {row['application_id']}",
-                "href": f"/interviews/{row['id']}",
+                "href": f"/interviews?interview_id={row['id']}",
                 "due_at": row["scheduled_at"],
             })
         for row in expiring_offers:
@@ -192,7 +205,7 @@ async def dashboard(
                 "type": "offer_expiring",
                 "title": "Offer approaching expiry",
                 "description": row["title"],
-                "href": f"/offers/{row['id']}",
+                "href": f"/offers?offer_id={row['id']}",
                 "due_at": row["expires_at"],
             })
         if awaiting_decision:
@@ -213,6 +226,23 @@ async def dashboard(
                 "href": f"/jobs?job_id={job['id']}",
                 "due_at": None,
             })
+
+        for task in due_tasks:
+            task_type = task["task_type"]
+            task_id = str(task["id"])
+            label = "Candidate follow-up due" if task_type == "candidate_follow_up" else (
+                "Vacancy follow-up due" if task_type == "vacancy_follow_up" else "Recruiter task due"
+            )
+            priorities.append({
+                "id": task_id,
+                "type": "task_due",
+                "title": label if task["priority"] not in ("high", "urgent") else f"{task['priority'].title()} priority: {label.lower()}",
+                "description": task["title"],
+                "href": f"/tasks?task_id={task_id}",
+                "due_at": task["due_at"],
+            })
+
+        priorities.sort(key=lambda item: item["due_at"].timestamp() if isinstance(item.get("due_at"), datetime) else float("inf"))
 
         return {
             "metrics": {

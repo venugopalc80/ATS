@@ -21,6 +21,8 @@ class FakeCursor:
         self.sql = ""
         self.params = []
         self.queries = []
+        self.job_status = "open"
+        self.task_rows = []
 
     def __enter__(self):
         return self
@@ -58,7 +60,7 @@ class FakeCursor:
         if "left join public.applications" in self.sql:
             return [{
                 "id": JOB, "title": "Backend Engineer", "client": "Example Ltd",
-                "status": "open", "applicants": 1, "days_open": 42,
+                "status": self.job_status, "applicants": 1, "days_open": 42,
             }]
         if "from public.interviews i" in self.sql and "scheduled_at" in self.sql and "limit 10" in self.sql:
             if "feedback is null" in self.sql:
@@ -83,6 +85,8 @@ class FakeCursor:
                 "entity_id": "candidate-1", "metadata": {}, "created_at": datetime(2026, 10, 13, 9, tzinfo=timezone.utc),
                 "actor_user_id": USER, "actor_name": "Recruiter",
             }]
+        if "from public.recruiter_tasks" in self.sql:
+            return self.task_rows
         raise AssertionError(f"Unexpected fetchall query: {self.sql}")
 
 
@@ -125,8 +129,8 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["pipeline"]["new"], 2)
         self.assertEqual(result["pipeline"]["rejected"], 1)
         self.assertEqual(result["date_range"], {"from": "2026-10-01", "to": "2026-10-13"})
-        self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews/{INTERVIEW}" for item in result["priorities"]))
-        self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers/{OFFER}" for item in result["priorities"]))
+        self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews?interview_id={INTERVIEW}" for item in result["priorities"]))
+        self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers?offer_id={OFFER}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "vacancy_health" and item["href"] == f"/jobs?job_id={JOB}" for item in result["priorities"]))
         self.assertEqual(result["activity"][0]["actor_name"], "Recruiter")
         # Every data query must include the requested organisation scope.
@@ -134,6 +138,58 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         for sql, params in cursor.queries:
             self.assertIn("organization_id", sql, f"Missing tenant scope in query: {sql}")
             self.assertIn(ORG, params, f"Missing requested organisation parameter: {sql}")
+
+
+    async def test_on_hold_vacancy_is_flagged_for_attention(self):
+        cursor = FakeCursor()
+        cursor.job_status = "on_hold"
+
+        @contextmanager
+        def fake_connection():
+            with FakeConnection(cursor) as connection:
+                yield connection
+
+        with patch.object(dashboard_router, "assert_org_member"), patch.object(
+            dashboard_router, "get_connection", fake_connection
+        ):
+            result = await dashboard_router.dashboard(
+                organization_id=ORG, date_from=None, date_to=None, user_id=USER,
+            )
+
+        self.assertEqual(result["jobs"][0]["health"], "needs_attention")
+        self.assertIn("Role is on hold", result["jobs"][0]["health_reasons"])
+        vacancy_query = next(sql for sql, _params in cursor.queries if "left join public.applications" in sql)
+        self.assertIn("order by case when j.status='on_hold' then 0 else 1 end", vacancy_query)
+        self.assertIn("coalesce(j.opened_at,j.created_at) asc limit 10", vacancy_query)
+
+    async def test_due_candidate_follow_up_appears_in_priorities(self):
+        cursor = FakeCursor()
+        task_id = UUID("66666666-6666-4666-8666-666666666666")
+        cursor.task_rows = [{
+            "id": task_id, "title": "Call candidate", "task_type": "candidate_follow_up",
+            "priority": "high", "status": "open",
+            "due_at": datetime(2026, 10, 13, 11, tzinfo=timezone.utc),
+            "candidate_id": UUID("77777777-7777-4777-8777-777777777777"), "job_id": None,
+        }]
+
+        @contextmanager
+        def fake_connection():
+            with FakeConnection(cursor) as connection:
+                yield connection
+
+        with patch.object(dashboard_router, "assert_org_member"), patch.object(
+            dashboard_router, "get_connection", fake_connection
+        ):
+            result = await dashboard_router.dashboard(
+                organization_id=ORG, date_from=None, date_to=None, user_id=USER,
+            )
+
+        item = next(item for item in result["priorities"] if item["id"] == str(task_id))
+        self.assertEqual(item["type"], "task_due")
+        self.assertIn("candidate follow-up due", item["title"].lower())
+        self.assertEqual(item["href"], f"/tasks?task_id={task_id}")
+        task_query = next(sql for sql, _params in cursor.queries if "from public.recruiter_tasks" in sql)
+        self.assertIn("organization_id=%s", task_query)
 
     async def test_rejects_non_member_before_database_access(self):
         with patch.object(

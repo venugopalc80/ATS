@@ -150,6 +150,7 @@ export default function Dashboard() {
           ["Candidates", "/candidates", "♙"],
           ["Submissions", "/submissions", "↗"],
           ["Interviews", "/interviews", "◷"],
+          ["Recruiter tasks", "/tasks", "✓"],
           ["Clients", "/clients", "□"],
           ["Onboarding", "/onboarding", "✓"],
           ["Offers", "/offers", "＄"],
@@ -222,9 +223,9 @@ export default function Dashboard() {
           <div className="metrics dashboard-metrics">
             {[
               { title: "Open jobs", value: data?.metrics.open_jobs, icon: "▣", href: "/jobs?status=open", detail: "Currently open vacancies" },
-              { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates", detail: "Accessible candidate records" },
-              { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews", detail: "Scheduled for today" },
-              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements", detail: (data?.metrics.placements_this_month ?? 0) + " created this month" },
+              { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates?status=active", detail: "Active candidate records" },
+              { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews?today=1", detail: "Scheduled for today" },
+              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements?status=active", detail: data ? data.metrics.placements_this_month + " created this month" : "Monthly count unavailable" },
             ].map((metric) => (
               <Link key={metric.title} href={metric.href} className="card dashboard-metric-card" aria-label={metric.title + ", view records"}>
                 <div className="dashboard-metric-top"><span className="dashboard-metric-icon" aria-hidden="true">{metric.icon}</span><span className="metric-title">{metric.title}</span></div>
@@ -236,8 +237,10 @@ export default function Dashboard() {
 
           <div className="dashboard-section-grid">
             <section className="card dashboard-priorities" id="priorities">
-              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{data?.priorities.length ?? 0} items</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.priorities.length ? (
+              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{error ? "Unavailable" : (data?.priorities.length ?? 0) + " items"}</span></div>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Priorities unavailable</strong><p>We could not confirm whether any items need attention. Retry to load the latest data.</p></div>
+              ) : !data?.priorities.length ? (
                 <div className="dashboard-empty"><strong>You're all caught up</strong><p>No outstanding priority items were found for the current data.</p></div>
               ) : (
                 <div className="dashboard-priority-list">
@@ -259,33 +262,42 @@ export default function Dashboard() {
               <Link href="/candidates?create=1" className="dashboard-quick-action"><span aria-hidden="true">♙</span><span><strong>Add candidate</strong><small>Create a candidate profile or import a CV</small></span><span aria-hidden="true">→</span></Link>
               <Link href="/match-lab" className="dashboard-quick-action"><span aria-hidden="true">⌕</span><span><strong>Find matches</strong><small>Choose a vacancy to begin candidate matching</small></span><span aria-hidden="true">→</span></Link>
               <Link href="/interviews?create=1" className="dashboard-quick-action"><span aria-hidden="true">◷</span><span><strong>Schedule interview</strong><small>Start interview scheduling</small></span><span aria-hidden="true">→</span></Link>
+              <Link href="/tasks?create=1" className="dashboard-quick-action"><span aria-hidden="true">✓</span><span><strong>Manage tasks</strong><small>Create recruiter tasks and candidate follow-ups</small></span><span aria-hidden="true">→</span></Link>
             </section>
           </div>
 
           <section className="card dashboard-pipeline-section">
-            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">Application counts for the selected date range · {totalPipeline} total</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
-            <div className="pipeline dashboard-pipeline">
-              {stages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
-                  <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong><span>{stage.label}</span>
-                </Link>
-              ))}
-            </div>
-            <div className="dashboard-terminal-stages">
-              <span className="muted-small">Terminal outcomes</span>
-              {terminalStages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
-                  {stage.label} <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong>
-                </Link>
-              ))}
-            </div>
+            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">{error ? "Pipeline data unavailable" : "Application counts for the selected date range · " + totalPipeline + " total"}</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
+            {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+              <div className="dashboard-empty" role="status"><strong>Hiring pipeline unavailable</strong><p>Application counts could not be loaded. Retry before interpreting hiring progress.</p></div>
+            ) : Object.keys(data?.pipeline ?? {}).length === 0 ? (
+              <div className="dashboard-empty"><strong>No pipeline activity in this date range</strong><p>Try a wider date range or review submissions.</p></div>
+            ) : <>
+              <div className="pipeline dashboard-pipeline">
+                {stages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
+                    <strong>{data?.pipeline[stage.key] ?? 0}</strong><span>{stage.label}</span>
+                  </Link>
+                ))}
+              </div>
+              <div className="dashboard-terminal-stages">
+                <span className="muted-small">Terminal outcomes</span>
+                {terminalStages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
+                    {stage.label} <strong>{data?.pipeline[stage.key] ?? 0}</strong>
+                  </Link>
+                ))}
+              </div>
+            </>}
           </section>
 
           <div className="dashboard-section-grid dashboard-lower-grid">
             <section className="card">
               <div className="card-head"><span className="card-title">Vacancy health</span><Link href="/jobs" className="link">All vacancies →</Link></div>
-              <p className="muted-small">Rules: flag open roles older than {data?.rules.vacancy_target_days ?? 30} days or with fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.jobs.length ? (
+              <p className="muted-small">Needs attention when a role is on hold, has been open for more than {data?.rules.vacancy_target_days ?? 30} days, or has fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Vacancy health unavailable</strong><p>We could not load vacancy records. Retry before making staffing decisions.</p></div>
+              ) : !data?.jobs.length ? (
                 <div className="dashboard-empty"><strong>No vacancies to display</strong><p>Create a requisition to start tracking vacancy health.</p><Link href="/jobs" className="btn">View jobs</Link></div>
               ) : (
                 <div className="dashboard-vacancy-list">
@@ -302,7 +314,9 @@ export default function Dashboard() {
 
             <section className="card">
               <div className="card-head"><span className="card-title">Recent activity</span><span className="muted-small">Latest recorded events</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.activity.length ? (
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Recent activity unavailable</strong><p>Activity could not be loaded, so this view may not reflect the latest changes.</p></div>
+              ) : !data?.activity.length ? (
                 <div className="dashboard-empty"><strong>No activity yet</strong><p>Recruitment events will appear here when recorded.</p></div>
               ) : (
                 <div className="activity dashboard-activity">
