@@ -150,6 +150,8 @@ async def list_tasks(
 @router.post("", status_code=201)
 async def create_task(payload: TaskCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_member(user_id, payload.organization_id)
+    if payload.task_type == "candidate_follow_up" and payload.candidate_id is None:
+        raise HTTPException(status_code=422, detail="Candidate follow-ups must be linked to a candidate")
     _validate_related_records(payload.organization_id, payload.candidate_id, payload.job_id)
     _validate_assignee(payload.organization_id, payload.assigned_to)
     title = payload.title.strip()
@@ -173,7 +175,7 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute("select organization_id from public.recruiter_tasks where id=%s", [task_id])
+                cursor.execute("select organization_id,candidate_id,task_type from public.recruiter_tasks where id=%s", [task_id])
                 existing = cursor.fetchone()
                 if existing is None:
                     raise HTTPException(status_code=404, detail="Task not found")
@@ -188,6 +190,10 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
                 _validate_related_records(organization_id, changes.get("candidate_id"), changes.get("job_id"))
                 if "assigned_to" in changes:
                     _validate_assignee(organization_id, changes["assigned_to"])
+                effective_task_type = changes.get("task_type", existing["task_type"])
+                effective_candidate_id = changes.get("candidate_id", existing["candidate_id"])
+                if effective_task_type == "candidate_follow_up" and effective_candidate_id is None:
+                    raise HTTPException(status_code=422, detail="Candidate follow-ups must be linked to a candidate")
                 if not changes:
                     cursor.execute(
                         """select t.*, c.first_name as candidate_first_name, c.last_name as candidate_last_name,
