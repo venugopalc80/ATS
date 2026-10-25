@@ -4,6 +4,7 @@ import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { apiFetch, API_BASE } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
+import { getSupabaseClient } from "@/lib/supabase";
 
 type Contact = { id: string; full_name: string; role: string };
 type Message = { id: string; sender_user_id: string; body: string; created_at: string; deleted?: boolean };
@@ -23,6 +24,7 @@ export default function CollaborationPage() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [activeId, setActiveId] = useState("");
+  const [currentUserId, setCurrentUserId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
@@ -55,6 +57,7 @@ export default function CollaborationPage() {
   }, [organizationId, request]);
 
   useEffect(() => { void refresh(); }, [refresh]);
+  useEffect(() => { getSupabaseClient().auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? "")).catch(() => setCurrentUserId("")); }, []);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
   const loadMessages = useCallback(async (id: string) => {
@@ -146,7 +149,7 @@ export default function CollaborationPage() {
             <header style={{ padding: "17px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, borderBottom: "1px solid #edf0f4" }}><div><strong style={{ fontSize: 15 }}>{activeTitle}</strong><div style={{ fontSize: 12, color: "#7b8595", marginTop: 4 }}>{active.kind === "group" ? "Group conversation" : "Direct conversation"} · {active.members.length} member{active.members.length === 1 ? "" : "s"}</div></div><button onClick={() => void togglePin(active)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 12px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>{active.is_pinned ? "Unpin" : "Pin conversation"}</button></header>
             <div aria-live="polite" style={{ flex: 1, overflowY: "auto", padding: "20px clamp(14px, 3vw, 32px)", display: "flex", flexDirection: "column", gap: 14 }}>
               {messages.length === 0 && <div style={{ margin: "auto", textAlign: "center", maxWidth: 300, color: "#7b8595" }}><div style={{ fontSize: 30, marginBottom: 8 }}>✳</div><strong style={{ color: "#344054" }}>Start a useful conversation</strong><p style={{ fontSize: 13, lineHeight: 1.6 }}>Coordinate a vacancy, share an update or agree on the next step.</p></div>}
-              {messages.map((m) => <div key={m.id} style={{ alignSelf: m.sender_user_id === "me" ? "flex-end" : "flex-start", maxWidth: "80%" }}><div style={{ padding: "11px 14px", borderRadius: 14, background: "#f1f3f7", fontSize: 14, lineHeight: 1.55, overflowWrap: "anywhere" }}>{m.body}</div><div style={{ fontSize: 10, color: "#8a94a3", marginTop: 5 }}>{timeLabel(m.created_at)}</div></div>)}
+              {messages.map((m) => <div key={m.id} style={{ alignSelf: m.sender_user_id === currentUserId ? "flex-end" : "flex-start", maxWidth: "80%" }}><div style={{ padding: "11px 14px", borderRadius: 14, background: "#f1f3f7", fontSize: 14, lineHeight: 1.55, overflowWrap: "anywhere" }}>{m.body}</div><div style={{ fontSize: 10, color: "#8a94a3", marginTop: 5 }}>{timeLabel(m.created_at)}</div></div>)}
             </div>
             <form onSubmit={sendMessage} style={{ padding: 16, borderTop: "1px solid #edf0f4" }}><div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}><textarea aria-label="Write a message" value={draft} onChange={(e) => setDraft(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); void sendMessage(e as unknown as FormEvent); } }} placeholder="Write a message… (Enter to send)" rows={2} maxLength={10000} style={{ flex: 1, resize: "vertical", minWidth: 0, border: "1px solid #dfe4eb", borderRadius: 12, padding: 12, font: "inherit", fontSize: 13, outlineColor: "#5468e8" }} /><button type="submit" disabled={!draft.trim() || busy} style={{ border: 0, borderRadius: 11, padding: "12px 17px", background: "#3549c7", color: "#fff", fontWeight: 650, cursor: busy ? "wait" : "pointer", opacity: !draft.trim() || busy ? .55 : 1 }}>Send ↗</button></div><div style={{ fontSize: 11, color: "#929baa", marginTop: 8 }}>Internal AQERITH conversation · Keep candidate details within authorised workflows.</div></form>
           </> : <div style={{ display: "grid", placeContent: "center", textAlign: "center", flex: 1, padding: 24 }}><div style={{ fontSize: 34, color: "#5265d7" }}>✳</div><h2 style={{ margin: "12px 0 6px", fontSize: 20 }}>Your team, in sync.</h2><p style={{ maxWidth: 320, color: "#7b8595", fontSize: 13, lineHeight: 1.6 }}>Select a conversation or choose Contacts to start messaging a colleague.</p><button onClick={() => setTab("contacts")} style={{ justifySelf: "center", marginTop: 10, padding: "10px 14px", border: 0, borderRadius: 9, background: "#3549c7", color: "white", cursor: "pointer" }}>Find a colleague</button></div>}
