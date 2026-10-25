@@ -10,8 +10,8 @@ type RecruiterTask = {
   organization_id: string;
   title: string;
   description: string | null;
-  task_type: "general" | "candidate_follow_up" | "vacancy_follow_up" | "interview_follow_up";
-  status: "open" | "in_progress" | "completed" | "cancelled";
+  task_type: "task" | "candidate_follow_up";
+  status: "open" | "completed" | "cancelled";
   priority: "low" | "normal" | "high" | "urgent";
   due_at: string | null;
   candidate_id: string | null;
@@ -22,7 +22,7 @@ type RecruiterTask = {
   assignee_name?: string | null;
 };
 
-const blank = { title: "", description: "", task_type: "general", priority: "normal", due_at: "" };
+const blank = { title: "", description: "", task_type: "task", priority: "normal", due_at: "" };
 
 function localDateTimeToIso(value: string): string | null {
   if (!value) return null;
@@ -102,7 +102,7 @@ export default function TasksPage() {
     }
   }
 
-  async function setStatus(task: RecruiterTask, status: "completed" | "in_progress") {
+  async function setStatus(task: RecruiterTask, status: "completed" | "open") {
     if (!API_BASE) return;
     setError("");
     setMessage("");
@@ -147,7 +147,7 @@ export default function TasksPage() {
           <label>Details<textarea maxLength={5000} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} rows={3} /></label>
           <div className="task-form-grid">
             <label>Task type<select value={form.task_type} onChange={(event) => setForm({ ...form, task_type: event.target.value })}>
-              <option value="general">General task</option><option value="candidate_follow_up">Candidate follow-up</option><option value="vacancy_follow_up">Vacancy follow-up</option><option value="interview_follow_up">Interview follow-up</option>
+              <option value="task">General task</option><option value="candidate_follow_up">Candidate follow-up</option>
             </select></label>
             <label>Priority<select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
               <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
@@ -181,7 +181,7 @@ export default function TasksPage() {
         <div className="card-head"><h2 className="card-title">Recently completed</h2></div>
         {loading ? <p>Loading tasks…</p> : completedTasks.length === 0 ? <div className="dashboard-empty"><p>Completed tasks will appear here.</p></div> : (
           <div className="dashboard-priority-list">{completedTasks.slice(0, 20).map((task) => (
-            <article key={task.id} className="dashboard-priority-row task-row"><span className="badge green">Complete</span><div className="dashboard-priority-copy"><strong>{task.title}</strong><span>{task.description || task.task_type.replaceAll("_", " ")}</span></div><button type="button" className="btn" onClick={() => void setStatus(task, "in_progress")}>Reopen</button></article>
+            <article key={task.id} className="dashboard-priority-row task-row"><span className="badge green">Complete</span><div className="dashboard-priority-copy"><strong>{task.title}</strong><span>{task.description || task.task_type.replaceAll("_", " ")}</span></div><button type="button" className="btn" onClick={() => void setStatus(task, "open")>Reopen</button></article>
           ))}</div>
         )}
       </section>
