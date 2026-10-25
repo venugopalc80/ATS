@@ -2,8 +2,25 @@ import unittest
 from uuid import uuid4
 
 from pydantic import ValidationError
+from fastapi import HTTPException
 
-from app.routers.collaboration import ConversationCreate, MessageCreate
+from app.routers.collaboration import ConversationCreate, MessageCreate, _member, _check_org_members
+
+
+class FakeCursor:
+    def __init__(self, one=None, many=None):
+        self.one = one
+        self.many = many or []
+        self.query = ""
+
+    def execute(self, query, params=None):
+        self.query = query
+
+    def fetchone(self):
+        return self.one
+
+    def fetchall(self):
+        return self.many
 
 
 class CollaborationPayloadTests(unittest.TestCase):
@@ -51,6 +68,25 @@ class CollaborationPayloadTests(unittest.TestCase):
         payload = MessageCreate(body="Please review the shortlist", client_message_id=key)
         self.assertEqual(payload.body, "Please review the shortlist")
         self.assertEqual(payload.client_message_id, key)
+
+    def test_member_helper_returns_join_date_for_authorized_member(self):
+        joined_at = object()
+        cursor = FakeCursor(one={"joined_at": joined_at})
+        membership = _member(cursor, uuid4(), uuid4())
+        self.assertIs(membership["joined_at"], joined_at)
+        self.assertIn("organization_members", cursor.query)
+
+    def test_member_helper_hides_nonmember_conversation(self):
+        with self.assertRaises(HTTPException) as error:
+            _member(FakeCursor(one=None), uuid4(), uuid4())
+        self.assertEqual(error.exception.status_code, 404)
+
+    def test_organization_member_check_rejects_outsider(self):
+        requested = [uuid4(), uuid4()]
+        cursor = FakeCursor(many=[{"user_id": requested[0]}])
+        with self.assertRaises(HTTPException) as error:
+            _check_org_members(cursor, uuid4(), requested)
+        self.assertEqual(error.exception.status_code, 422)
 
     def test_message_enforces_maximum_length(self):
         with self.assertRaises(ValidationError):
