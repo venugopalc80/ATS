@@ -180,6 +180,9 @@ async def update_task(task_id: UUID, payload: TaskUpdate, user_id: UUID = Depend
                 organization_id = existing["organization_id"]
                 assert_org_member(user_id, organization_id)
                 changes = payload.model_dump(exclude_unset=True)
+                for required_field in ("title", "task_type", "status", "priority"):
+                    if required_field in changes and changes[required_field] is None:
+                        raise HTTPException(status_code=422, detail=f"{required_field} cannot be null")
                 if "title" in changes and changes["title"] is not None:
                     changes["title"] = changes["title"].strip()
                 _validate_related_records(organization_id, changes.get("candidate_id"), changes.get("job_id"))
