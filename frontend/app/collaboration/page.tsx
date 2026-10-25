@@ -30,6 +30,9 @@ export default function CollaborationPage() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [groupMode, setGroupMode] = useState(false);
+  const [groupTitle, setGroupTitle] = useState("");
+  const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
 
   const request = useCallback(async (path: string, init?: RequestInit) => {
     if (!API_BASE) throw new Error("AQERITH API is not configured.");
@@ -91,6 +94,21 @@ export default function CollaborationPage() {
     finally { setBusy(false); }
   }
 
+  async function createGroup() {
+    const title = groupTitle.trim();
+    if (!title || selectedContactIds.length < 1 || busy) return;
+    setBusy(true); setError("");
+    try {
+      const chat = await request("/api/collaboration/conversations", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ organization_id: organizationId, kind: "group", title, member_ids: selectedContactIds }),
+      });
+      setGroupMode(false); setGroupTitle(""); setSelectedContactIds([]);
+      await refresh(); setActiveId(chat.id); setTab("chats");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not create group."); }
+    finally { setBusy(false); }
+  }
+
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     if (!activeId || !draft.trim() || busy) return;
@@ -129,7 +147,24 @@ export default function CollaborationPage() {
           </nav>
           <div style={{ overflowY: "auto", padding: 8, flex: 1 }}>
             {loading ? <p style={{ padding: 14, color: "#7a8595", fontSize: 13 }}>Loading your workspace…</p> :
-              tab === "contacts" ? filteredContacts.map((c) => <button key={c.id} disabled={busy} onClick={() => void startDirect(c)} style={{ width: "100%", display: "flex", gap: 11, alignItems: "center", textAlign: "left", padding: 12, border: 0, borderRadius: 10, background: "white", cursor: "pointer" }}><span style={{ width: 36, height: 36, borderRadius: 12, display: "grid", placeItems: "center", background: "#e9edff", color: "#4054c5", fontWeight: 700 }}>{c.full_name.slice(0,1).toUpperCase()}</span><span style={{ minWidth: 0 }}><strong style={{ display: "block", fontSize: 13 }}>{c.full_name}</strong><small style={{ color: "#7b8595" }}>{roleLabel(c.role)} · Message</small></span></button>) :
+              tab === "contacts" ? <>
+                <div style={{ padding: "8px 8px 12px", display: "flex", gap: 8 }}>
+                  <button onClick={() => { setGroupMode(false); setSelectedContactIds([]); }} style={{ flex: 1, border: "1px solid #e0e5ec", borderRadius: 8, padding: 8, background: !groupMode ? "#f0f2ff" : "#fff", color: "#46546a", cursor: "pointer", fontSize: 12 }}>Message</button>
+                  <button onClick={() => setGroupMode(true)} style={{ flex: 1, border: "1px solid #e0e5ec", borderRadius: 8, padding: 8, background: groupMode ? "#f0f2ff" : "#fff", color: "#46546a", cursor: "pointer", fontSize: 12 }}>New group</button>
+                </div>
+                {groupMode && <div style={{ padding: 10, margin: "0 4px 10px", border: "1px solid #e0e5ec", borderRadius: 10 }}>
+                  <label htmlFor="group-title" style={{ display: "block", fontSize: 12, fontWeight: 650, marginBottom: 6 }}>Group name</label>
+                  <input id="group-title" value={groupTitle} onChange={(e) => setGroupTitle(e.target.value)} maxLength={120} placeholder="e.g. Product hiring team" style={{ width: "100%", boxSizing: "border-box", padding: 9, border: "1px solid #e0e5ec", borderRadius: 8, fontSize: 12 }} />
+                  <button disabled={busy || !groupTitle.trim() || selectedContactIds.length === 0} onClick={() => void createGroup()} style={{ width: "100%", marginTop: 8, border: 0, borderRadius: 8, padding: 9, background: "#3549c7", color: "#fff", opacity: busy || !groupTitle.trim() || selectedContactIds.length === 0 ? .5 : 1, cursor: "pointer", fontSize: 12 }}>Create group ({selectedContactIds.length} selected)</button>
+                </div>}
+                {filteredContacts.map((c) => groupMode ?
+                  <label key={c.id} style={{ display: "flex", gap: 10, alignItems: "center", padding: 12, borderRadius: 10, cursor: "pointer" }}>
+                    <input type="checkbox" checked={selectedContactIds.includes(c.id)} onChange={(e) => setSelectedContactIds((ids) => e.target.checked ? [...ids, c.id] : ids.filter((id) => id !== c.id))} />
+                    <span style={{ width: 34, height: 34, borderRadius: 11, display: "grid", placeItems: "center", background: "#e9edff", color: "#4054c5", fontWeight: 700 }}>{c.full_name.slice(0,1).toUpperCase()}</span>
+                    <span><strong style={{ display: "block", fontSize: 13 }}>{c.full_name}</strong><small style={{ color: "#7b8595" }}>{roleLabel(c.role)}</small></span>
+                  </label>
+                : <button key={c.id} disabled={busy} onClick={() => void startDirect(c)} style={{ width: "100%", display: "flex", gap: 11, alignItems: "center", textAlign: "left", padding: 12, border: 0, borderRadius: 10, background: "white", cursor: "pointer" }}><span style={{ width: 36, height: 36, borderRadius: 12, display: "grid", placeItems: "center", background: "#e9edff", color: "#4054c5", fontWeight: 700 }}>{c.full_name.slice(0,1).toUpperCase()}</span><span style={{ minWidth: 0 }}><strong style={{ display: "block", fontSize: 13 }}>{c.full_name}</strong><small style={{ color: "#7b8595" }}>{roleLabel(c.role)} · Message</small></span></button>)}
+              </> :
               filteredConversations.map((c) => {
                 const otherNames = c.members.map((m) => m.full_name).filter(Boolean);
                 const chatTitle = c.title || otherNames.join(", ") || "Direct message";
