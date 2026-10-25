@@ -27,6 +27,14 @@ class TaskSchemaTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             TaskUpdate(status="deleted")
 
+    def test_null_status_is_rejected(self):
+        with self.assertRaises(ValueError):
+            TaskUpdate(status=None)
+
+    def test_null_priority_is_rejected(self):
+        with self.assertRaises(ValueError):
+            TaskUpdate(priority=None)
+
 
 class TaskEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_list_requires_organization_membership(self):
