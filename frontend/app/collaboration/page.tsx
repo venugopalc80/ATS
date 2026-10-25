@@ -228,7 +228,7 @@ export default function CollaborationPage() {
                 : <button key={c.id} disabled={busy} onClick={() => void startDirect(c)} style={{ width: "100%", display: "flex", gap: 11, alignItems: "center", textAlign: "left", padding: 12, border: 0, borderRadius: 10, background: "white", cursor: "pointer" }}><span style={{ width: 36, height: 36, borderRadius: 12, display: "grid", placeItems: "center", background: "#e9edff", color: "#4054c5", fontWeight: 700 }}>{c.full_name.slice(0,1).toUpperCase()}</span><span style={{ minWidth: 0 }}><strong style={{ display: "block", fontSize: 13 }}>{c.full_name}</strong><small style={{ color: "#7b8595" }}>{roleLabel(c.role)} · Message</small></span></button>)}
               </> :
               filteredConversations.map((c) => {
-                const otherNames = c.members.map((m) => m.full_name).filter(Boolean);
+                const otherNames = c.members.filter((m) => c.kind === "group" || m.id !== currentUserId).map((m) => m.full_name).filter(Boolean);
                 const chatTitle = c.title || otherNames.join(", ") || "Direct message";
                 return <button key={c.id} onClick={() => setActiveId(c.id)} style={{ width: "100%", display: "flex", gap: 10, alignItems: "flex-start", textAlign: "left", padding: 12, border: 0, borderRadius: 11, background: activeId === c.id ? "#f0f2ff" : "white", cursor: "pointer", marginBottom: 3 }}>
                   <span style={{ width: 38, height: 38, flexShrink: 0, borderRadius: 12, display: "grid", placeItems: "center", background: "#edf0f5", color: "#4e5b70", fontWeight: 700 }}>{chatTitle.slice(0,1).toUpperCase()}</span>
