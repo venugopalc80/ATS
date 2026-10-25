@@ -201,7 +201,7 @@ export default function TasksPage() {
         <div className="card-head"><h2 className="card-title">Recently completed</h2></div>
         {loading ? <p>Loading tasks…</p> : completedTasks.length === 0 ? <div className="dashboard-empty"><p>Completed tasks will appear here.</p></div> : (
           <div className="dashboard-priority-list">{completedTasks.slice(0, 20).map((task) => (
-            <article key={task.id} className="dashboard-priority-row task-row"><span className="badge green">Complete</span><div className="dashboard-priority-copy"><strong>{task.title}</strong><span>{task.description || task.task_type.replaceAll("_", " ")}</span></div><button type="button" className="btn" onClick={() => void setStatus(task, "open")>Reopen</button></article>
+            <article key={task.id} className="dashboard-priority-row task-row"><span className="badge green">Complete</span><div className="dashboard-priority-copy"><strong>{task.title}</strong><span>{task.description || task.task_type.replaceAll("_", " ")}</span></div><button type="button" className="btn" onClick={() => void setStatus(task, "open")}>Reopen</button></article>
           ))}</div>
         )}
       </section>
