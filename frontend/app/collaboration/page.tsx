@@ -112,8 +112,7 @@ export default function CollaborationPage() {
     } catch (e) { setError(e instanceof Error ? e.message : "Could not update pin."); }
   }
 
-  const title = active?.title || active?.members.filter((m) => m.id !== active?.members.find((x) => x.id === "")?.id).map((m) => m.full_name).filter(Boolean).join(", ") || "Conversation";
-  const activeTitle = active?.kind === "group" ? active.title : active?.members.filter((m) => m.full_name).map((m) => m.full_name).join(", ") || title;
+  const activeTitle = active?.kind === "group" ? (active.title || "Group conversation") : active?.members.filter((m) => m.id !== currentUserId).map((m) => m.full_name).filter(Boolean).join(", ") || "Direct message";
 
   return (
     <main style={{ minHeight: "100vh", background: "#f5f6f8", color: "#1c2430", padding: "28px clamp(16px, 4vw, 48px)", fontFamily: "Inter, ui-sans-serif, system-ui, sans-serif" }}>
