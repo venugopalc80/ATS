@@ -33,6 +33,8 @@ export default function CollaborationPage() {
   const [groupMode, setGroupMode] = useState(false);
   const [groupTitle, setGroupTitle] = useState("");
   const [selectedContactIds, setSelectedContactIds] = useState<string[]>([]);
+  const [manageMembers, setManageMembers] = useState(false);
+  const [addMemberIds, setAddMemberIds] = useState<string[]>([]);
 
   const request = useCallback(async (path: string, init?: RequestInit) => {
     if (!API_BASE) throw new Error("AQERITH API is not configured.");
@@ -109,6 +111,29 @@ export default function CollaborationPage() {
     finally { setBusy(false); }
   }
 
+  async function addGroupMembers() {
+    if (!activeId || addMemberIds.length === 0 || busy) return;
+    setBusy(true); setError("");
+    try {
+      await request("/api/collaboration/conversations/" + activeId + "/members", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ member_ids: addMemberIds }),
+      });
+      setAddMemberIds([]); setManageMembers(false); await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not add group members."); }
+    finally { setBusy(false); }
+  }
+
+  async function leaveGroup() {
+    if (!activeId || busy || !window.confirm("Leave this group conversation?")) return;
+    setBusy(true); setError("");
+    try {
+      await request("/api/collaboration/conversations/" + activeId + "/leave", { method: "POST" });
+      setActiveId(""); setMessages([]); await refresh();
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not leave group."); }
+    finally { setBusy(false); }
+  }
+
   async function sendMessage(event: FormEvent) {
     event.preventDefault();
     if (!activeId || !draft.trim() || busy) return;
@@ -180,7 +205,16 @@ export default function CollaborationPage() {
         </aside>
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
           {active ? <>
-            <header style={{ padding: "17px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, borderBottom: "1px solid #edf0f4" }}><div><strong style={{ fontSize: 15 }}>{activeTitle}</strong><div style={{ fontSize: 12, color: "#7b8595", marginTop: 4 }}>{active.kind === "group" ? "Group conversation" : "Direct conversation"} · {active.members.length} member{active.members.length === 1 ? "" : "s"}</div></div><button onClick={() => void togglePin(active)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 12px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>{active.is_pinned ? "Unpin" : "Pin conversation"}</button></header>
+            <header style={{ padding: "17px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, borderBottom: "1px solid #edf0f4" }}><div><strong style={{ fontSize: 15 }}>{activeTitle}</strong><div style={{ fontSize: 12, color: "#7b8595", marginTop: 4 }}>{active.kind === "group" ? "Group conversation" : "Direct conversation"} · {active.members.length} member{active.members.length === 1 ? "" : "s"}</div></div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>{active.kind === "group" && <><button onClick={() => setManageMembers((v) => !v)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>Members</button><button onClick={() => void leaveGroup()} disabled={busy} style={{ border: "1px solid #f0d6d3", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#9d3024", fontSize: 12 }}>Leave</button></>}<button onClick={() => void togglePin(active)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 12px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>{active.is_pinned ? "Unpin" : "Pin conversation"}</button></div></header>
+            {manageMembers && active.kind === "group" && <div style={{ padding: 14, borderBottom: "1px solid #edf0f4", background: "#fafbfc" }}>
+              <strong style={{ fontSize: 12 }}>Group members</strong>
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>{active.members.map((m) => <span key={m.id} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 8, padding: "6px 8px", fontSize: 12 }}>{m.full_name || "AQERITH user"}{m.id === currentUserId ? " (you)" : ""}</span>)}</div>
+              {active.members.some((m) => m.id === currentUserId && m.role === "owner") && <>
+                <div style={{ marginTop: 12, fontSize: 12, fontWeight: 650 }}>Add teammates</div>
+                <div style={{ display: "flex", gap: 10, flexWrap: "wrap", marginTop: 7 }}>{contacts.filter((contact) => !active.members.some((m) => m.id === contact.id)).map((contact) => <label key={contact.id} style={{ fontSize: 12, display: "flex", gap: 5, alignItems: "center" }}><input type="checkbox" checked={addMemberIds.includes(contact.id)} onChange={(e) => setAddMemberIds((ids) => e.target.checked ? [...ids, contact.id] : ids.filter((id) => id !== contact.id))} />{contact.full_name}</label>)}</div>
+                <button onClick={() => void addGroupMembers()} disabled={busy || addMemberIds.length === 0} style={{ marginTop: 10, border: 0, borderRadius: 8, padding: "8px 11px", background: "#3549c7", color: "#fff", opacity: busy || addMemberIds.length === 0 ? .5 : 1, cursor: "pointer", fontSize: 12 }}>Add selected members</button>
+              </>}
+            </div>}
             <div aria-live="polite" style={{ flex: 1, overflowY: "auto", padding: "20px clamp(14px, 3vw, 32px)", display: "flex", flexDirection: "column", gap: 14 }}>
               {messages.length === 0 && <div style={{ margin: "auto", textAlign: "center", maxWidth: 300, color: "#7b8595" }}><div style={{ fontSize: 30, marginBottom: 8 }}>✳</div><strong style={{ color: "#344054" }}>Start a useful conversation</strong><p style={{ fontSize: 13, lineHeight: 1.6 }}>Coordinate a vacancy, share an update or agree on the next step.</p></div>}
               {messages.map((m) => <div key={m.id} style={{ alignSelf: m.sender_user_id === currentUserId ? "flex-end" : "flex-start", maxWidth: "80%" }}><div style={{ padding: "11px 14px", borderRadius: 14, background: "#f1f3f7", fontSize: 14, lineHeight: 1.55, overflowWrap: "anywhere" }}>{m.body}</div><div style={{ fontSize: 10, color: "#8a94a3", marginTop: 5 }}>{timeLabel(m.created_at)}</div></div>)}
