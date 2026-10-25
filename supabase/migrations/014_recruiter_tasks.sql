@@ -30,9 +30,21 @@ alter table public.recruiter_tasks enable row level security;
 create policy recruiter_tasks_member_select on public.recruiter_tasks
   for select to authenticated using (public.is_org_member(organization_id));
 create policy recruiter_tasks_member_insert on public.recruiter_tasks
-  for insert to authenticated with check (public.is_org_member(organization_id));
+  for insert to authenticated with check (
+    public.is_org_member(organization_id)
+    and (assigned_to is null or exists (
+      select 1 from public.organization_members m
+      where m.organization_id = recruiter_tasks.organization_id and m.user_id = recruiter_tasks.assigned_to
+    ))
+  );
 create policy recruiter_tasks_member_update on public.recruiter_tasks
   for update to authenticated using (public.is_org_member(organization_id))
-  with check (public.is_org_member(organization_id));
+  with check (
+    public.is_org_member(organization_id)
+    and (assigned_to is null or exists (
+      select 1 from public.organization_members m
+      where m.organization_id = recruiter_tasks.organization_id and m.user_id = recruiter_tasks.assigned_to
+    ))
+  );
 create policy recruiter_tasks_member_delete on public.recruiter_tasks
   for delete to authenticated using (public.is_org_member(organization_id));
