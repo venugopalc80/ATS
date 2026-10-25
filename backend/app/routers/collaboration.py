@@ -22,6 +22,12 @@ class ConversationCreate(BaseModel):
             raise ValueError("Groups require at least one other member")
         return self
 
+class GroupMembersAdd(BaseModel):
+    member_ids: list[UUID] = Field(min_length=1, max_length=30)
+
+class GroupTitleUpdate(BaseModel):
+    title: str = Field(min_length=1, max_length=120)
+
 class MessageCreate(BaseModel):
     body: str = Field(min_length=1, max_length=10000)
     client_message_id: UUID | None = None
@@ -185,3 +191,94 @@ async def set_pinned(conversation_id: UUID, pinned: bool = Query(...), user_id: 
             cursor.execute("update public.conversation_members set is_pinned=%s where conversation_id=%s and user_id=%s",
                            [pinned,conversation_id,user_id])
             return {"pinned": pinned}
+
+
+def _assert_group_owner(cursor, conversation_id: UUID, user_id: UUID):
+    cursor.execute("""
+      select c.kind, cm.member_role
+      from public.conversations c
+      join public.conversation_members cm on cm.conversation_id=c.id
+      join public.organization_members om on om.organization_id=c.organization_id and om.user_id=cm.user_id
+      where c.id=%s and cm.user_id=%s and cm.left_at is null
+    """, [conversation_id, user_id])
+    row = cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if row["kind"] != "group" or row["member_role"] != "owner":
+        raise HTTPException(status_code=403, detail="Only group owners can manage members")
+
+@router.post("/conversations/{conversation_id}/members")
+async def add_group_members(conversation_id: UUID, payload: GroupMembersAdd,
+                            user_id: UUID = Depends(get_current_user_id)):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _assert_group_owner(cursor, conversation_id, user_id)
+            cursor.execute("select organization_id from public.conversations where id=%s and archived_at is null", [conversation_id])
+            conversation = cursor.fetchone()
+            if conversation is None:
+                raise HTTPException(status_code=404, detail="Conversation not found")
+            member_ids = list(set(payload.member_ids))
+            _check_org_members(cursor, conversation["organization_id"], member_ids)
+            for target_id in member_ids:
+                cursor.execute("""
+                  insert into public.conversation_members (conversation_id,user_id,member_role)
+                  values (%s,%s,'member')
+                  on conflict (conversation_id,user_id) do update set left_at=null, joined_at=now()
+                """, [conversation_id, target_id])
+                cursor.execute("""
+                  insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
+                  values (%s,%s,'member_added',%s)
+                """, [conversation_id,user_id,target_id])
+            return {"added": [str(x) for x in member_ids]}
+
+@router.delete("/conversations/{conversation_id}/members/{target_user_id}")
+async def remove_group_member(conversation_id: UUID, target_user_id: UUID,
+                              user_id: UUID = Depends(get_current_user_id)):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _assert_group_owner(cursor, conversation_id, user_id)
+            if target_user_id == user_id:
+                raise HTTPException(status_code=422, detail="Use the leave endpoint to leave this group")
+            cursor.execute("""
+              update public.conversation_members set left_at=now()
+              where conversation_id=%s and user_id=%s and left_at is null
+            """, [conversation_id,target_user_id])
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Active group member not found")
+            cursor.execute("""
+              insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
+              values (%s,%s,'member_removed',%s)
+            """, [conversation_id,user_id,target_user_id])
+            return {"removed": str(target_user_id)}
+
+@router.post("/conversations/{conversation_id}/leave")
+async def leave_group(conversation_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _member(cursor, conversation_id, user_id)
+            cursor.execute("select kind from public.conversations where id=%s", [conversation_id])
+            row = cursor.fetchone()
+            if row is None or row["kind"] != "group":
+                raise HTTPException(status_code=422, detail="Only group conversations can be left")
+            cursor.execute("update public.conversation_members set left_at=now() where conversation_id=%s and user_id=%s", [conversation_id,user_id])
+            cursor.execute("""
+              insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
+              values (%s,%s,'member_left',%s)
+            """, [conversation_id,user_id,user_id])
+            return {"left": True}
+
+@router.patch("/conversations/{conversation_id}/title")
+async def update_group_title(conversation_id: UUID, payload: GroupTitleUpdate,
+                             user_id: UUID = Depends(get_current_user_id)):
+    title = payload.title.strip()
+    if not title:
+        raise HTTPException(status_code=422, detail="Group title cannot be empty")
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _assert_group_owner(cursor, conversation_id, user_id)
+            cursor.execute("update public.conversations set title=%s,updated_at=now() where id=%s", [title,conversation_id])
+            cursor.execute("""
+              insert into public.conversation_events (conversation_id,actor_user_id,event_type,metadata)
+              values (%s,%s,'title_changed',jsonb_build_object('title',%s))
+            """, [conversation_id,user_id,title])
+            return {"title": title}
