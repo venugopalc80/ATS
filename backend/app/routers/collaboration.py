@@ -87,10 +87,13 @@ async def list_conversations(organization_id: UUID, user_id: UUID = Depends(get_
             cursor.execute("""
               select c.id, c.kind, c.title, c.updated_at, cm.is_pinned, cm.last_read_at,
                 (select m.body from public.messages m where m.conversation_id=c.id and m.deleted_at is null
+                 and m.created_at >= cm.joined_at
                  order by m.created_at desc, m.id desc limit 1) as last_message,
                 (select m.created_at from public.messages m where m.conversation_id=c.id and m.deleted_at is null
+                 and m.created_at >= cm.joined_at
                  order by m.created_at desc, m.id desc limit 1) as last_message_at,
                 (select count(*) from public.messages m where m.conversation_id=c.id and m.deleted_at is null
+                 and m.created_at >= cm.joined_at
                  and m.sender_user_id <> %s and (cm.last_read_at is null or m.created_at > cm.last_read_at)) as unread_count,
                 (select coalesce(json_agg(json_build_object('id',p.id,'full_name',p.full_name,'role',m2.member_role)), '[]'::json)
                  from public.conversation_members m2
