@@ -22,7 +22,11 @@ type RecruiterTask = {
   assignee_name?: string | null;
 };
 
-const blank = { title: "", description: "", task_type: "task", priority: "normal", due_at: "" };
+type CandidateOption = { id: string; first_name: string; last_name?: string | null };
+type JobOption = { id: string; title: string };
+
+
+const blank = { title: "", description: "", task_type: "task", priority: "normal", due_at: "", candidate_id: "", job_id: "" };
 
 function localDateTimeToIso(value: string): string | null {
   if (!value) return null;
@@ -33,6 +37,8 @@ function localDateTimeToIso(value: string): string | null {
 export default function TasksPage() {
   const [organizationId, setOrganizationId] = useState("");
   const [tasks, setTasks] = useState<RecruiterTask[]>([]);
+  const [candidates, setCandidates] = useState<CandidateOption[]>([]);
+  const [jobs, setJobs] = useState<JobOption[]>([]);
   const [form, setForm] = useState(blank);
   const [showForm, setShowForm] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -71,6 +77,29 @@ export default function TasksPage() {
 
   useEffect(() => { if (organizationId) void loadTasks(); }, [organizationId, loadTasks]);
 
+  useEffect(() => {
+    if (!API_BASE || !organizationId) return;
+    let cancelled = false;
+    async function loadRelatedRecords() {
+      try {
+        const [candidateResponse, jobResponse] = await Promise.all([
+          apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId)),
+          apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(organizationId)),
+        ]);
+        if (!candidateResponse.ok || !jobResponse.ok) return;
+        const [candidateRows, jobRows] = await Promise.all([candidateResponse.json(), jobResponse.json()]);
+        if (!cancelled) {
+          setCandidates(candidateRows.map((row: CandidateOption) => ({ id: row.id, first_name: row.first_name, last_name: row.last_name })));
+          setJobs(jobRows.map((row: JobOption) => ({ id: row.id, title: row.title })));
+        }
+      } catch {
+        // The task workspace remains usable if optional record lists cannot load.
+      }
+    }
+    void loadRelatedRecords();
+    return () => { cancelled = true; };
+  }, [organizationId]);
+
   async function createTask(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!API_BASE || !organizationId || !form.title.trim()) return;
@@ -88,6 +117,8 @@ export default function TasksPage() {
           task_type: form.task_type,
           priority: form.priority,
           due_at: localDateTimeToIso(form.due_at),
+          candidate_id: form.candidate_id || null,
+          job_id: form.job_id || null,
         }),
       });
       if (!response.ok) throw new Error("Task could not be saved (HTTP " + response.status + ").");
@@ -171,6 +202,12 @@ export default function TasksPage() {
             </select></label>
             <label>Priority<select value={form.priority} onChange={(event) => setForm({ ...form, priority: event.target.value })}>
               <option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option>
+            </select></label>
+            <label>Candidate<select value={form.candidate_id} required={form.task_type === "candidate_follow_up"} onChange={(event) => setForm({ ...form, candidate_id: event.target.value })}>
+              <option value="">No candidate linked</option>{candidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.first_name} {candidate.last_name || ""}</option>)}
+            </select></label>
+            <label>Vacancy<select value={form.job_id} onChange={(event) => setForm({ ...form, job_id: event.target.value })}>
+              <option value="">No vacancy linked</option>{jobs.map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}
             </select></label>
             <label>Due date and time<input type="datetime-local" value={form.due_at} onChange={(event) => setForm({ ...form, due_at: event.target.value })} /></label>
           </div>
