@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 from uuid import UUID
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
@@ -16,10 +16,10 @@ class ConversationCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_kind(self):
-        if self.kind == "direct" and len(set(self.member_ids)) != 1:
+        if self.kind == "direct" and len(self.member_ids) != 1:
             raise ValueError("Direct conversations require exactly one other member")
-        if self.kind == "group" and len(set(self.member_ids)) < 1:
-            raise ValueError("Groups require at least one other member")
+        if self.kind == "group" and not (self.title and self.title.strip()):
+            raise ValueError("Group title is required")
         return self
 
 class GroupMembersAdd(BaseModel):
@@ -31,6 +31,13 @@ class GroupTitleUpdate(BaseModel):
 class MessageCreate(BaseModel):
     body: str = Field(min_length=1, max_length=10000)
     client_message_id: UUID | None = None
+
+    @field_validator("body")
+    @classmethod
+    def body_must_contain_text(cls, value: str) -> str:
+        if not value.strip():
+            raise ValueError("Message cannot be empty")
+        return value
 
 def _member(cursor, conversation_id: UUID, user_id: UUID):
     cursor.execute("""
