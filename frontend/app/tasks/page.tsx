@@ -124,7 +124,27 @@ export default function TasksPage() {
   const completedTasks = tasks.filter((task) => task.status === "completed");
 
   return (
-    <main className="content dashboard-content">
+    <div className="shell">
+      <aside className="sidebar">
+        <Link href="/dashboard" className="brand">AQERITH</Link>
+        <div className="nav-label">Workspace</div>
+        <Link href="/dashboard" className="nav-item"><span>⌂</span><span>Dashboard</span></Link>
+        <Link href="/jobs" className="nav-item"><span>▣</span><span>Jobs</span></Link>
+        <Link href="/candidates" className="nav-item"><span>♙</span><span>Candidates</span></Link>
+        <Link href="/submissions" className="nav-item"><span>↗</span><span>Submissions</span></Link>
+        <Link href="/interviews" className="nav-item"><span>◷</span><span>Interviews</span></Link>
+        <Link href="/clients" className="nav-item"><span>□</span><span>Clients</span></Link>
+        <Link href="/offers" className="nav-item"><span>$</span><span>Offers</span></Link>
+        <Link href="/placements" className="nav-item"><span>◇</span><span>Placements</span></Link>
+        <div className="nav-label">Work management</div>
+        <div className="nav-item active"><span>✓</span><span>Recruiter tasks</span></div>
+      </aside>
+      <main className="main">
+        <header className="topbar">
+          <Link href="/candidates" className="search" style={{ textDecoration: "none" }}>Search candidates...</Link>
+          <div className="profile"><span>AQERITH workspace</span><div className="avatar">A</div></div>
+        </header>
+        <section className="content dashboard-content">
       <div className="header-row">
         <div>
           <div className="eyebrow">Recruitment operations</div>
@@ -185,6 +205,8 @@ export default function TasksPage() {
           ))}</div>
         )}
       </section>
-    </main>
+        </section>
+      </main>
+    </div>
   );
 }
