@@ -32,6 +32,18 @@ class RecruiterTaskSchemaTests(unittest.TestCase):
 
 
 class RecruiterTaskAccessTests(unittest.IsolatedAsyncioTestCase):
+    async def test_candidate_follow_up_requires_candidate_link(self):
+        payload = tasks_router.TaskCreate(
+            organization_id=ORG, title="Call candidate", task_type="candidate_follow_up"
+        )
+        with patch.object(tasks_router, "assert_org_member"), patch.object(
+            tasks_router, "get_connection"
+        ) as connection:
+            with self.assertRaises(HTTPException) as error:
+                await tasks_router.create_task(payload, user_id=USER)
+        self.assertEqual(error.exception.status_code, 422)
+        connection.assert_not_called()
+
     async def test_non_member_cannot_create_task_or_read_database(self):
         payload = tasks_router.TaskCreate(organization_id=OTHER_ORG, title="Follow up")
         with patch.object(
