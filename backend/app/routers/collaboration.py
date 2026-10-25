@@ -1,0 +1,182 @@
+from datetime import datetime
+from typing import Literal
+from uuid import UUID
+from pydantic import BaseModel, Field, model_validator
+from fastapi import APIRouter, Depends, HTTPException, Query
+from app.auth import assert_org_member, get_current_user_id
+from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
+
+router = APIRouter(prefix="/api/collaboration", tags=["collaboration"])
+
+class ConversationCreate(BaseModel):
+    organization_id: UUID
+    kind: Literal["direct", "group"]
+    member_ids: list[UUID] = Field(min_length=1, max_length=30)
+    title: str | None = Field(default=None, max_length=120)
+
+    @model_validator(mode="after")
+    def validate_kind(self):
+        if self.kind == "direct" and len(set(self.member_ids)) != 1:
+            raise ValueError("Direct conversations require exactly one other member")
+        if self.kind == "group" and len(set(self.member_ids)) < 1:
+            raise ValueError("Groups require at least one other member")
+        return self
+
+class MessageCreate(BaseModel):
+    body: str = Field(min_length=1, max_length=10000)
+    client_message_id: UUID | None = None
+
+def _member(cursor, conversation_id: UUID, user_id: UUID):
+    cursor.execute("""
+      select 1 from public.conversation_members
+      where conversation_id=%s and user_id=%s and left_at is null
+    """, [conversation_id, user_id])
+    if cursor.fetchone() is None:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+def _check_org_members(cursor, organization_id: UUID, user_ids: list[UUID]):
+    cursor.execute("""
+      select user_id from public.organization_members
+      where organization_id=%s and user_id = any(%s)
+    """, [organization_id, user_ids])
+    found = {row["user_id"] for row in cursor.fetchall()}
+    if set(user_ids) != found:
+        raise HTTPException(status_code=422, detail="One or more members do not belong to this organization")
+
+@router.get("/contacts")
+async def contacts(organization_id: UUID, q: str = Query(default="", max_length=100),
+                   user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    pattern = "%" + q.strip().replace("%", "\\%").replace("_", "\\_") + "%"
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+              select p.id, p.full_name, m.role
+              from public.organization_members m join public.profiles p on p.id=m.user_id
+              where m.organization_id=%s and p.id <> %s
+                and (%s = '' or coalesce(p.full_name,'') ilike %s)
+              order by p.full_name nulls last limit 100
+            """, [organization_id, user_id, q.strip(), pattern])
+            return [{"id": str(r["id"]), "full_name": r["full_name"] or "AQERITH user", "role": r["role"]} for r in cursor.fetchall()]
+
+@router.get("/conversations")
+async def list_conversations(organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("""
+              select c.id, c.kind, c.title, c.updated_at, cm.is_pinned, cm.last_read_at,
+                (select m.body from public.messages m where m.conversation_id=c.id and m.deleted_at is null
+                 order by m.created_at desc, m.id desc limit 1) as last_message,
+                (select m.created_at from public.messages m where m.conversation_id=c.id and m.deleted_at is null
+                 order by m.created_at desc, m.id desc limit 1) as last_message_at,
+                (select count(*) from public.messages m where m.conversation_id=c.id and m.deleted_at is null
+                 and m.sender_user_id <> %s and (cm.last_read_at is null or m.created_at > cm.last_read_at)) as unread_count,
+                (select coalesce(json_agg(json_build_object('id',p.id,'full_name',p.full_name,'role',m2.member_role)), '[]'::json)
+                 from public.conversation_members m2 join public.profiles p on p.id=m2.user_id
+                 where m2.conversation_id=c.id and m2.left_at is null) as members
+              from public.conversation_members cm join public.conversations c on c.id=cm.conversation_id
+              where cm.user_id=%s and cm.left_at is null and c.organization_id=%s and c.archived_at is null
+              order by cm.is_pinned desc, coalesce(c.updated_at,c.created_at) desc limit 100
+            """, [user_id, user_id, organization_id])
+            return [{**r, "id": str(r["id"]), "updated_at": r["updated_at"].isoformat() if r["updated_at"] else None,
+                     "last_read_at": r["last_read_at"].isoformat() if r["last_read_at"] else None,
+                     "last_message_at": r["last_message_at"].isoformat() if r["last_message_at"] else None}
+                    for r in cursor.fetchall()]
+
+@router.post("/conversations", status_code=201)
+async def create_conversation(payload: ConversationCreate, user_id: UUID = Depends(get_current_user_id)):
+    assert_org_member(user_id, payload.organization_id)
+    members = sorted(set(payload.member_ids + [user_id]), key=str)
+    if payload.kind == "direct" and len(members) != 2:
+        raise HTTPException(status_code=422, detail="Direct conversations require one other user")
+    direct_key = ":".join(map(str, members)) if payload.kind == "direct" else None
+    title = payload.title.strip() if payload.title else None
+    if payload.kind == "group" and not title:
+        raise HTTPException(status_code=422, detail="Group title is required")
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _check_org_members(cursor, payload.organization_id, members)
+            if direct_key:
+                cursor.execute("""
+                  insert into public.conversations (organization_id,kind,direct_key,created_by)
+                  values (%s,'direct',%s,%s)
+                  on conflict (organization_id,direct_key) where direct_key is not null
+                  do update set updated_at=public.conversations.updated_at
+                  returning id
+                """, [payload.organization_id, direct_key, user_id])
+            else:
+                cursor.execute("""
+                  insert into public.conversations (organization_id,kind,title,created_by)
+                  values (%s,'group',%s,%s) returning id
+                """, [payload.organization_id, title, user_id])
+            conversation_id = cursor.fetchone()["id"]
+            for member_id in members:
+                cursor.execute("""
+                  insert into public.conversation_members (conversation_id,user_id,member_role)
+                  values (%s,%s,%s) on conflict (conversation_id,user_id) do nothing
+                """, [conversation_id, member_id, "owner" if member_id == user_id else "member"])
+            return {"id": str(conversation_id), "kind": payload.kind, "title": title}
+
+@router.get("/conversations/{conversation_id}/messages")
+async def list_messages(conversation_id: UUID, before: datetime | None = None,
+                        limit: int = Query(default=50, ge=1, le=100),
+                        user_id: UUID = Depends(get_current_user_id)):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _member(cursor, conversation_id, user_id)
+            if before:
+                cursor.execute("""
+                  select id,sender_user_id,body,created_at,edited_at,deleted_at
+                  from public.messages where conversation_id=%s and created_at < %s
+                  order by created_at desc,id desc limit %s
+                """, [conversation_id, before, limit])
+            else:
+                cursor.execute("""
+                  select id,sender_user_id,body,created_at,edited_at,deleted_at
+                  from public.messages where conversation_id=%s
+                  order by created_at desc,id desc limit %s
+                """, [conversation_id, limit])
+            rows = cursor.fetchall()
+            return [{"id":str(r["id"]), "sender_user_id":str(r["sender_user_id"]),
+                     "body":"This message was deleted" if r["deleted_at"] else r["body"],
+                     "created_at":r["created_at"].isoformat(), "edited_at":r["edited_at"].isoformat() if r["edited_at"] else None,
+                     "deleted":bool(r["deleted_at"])} for r in reversed(rows)]
+
+@router.post("/conversations/{conversation_id}/messages", status_code=201)
+async def send_message(conversation_id: UUID, payload: MessageCreate, user_id: UUID = Depends(get_current_user_id)):
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=422, detail="Message cannot be empty")
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _member(cursor, conversation_id, user_id)
+            cursor.execute("""
+              insert into public.messages (conversation_id,sender_user_id,body,client_message_id)
+              values (%s,%s,%s,%s)
+              on conflict (conversation_id,sender_user_id,client_message_id)
+              do update set client_message_id=excluded.client_message_id
+              returning id,sender_user_id,body,created_at
+            """, [conversation_id,user_id,body,payload.client_message_id])
+            message = cursor.fetchone()
+            cursor.execute("update public.conversations set updated_at=now() where id=%s", [conversation_id])
+            return {"id":str(message["id"]), "sender_user_id":str(message["sender_user_id"]),
+                    "body":message["body"], "created_at":message["created_at"].isoformat()}
+
+@router.post("/conversations/{conversation_id}/read")
+async def mark_read(conversation_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _member(cursor, conversation_id, user_id)
+            cursor.execute("update public.conversation_members set last_read_at=now() where conversation_id=%s and user_id=%s",
+                           [conversation_id,user_id])
+            return {"ok": True}
+
+@router.post("/conversations/{conversation_id}/pin")
+async def set_pinned(conversation_id: UUID, pinned: bool = Query(...), user_id: UUID = Depends(get_current_user_id)):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            _member(cursor, conversation_id, user_id)
+            cursor.execute("update public.conversation_members set is_pinned=%s where conversation_id=%s and user_id=%s",
+                           [pinned,conversation_id,user_id])
+            return {"pinned": pinned}
