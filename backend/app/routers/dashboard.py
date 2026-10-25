@@ -173,7 +173,7 @@ async def dashboard(
                 cursor.execute(
                     """select id,title,task_type,priority,status,due_at,candidate_id,job_id
                        from public.recruiter_tasks
-                       where organization_id=%s and status in ('open','in_progress')
+                       where organization_id=%s and status='open'
                          and due_at is not null and due_at < now() + interval '3 days'
                        order by due_at asc limit 20""",
                     [organization_id],
