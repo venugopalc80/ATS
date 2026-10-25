@@ -105,6 +105,15 @@ class NoticeCreate(BaseModel):
     notice_text: str = Field(min_length=1, max_length=50000)
     effective_at: datetime
 
+    @model_validator(mode="after")
+    def validate_notice(self):
+        for field_name in ("version", "purpose", "notice_text"):
+            if not getattr(self, field_name).strip():
+                raise ValueError(f"{field_name} must not be blank")
+        if self.effective_at.tzinfo is None or self.effective_at.utcoffset() is None:
+            raise ValueError("Notice effective_at must include a timezone")
+        return self
+
 
 class RetentionPolicyCreate(BaseModel):
     organization_id: UUID
@@ -135,6 +144,8 @@ class RetentionExceptionCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_exception_timestamps(self):
+        if not self.reason.strip():
+            raise ValueError("Retention exception reason must not be blank")
         for field_name in ("starts_at", "ends_at"):
             value = getattr(self, field_name)
             if value is not None and (value.tzinfo is None or value.utcoffset() is None):
@@ -157,6 +168,10 @@ class ProcessingRecordCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_consent_fields(self):
+        for field_name in ("consent_captured_at", "consent_withdrawn_at"):
+            value = getattr(self, field_name)
+            if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+                raise ValueError(f"{field_name} must include a timezone")
         if self.legal_basis == "consent":
             if self.consent_status not in {"granted", "withdrawn"} or self.consent_captured_at is None:
                 raise ValueError("Consent basis requires an explicit status and capture timestamp")
