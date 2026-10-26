@@ -10,11 +10,10 @@ type SupportCase = {
   category: string;
   priority: string;
   status: string;
-  subject: string;
   created_at: string;
 };
 
-type CaseDetail = SupportCase & { description: string; resolved_at?: string | null };
+type CaseDetail = SupportCase & { subject: string; description: string; resolved_at?: string | null };
 type SupportMessage = { id: string; author_user_id?: string | null; author_operator_id?: string | null; visibility: "customer" | "internal"; body: string; created_at: string };
 
 type Health = {
@@ -73,7 +72,7 @@ export default function PlatformOperationsPage() {
         body: JSON.stringify({
           organization_id: item.organization_id,
           support_case_id: item.id,
-          purpose: "Investigate support case: " + item.subject,
+          purpose: "Investigate a customer support case in category: " + item.category,
           scope: ["case_metadata", "case_messages"],
           duration_minutes: 30,
         }),
@@ -165,7 +164,7 @@ export default function PlatformOperationsPage() {
                 {cases.length === 0 ? <div className="card">No support cases are waiting.</div> : (
                   <div style={{ display: "grid", gap: 10 }}>
                     {cases.map((item) => <article className="card" key={item.id}>
-                      <div className="card-head"><strong>{item.subject}</strong><span className={"badge " + (item.priority === "urgent" || item.priority === "high" ? "amber" : "blue")}>{item.priority}</span></div>
+                      <div className="card-head"><strong>Support case · {item.category}</strong><span className={"badge " + (item.priority === "urgent" || item.priority === "high" ? "amber" : "blue")}>{item.priority}</span></div>
                       <p className="muted-small">{item.category} · {item.status.replaceAll("_", " ")} · Organisation {item.organization_id}</p>
                       <p className="muted-small">Case content is hidden until an organisation admin approves a case-specific, time-limited support grant.</p>
                       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
