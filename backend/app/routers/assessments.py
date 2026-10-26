@@ -447,8 +447,8 @@ async def review_result(assignment_id: UUID, payload: AssessmentReviewCreate, or
                     [organization_id, assignment_id, payload.result_id, user_id, payload.feedback.strip(), payload.recommendation],
                 )
                 review = cur.fetchone()
-                cur.execute("update public.assessment_assignments set status='completed', updated_at=now() where id=%s",
-                            [assignment_id])
+                cur.execute("update public.assessment_assignments set status='completed', updated_at=now() where id=%s and organization_id=%s",
+                            [assignment_id, organization_id])
                 record_event(cur, organization_id, assignment_id, user_id, "assessment_review_submitted",
                              {"review_id": str(review["id"]), "recommendation": payload.recommendation})
                 return review
