@@ -113,6 +113,8 @@ export default function CandidatesPage() {
   const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string; country: string }>>([]);
   const [activeView, setActiveView] = useState("All candidates");
   const [page, setPage] = useState(1);
+  const [totalCandidates, setTotalCandidates] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const pageSize = 25;
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Candidate | null>(null);
@@ -179,15 +181,28 @@ export default function CandidatesPage() {
     if (!API_BASE || !organizationId) { setLoading(false); return; }
 
     let cancelled = false;
+    setLoading(true);
 
     async function load() {
       try {
-        const response = await apiFetch(
-          API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId)
-        );
+        const params = new URLSearchParams({
+          organization_id: organizationId,
+          page: String(page),
+          page_size: String(pageSize),
+          sort_by: sortBy,
+          sort_direction: sortDirection,
+        });
+        if (query.trim()) params.set("search", query.trim());
+        if (status !== "all") params.set("status", status);
+        if (country !== "all") params.set("country_code", country);
+        const response = await apiFetch(API_BASE + "/api/candidates?" + params.toString());
         if (!response.ok) throw new Error("API returned " + response.status);
         const data: Candidate[] = await response.json();
-        if (!cancelled) setCandidates(data);
+        const total = Number(response.headers.get("X-Total-Count") ?? data.length);
+        if (!cancelled) {
+          setCandidates(data);
+          setTotalCandidates(Number.isFinite(total) ? total : data.length);
+        }
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : "Unable to load candidates.");
       } finally {
@@ -195,28 +210,14 @@ export default function CandidatesPage() {
       }
     }
 
-    load();
+    void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [page, pageSize, query, status, country, sortBy, sortDirection, refreshKey]);
 
-  const filtered = useMemo(() => candidates.filter((candidate) => {
-    const haystack = (
-      fullName(candidate) + " " +
-      (candidate.email ?? "") + " " +
-      (candidate.current_title ?? "") + " " +
-      (candidate.city ?? "") + " " +
-      candidate.skills.join(" ")
-    ).toLowerCase();
+  const filtered = candidates;
 
-    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country);
-  }).sort((a, b) => {
-    const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
-    const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
-    return sortDirection === "asc" ? comparison : -comparison;
-  }), [candidates, query, status, country, sortBy, sortDirection]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const pageCount = Math.max(1, Math.ceil(totalCandidates / pageSize));
+  const visibleCandidates = filtered;
   const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
   useEffect(() => {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
@@ -253,21 +254,53 @@ export default function CandidatesPage() {
     else { const view = savedViews.find((item) => item.name === name); if (view) { setQuery(view.query); setStatus(view.status); setCountry(view.country); } }
     setPage(1);
   }
-  function exportCandidates() {
-    const escapeCsv = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
-    const rows = [["Candidate ID","First name","Last name","Email","Phone","City","Region","Country","Current title","Years experience","Skills","Status"], ...filtered.map((candidate) => [candidate.id,candidate.first_name,candidate.last_name,candidate.email,candidate.phone,candidate.city,candidate.region,candidate.country_code,candidate.current_title,candidate.years_experience,candidate.skills.join("; "),candidate.status])];
-    const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" })); const link = document.createElement("a"); link.href = url; link.download = "aqerith-candidates.csv"; link.click(); URL.revokeObjectURL(url);
+  async function exportCandidates() {
+    const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+    if (!API_BASE || !organizationId) { setMessage("API or organisation configuration is missing."); return; }
+    setMessage("");
+    try {
+      const allCandidates: Candidate[] = [];
+      let exportPage = 1;
+      let total = 0;
+      do {
+        const params = new URLSearchParams({
+          organization_id: organizationId,
+          page: String(exportPage),
+          page_size: String(pageSize),
+          sort_by: sortBy,
+          sort_direction: sortDirection,
+        });
+        if (query.trim()) params.set("search", query.trim());
+        if (status !== "all") params.set("status", status);
+        if (country !== "all") params.set("country_code", country);
+        const response = await apiFetch(API_BASE + "/api/candidates?" + params.toString());
+        if (!response.ok) throw new Error("Could not export candidates (HTTP " + response.status + ").");
+        const batch: Candidate[] = await response.json();
+        total = Number(response.headers.get("X-Total-Count") ?? batch.length);
+        allCandidates.push(...batch);
+        exportPage += 1;
+        if (!batch.length) break;
+      } while (allCandidates.length < total);
+      const escapeCsv = (value: unknown) => '"' + String(value ?? "").replace(/"/g, '""') + '"';
+      const rows = [["Candidate ID","First name","Last name","Email","Phone","City","Region","Country","Current title","Years experience","Skills","Status"], ...allCandidates.map((candidate) => [candidate.id,candidate.first_name,candidate.last_name,candidate.email,candidate.phone,candidate.city,candidate.region,candidate.country_code,candidate.current_title,candidate.years_experience,candidate.skills.join("; "),candidate.status])];
+      const csv = rows.map((row) => row.map(escapeCsv).join(",")).join("\r\n");
+      const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8;" }));
+      const link = document.createElement("a"); link.href = url; link.download = "aqerith-candidates.csv"; link.click(); URL.revokeObjectURL(url);
+      setMessage("Exported " + allCandidates.length + " candidate(s).");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to export candidates.");
+    }
   }
   async function applyBulkStatus() {
     if (!selectedIds.length) return; setSaving(true); setMessage("");
     try {
       const results = await Promise.all(selectedIds.map(async (id) => {
-        const response = await apiFetch(API_BASE + "/api/candidates/" + id, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: bulkStatus }) });
+        const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+        const response = await apiFetch(API_BASE + "/api/candidates/" + id + "?organization_id=" + encodeURIComponent(organizationId), { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status: bulkStatus }) });
         if (!response.ok) { const body = await response.json().catch(() => null); throw new Error(body?.detail || "Could not update every selected candidate."); }
         return await response.json() as Candidate;
       }));
-      const byId = new Map(results.map((candidate) => [candidate.id, candidate])); setCandidates((current) => current.map((candidate) => byId.get(candidate.id) ?? candidate)); setSelectedIds([]); setMessage("Updated " + results.length + " candidate(s).");
+      const byId = new Map(results.map((candidate) => [candidate.id, candidate])); setCandidates((current) => current.map((candidate) => byId.get(candidate.id) ?? candidate)); setSelectedIds([]); setRefreshKey((current) => current + 1); setMessage("Updated " + results.length + " candidate(s).");
     } catch (error) { setMessage(error instanceof Error ? error.message : "Bulk update failed. Some updates may have succeeded; refresh to verify."); }
     finally { setSaving(false); }
   }
@@ -297,10 +330,7 @@ export default function CandidatesPage() {
       if (!response.ok) throw new Error(payload?.detail || "CV import failed (HTTP " + response.status + ").");
       setCvImportResults(payload.results ?? []);
       setCvImportMessage("Finished: " + payload.imported + " imported, " + payload.duplicates + " duplicates skipped, " + payload.failed + " failed.");
-      if (payload.imported > 0) {
-        const refreshed = await apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId));
-        if (refreshed.ok) setCandidates(await refreshed.json());
-      }
+      if (payload.imported > 0) setRefreshKey((current) => current + 1);
     } catch (error) {
       setCvImportMessage(error instanceof Error ? error.message : "Unable to import CVs.");
     } finally {
@@ -415,13 +445,22 @@ export default function CandidatesPage() {
       for (const row of eligible) {
         const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean) };
         try {
+          const duplicateParams = new URLSearchParams({ organization_id: organizationId });
+          if (row.email) duplicateParams.set("email", row.email);
+          if (row.phone) duplicateParams.set("phone", row.phone);
+          if (row.email || row.phone) {
+            const duplicateResponse = await apiFetch(API_BASE + "/api/candidates/duplicates?" + duplicateParams.toString());
+            if (!duplicateResponse.ok) throw new Error("Duplicate check failed");
+            const duplicates: Candidate[] = await duplicateResponse.json();
+            if (duplicates.length) { failures.push("Row " + row.line + ": possible duplicate of " + fullName(duplicates[0])); continue; }
+          }
           const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
           const candidate = await response.json() as Candidate; setCandidates((current) => [candidate, ...current]); created++;
         } catch { failures.push("Row " + row.line + ": network error"); }
       }
       setImportMessage("Imported " + created + " candidate(s). Skipped " + (importRows.length - eligible.length) + " invalid or duplicate row(s)." + (failures.length ? " Failed: " + failures.slice(0, 5).join("; ") : ""));
-      if (created > 0) { setImportRows([]); setImportFileName(""); }
+      if (created > 0) { setImportRows([]); setImportFileName(""); setTotalCandidates((current) => current + created); setRefreshKey((current) => current + 1); }
     } finally { setImporting(false); }
   }
 
@@ -460,13 +499,34 @@ export default function CandidatesPage() {
     };
 
     try {
-      if (!API_BASE || !ORGANIZATION_ID) {
-        setMessage("API configuration is missing.");
+      const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+      if (!API_BASE || !organizationId) {
+        setMessage("API or organisation configuration is missing.");
         return;
       }
 
+      if (!editing && (form.email.trim() || form.phone.trim())) {
+        const duplicateParams = new URLSearchParams({ organization_id: organizationId });
+        if (form.email.trim()) duplicateParams.set("email", form.email.trim());
+        if (form.phone.trim()) duplicateParams.set("phone", form.phone.trim());
+        const duplicateResponse = await apiFetch(API_BASE + "/api/candidates/duplicates?" + duplicateParams.toString());
+        if (!duplicateResponse.ok) {
+          const body = await duplicateResponse.json().catch(() => null);
+          throw new Error(body?.detail || "Could not check for duplicate candidate records.");
+        }
+        const duplicates: Candidate[] = await duplicateResponse.json();
+        if (duplicates.length) {
+          const summary = duplicates.slice(0, 5).map((candidate) =>
+            "• " + fullName(candidate) + (candidate.email ? " · " + candidate.email : "") +
+            ([candidate.city, candidate.country_code].filter(Boolean).length ? " · " + [candidate.city, candidate.country_code].filter(Boolean).join(", ") : "")
+          ).join("\n");
+          const more = duplicates.length > 5 ? "\n…and " + (duplicates.length - 5) + " more." : "";
+          if (!window.confirm("Possible existing candidate record(s) found:\n\n" + summary + more + "\n\nCreate a separate profile anyway?")) return;
+        }
+      }
+
       const endpoint = editing
-        ? API_BASE + "/api/candidates/" + editing.id
+        ? API_BASE + "/api/candidates/" + editing.id + "?organization_id=" + encodeURIComponent(organizationId)
         : API_BASE + "/api/candidates";
 
       const response = await apiFetch(endpoint, {
@@ -486,6 +546,9 @@ export default function CandidatesPage() {
           ? current.map((item) => item.id === saved.id ? saved : item)
           : [saved, ...current]
       );
+      setTotalCandidates((current) => editing ? current : current + 1);
+      setRefreshKey((current) => current + 1);
+      if (!editing) setPage(1);
       setMessage(editing ? "Candidate updated successfully." : "Candidate created successfully.");
       setEditing(null);
       setForm(emptyForm);
@@ -501,12 +564,15 @@ export default function CandidatesPage() {
     if (!window.confirm("Delete " + fullName(candidate) + "? This cannot be undone.")) return;
 
     try {
-      const response = await apiFetch(API_BASE + "/api/candidates/" + candidate.id, { method: "DELETE" });
+      const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
+      const response = await apiFetch(API_BASE + "/api/candidates/" + candidate.id + "?organization_id=" + encodeURIComponent(organizationId), { method: "DELETE" });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
         throw new Error(body?.detail || "API returned " + response.status);
       }
       setCandidates((current) => current.filter((item) => item.id !== candidate.id));
+      setTotalCandidates((current) => Math.max(0, current - 1));
+      setRefreshKey((current) => current + 1);
       setMessage("Candidate deleted.");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to delete candidate.");
@@ -555,8 +621,8 @@ export default function CandidatesPage() {
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
-              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
-              <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
+              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(["GB", "US", "IN", "AU", ...candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean)])].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
+              <span className="muted-small">{totalCandidates} candidate{totalCandidates === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
             </div>
           </div>
 
@@ -593,7 +659,7 @@ export default function CandidatesPage() {
                 ))}
               </tbody>
             </table></div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {totalCandidates ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, totalCandidates)} of {totalCandidates}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
           </div>
         </section>
       </main>
