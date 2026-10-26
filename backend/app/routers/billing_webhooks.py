@@ -154,23 +154,25 @@ async def stripe_webhook(
                         [provider_subscription_id],
                     )
                     existing = cursor.fetchone()
-                    if existing and not should_apply_subscription_event(
-                        existing.get("provider_event_created_at"), event_created
-                    ):
-                        cursor.execute(
-                            """update public.billing_webhook_events
-                               set organization_id=%s, processing_status='processed',
-                                   processed_at=now(), failure_code='stale_provider_event'
-                               where id=%s""",
-                            [organization_id, receipt["id"]],
-                        )
-                        return {"received": True, "processed": False, "stale": True}
+                    if existing:
+                        # Validate tenant binding before stale-event handling; provider IDs
+                        # must never be accepted under another organisation's metadata.
+                        if str(existing["organization_id"]) != str(organization_id):
+                            raise ValueError("Stripe subscription tenant metadata does not match stored tenant")
+                        if not should_apply_subscription_event(
+                            existing.get("provider_event_created_at"), event_created
+                        ):
+                            cursor.execute(
+                                """update public.billing_webhook_events
+                                   set organization_id=%s, processing_status='processed',
+                                       processed_at=now(), failure_code='stale_provider_event'
+                                   where id=%s""",
+                                [organization_id, receipt["id"]],
+                            )
+                            return {"received": True, "processed": False, "stale": True}
 
                     previous_state = {}
                     if existing:
-                        # Provider IDs are permanently bound to the original tenant.
-                        if str(existing["organization_id"]) != str(organization_id):
-                            raise ValueError("Stripe subscription tenant metadata does not match stored tenant")
                         previous_state = {
                             "organization_id": str(existing["organization_id"]),
                             "plan_id": str(existing["plan_id"]),
