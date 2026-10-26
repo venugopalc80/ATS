@@ -457,5 +457,29 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.membership.call_count, len(calls))
 
 
+    async def test_export_rejects_unsupported_date_and_job_filters_for_workload(self):
+        with self.assertRaises(HTTPException) as context:
+            await analytics_router.analytics_export(
+                organization_id=ORG, report_type="workload",
+                date_from=date(2026, 10, 1), date_to=None,
+                job_id=None, recruiter_id=None,
+                user_id=UUID("22222222-2222-4222-8222-222222222222"),
+            )
+        self.assertEqual(context.exception.status_code, 422)
+        self.assertIn("do not support date or job filters", context.exception.detail)
+        self.assertEqual(self.cursor.queries, [])
+
+    async def test_export_rejects_unsupported_filters_for_forecast(self):
+        with self.assertRaises(HTTPException) as context:
+            await analytics_router.analytics_export(
+                organization_id=ORG, report_type="forecast",
+                date_from=None, date_to=None, job_id=JOB, recruiter_id=None,
+                user_id=UUID("22222222-2222-4222-8222-222222222222"),
+            )
+        self.assertEqual(context.exception.status_code, 422)
+        self.assertIn("do not support date or job filters", context.exception.detail)
+        self.assertEqual(self.cursor.queries, [])
+
+
 if __name__ == "__main__":
     unittest.main()
