@@ -417,5 +417,45 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(row["cost_metrics_status"], "spend_not_segmented_for_filters")
 
 
+    async def test_every_analytics_endpoint_rejects_non_members_before_querying(self):
+        user_id = UUID("22222222-2222-4222-8222-222222222222")
+        calls = [
+            lambda: analytics_router.analytics_kpis(
+                organization_id=ORG, date_from=None, date_to=None, job_id=None,
+                recruiter_id=None, user_id=user_id,
+            ),
+            lambda: analytics_router.analytics_funnel(
+                organization_id=ORG, date_from=None, date_to=None, job_id=None,
+                recruiter_id=None, user_id=user_id,
+            ),
+            lambda: analytics_router.analytics_workload(
+                organization_id=ORG, recruiter_id=None, user_id=user_id,
+            ),
+            lambda: analytics_router.analytics_sources(
+                organization_id=ORG, date_from=None, date_to=None, job_id=None,
+                recruiter_id=None, user_id=user_id,
+            ),
+            lambda: analytics_router.analytics_forecast(
+                organization_id=ORG, recruiter_id=None, user_id=user_id,
+            ),
+            lambda: analytics_router.analytics_campaign_roi(
+                organization_id=ORG, date_from=None, date_to=None, job_id=None,
+                recruiter_id=None, user_id=user_id,
+            ),
+            lambda: analytics_router.analytics_export(
+                organization_id=ORG, report_type="sources", date_from=None,
+                date_to=None, job_id=None, recruiter_id=None, user_id=user_id,
+            ),
+        ]
+        self.membership.side_effect = HTTPException(status_code=403, detail="Not a member")
+        for call in calls:
+            with self.subTest(endpoint=call):
+                with self.assertRaises(HTTPException) as context:
+                    await call()
+                self.assertEqual(context.exception.status_code, 403)
+                self.assertEqual(self.cursor.queries, [])
+        self.assertEqual(self.membership.call_count, len(calls))
+
+
 if __name__ == "__main__":
     unittest.main()
