@@ -102,3 +102,11 @@ Do not send real candidate data to an external provider before these gates have 
 - Applied the additive retention and backfill migrations to ATS-Staging (`riauyrhfnlsxmtgipuxi`) and verified both columns and both partial indexes through read-only catalog queries. No production database changes were made.
 - GitHub Actions Section 7 run #55 passed backend compile/tests and frontend typecheck on commit `6586e1be6b0386e7670e282cf03f702c43d7e53c`. The associated Vercel checks were pending at the first status read; the latest confirmed build status still needs checking before preview QA.
 - Staging security advisor continues to report existing broader findings: RLS-enabled assessment, candidate-document, conversation and recovery-drill tables without policies; `public.is_org_member(uuid)` executable by authenticated users as SECURITY DEFINER; `vector` in `public`; and leaked-password protection disabled. These findings are not caused by this retention migration and require separate, impact-reviewed remediation.
+
+
+## Governance query performance (2026-10-26)
+
+- Added indexes for Section 7 foreign-key columns used by joins and referential checks, plus organisation indexes where the tables lacked an organisation-leading index.
+- Applied the index migration to ATS-Staging. The latest Supabase performance-advisor query reported **zero remaining unindexed foreign-key findings for the ten Section 7 AI tables**.
+- The advisor reports the newly added indexes as unused because the staging AI tables currently contain zero rows; this is expected on an empty staging dataset and is not a reason to remove foreign-key indexes before production data exists.
+- The wider project still has unrelated unindexed foreign-key findings; this work intentionally does not alter unrelated tables.
