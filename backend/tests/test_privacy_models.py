@@ -393,3 +393,27 @@ def test_consent_evidence_timestamps_must_be_timezone_aware():
             legal_basis="consent", consent_status="granted",
             consent_captured_at=datetime(2026, 10, 25),
         ))
+
+
+def test_retention_policy_rejects_blank_category_and_purpose():
+    for field_name, value in (("data_category", "   "), ("purpose", "  ")):
+        payload = {
+            "organization_id": uuid4(),
+            "data_category": "candidate_profile",
+            "purpose": "recruitment",
+            "jurisdiction": "GB",
+            "retention_days": 365,
+            "action": "review",
+            "version": 1,
+            "effective_at": datetime(2026, 10, 26, tzinfo=timezone.utc),
+        }
+        payload[field_name] = value
+        with pytest.raises(ValidationError, match="must not be blank"):
+            RetentionPolicyCreate(**payload)
+
+
+def test_processing_record_rejects_blank_purpose():
+    payload = base_processing_record(legal_basis="legitimate_interests")
+    payload["purpose"] = "   "
+    with pytest.raises(ValidationError, match="purpose must not be blank"):
+        ProcessingRecordCreate(**payload)
