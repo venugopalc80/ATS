@@ -1,8 +1,8 @@
 # Section 6 — Analytics and Business Intelligence
 
 **Scope:** AQERITH Ideas 28–33  
-**Status:** Metric contract, KPI/funnel/workload/source APIs, six-month baseline demand forecast, allowlisted CSV exports and first analytics workspace UI are committed on the feature branch. The latest code acceptance run passed backend tests and frontend typecheck/production build. Forecast/campaign SQL was checked read-only against staging; staging has no recruitment/campaign rows for numerical reconciliation.  
-**Last reviewed:** 2026-10-22
+**Status:** Metric contract, KPI/funnel/workload/source APIs, six-month baseline demand forecast, allowlisted CSV exports and first analytics workspace UI are committed on the feature branch. Forecast/campaign SQL was checked read-only against staging; staging has no recruitment/campaign rows for numerical reconciliation. Check the linked pull request's Actions checks for the latest code acceptance status.  
+**Last reviewed:** 2026-10-26
 
 This document defines the proposed shared contract for analytics APIs, dashboards, exports and forecast comparisons. A metric is not accepted solely because the UI displays a value.
 
