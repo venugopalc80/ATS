@@ -17,6 +17,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Billing APIs for plan listing, owner/admin subscription read and server-configured Stripe Checkout creation.
 - Checkout retry idempotency: the billing page reuses a per-organisation/plan attempt UUID across reloads and transient failures, and the backend passes a stable derived key to Stripe; cancelled checkout attempts clear stored keys so a new attempt can be created.
 - Stripe webhook signature verification, idempotent event receipts, subscription state writes and append-only lifecycle history.
+- Subscription provider IDs are checked against the original organisation before stale-event handling; regression coverage verifies a stale event with mismatched tenant metadata is rejected.
 - Billing page and unit tests authored for entitlement logic, subscription API states and webhook safeguards.
 - Stripe SDK added to backend requirements.
 
@@ -37,7 +38,9 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Support cases, customer-visible support messages, separately provisioned platform operator roles and scoped support access grants.
 - Support access is bound to a specific case, requires organisation admin approval, expires within a maximum of 60 minutes, can be revoked, and is audit-logged.
 - Platform support queue and health endpoint avoid exposing candidate records by default.
+- The unapproved support queue omits customer-written case subjects; regression coverage verifies subject data is absent before access approval.
 - Customer support and restricted platform operations UIs.
+- Regression coverage verifies platform operators cannot read case details without an active organisation-approved access grant.
 - Platform operators can open a case only with an active organisation-approved grant, view the approved conversation, send customer-visible replies, or add internal notes.
 - Validation tests authored for support request payloads.
 
@@ -47,17 +50,17 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Verified the newly added tables have RLS enabled and policies in place for their intended browser roles.
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - No production database changes, merges or production deployments were performed.
-- GitHub Actions Section 9 billing/unit-test workflow and Dashboard Update 1 Acceptance workflow both passed on commit 105b7d630cd7187784aacd6feee48d78e95b3fa6, including Section 9 backend tests, the checkout idempotency test, Stripe webhook safeguards, backend acceptance tests, frontend typecheck and production build. End-to-end Stripe checkout/webhook tests remain pending.
+- GitHub Actions Section 9 billing/unit-test workflow (run 49) and Dashboard Update 1 Acceptance workflow (run 715) passed on commit 591b4086c25ff475a57b79775401647ff607b924. This includes backend tests, Stripe webhook safeguards, support queue privacy/access-grant regression tests, frontend typecheck and production build. End-to-end Stripe checkout/webhook tests remain pending.
 - Vercel preview deployments reported the account's daily deployment limit has been reached; preview deployment validation is blocked until the limit resets or the account limit changes.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
 
 ## Main remaining work
 
 - Seed and approve commercial plan/pricing decisions; configure Stripe test secrets and plan price IDs.
-- Added stale Stripe subscription event protection using provider event timestamps; equal-second event ordering and provider reconciliation still need further hardening. Checkout retries now use Stripe idempotency keys. Payment-failure/cancellation edge cases remain pending.
+- Added stale Stripe subscription event protection using provider event timestamps and tenant-binding validation before stale-event handling; equal-second event ordering and provider reconciliation still need further hardening. Checkout retries now use Stripe idempotency keys. Payment-failure/cancellation edge cases remain pending.
 - Wire entitlement enforcement into real job, candidate, seat and AI operations; add race-safe quota enforcement.
 - Finish subscription and usage UI, settings/help/support UX and role-based access acceptance checks.
-- Add integration tests for tenant isolation, access grant expiry/revocation, webhook idempotency and settings version concurrency.
+- Add integration tests for access-grant expiry/revocation, webhook duplicate delivery and settings version concurrency. Basic regression coverage now verifies cross-tenant stale webhook rejection and denial of case details without an active approved grant.
 - Re-run backend tests, frontend typecheck/build after the latest UI changes, and staging smoke tests. The Section 9 workflow now includes frontend typecheck/build steps and triggers on platform operations UI changes. Keep PR in draft until checks pass.
 - Provision platform operators through a separate privileged process; customer organisation roles must never grant platform access.
 
