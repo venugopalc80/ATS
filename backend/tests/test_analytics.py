@@ -129,6 +129,11 @@ class FakeAnalyticsCursor:
                 "entered_applications": 5, "reached_next_applications": 3,
                 "conversion_rate": 0.6,
             }]
+        if "as still_in_stage" in self.sql:
+            return [
+                {"stage": "interview", "latest_applications": 3, "still_in_stage": 2},
+                {"stage": "hired", "latest_applications": 1, "still_in_stage": 0},
+            ]
         if "group by a.status" in self.sql:
             return [{"status": "interview", "distinct_applications": 3}]
         if "as campaign_name" in self.sql and "spend_amount" in self.sql:
@@ -273,6 +278,9 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["stage_waiting_time"][0]["p90_days"], 5.0)
         self.assertEqual(result["stage_conversions"][0]["conversion_rate"], 0.6)
         self.assertEqual(result["stage_conversions"][0]["entered_applications"], 5)
+        self.assertEqual(result["current_stage_presence"][0]["still_in_stage"], 2)
+        self.assertEqual(result["outcome_summary"]["active"], 3)
+        self.assertEqual(result["outcome_summary"]["hired"], 0)
         self.assertIn("h.organization_id=%s", self.cursor.queries[0][0])
         self.assertIn("count(distinct h.application_id)", self.cursor.queries[3][0])
         self.assertIn("lead(h.created_at)", self.cursor.queries[1][0])
