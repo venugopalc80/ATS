@@ -153,7 +153,9 @@ class ApplicationService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
-    async def create_application(self, payload: ApplicationCreate) -> dict[str, Any]:
+    async def create_application(
+        self, payload: ApplicationCreate, actor_user_id: UUID
+    ) -> dict[str, Any]:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -163,6 +165,7 @@ class ApplicationService:
                 links = cursor.fetchone()
                 if not links["job_ok"] or not links["candidate_ok"]:
                     raise ValueError("Job and candidate must belong to the same organization")
+                cursor.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
                 cursor.execute(
                     "insert into public.applications (organization_id, job_id, candidate_id, source, status) values (%s, %s, %s, %s, %s) returning " + APPLICATION_COLUMNS,
                     [payload.organization_id, payload.job_id, payload.candidate_id, payload.source, payload.status],
