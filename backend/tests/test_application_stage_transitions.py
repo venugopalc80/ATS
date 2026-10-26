@@ -117,6 +117,13 @@ class ApplicationStageTransitionTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn(("select set_config('app.transition_reason', %s, true)", ["CV reviewed"]), self.cursor.executed)
         self.assertTrue(any(sql.startswith("update public.applications set status=") for sql, _ in self.cursor.executed))
         self.assertTrue(any("from public.application_stage_config" in sql for sql, _ in self.cursor.executed))
+        lock_index = next(i for i, (sql, _) in enumerate(self.cursor.executed) if "pg_advisory_xact_lock" in sql)
+        config_index = next(i for i, (sql, _) in enumerate(self.cursor.executed) if "from public.application_stage_config" in sql)
+        self.assertLess(lock_index, config_index)
+        self.assertEqual(
+            self.cursor.executed[lock_index][1],
+            [f"aqerith:application-stage-graph:{ORG}"],
+        )
 
     async def test_service_rejects_blank_transition_reason(self):
         with self.assertRaisesRegex(ValueError, "Transition reason cannot be blank"):
