@@ -13,7 +13,7 @@ support_router = APIRouter(prefix="/api/support", tags=["support"])
 platform_router = APIRouter(prefix="/api/platform", tags=["platform operations"])
 
 SupportCategory = Literal["billing", "technical", "account", "security", "privacy", "other"]
-SupportScope = Literal["case_metadata", "case_messages"]
+SupportScope = Literal["case_metadata", "case_content", "case_messages"]
 
 
 class SupportCaseCreate(BaseModel):
@@ -297,7 +297,7 @@ async def platform_get_support_case(
                        from public.support_access_grants
                        where organization_id=%s and support_case_id=%s and operator_user_id=%s
                          and approved_at is not null and revoked_at is null
-                         and expires_at > now() and scope @> array['case_metadata']::text[]
+                         and expires_at > now() and scope @> array['case_content']::text[]
                        order by approved_at desc limit 1""",
                     [case_ref["organization_id"], case_id, user_id],
                 )
