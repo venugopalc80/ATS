@@ -217,7 +217,7 @@ def _assert_group_owner(cursor, conversation_id: UUID, user_id: UUID):
       from public.conversations c
       join public.conversation_members cm on cm.conversation_id=c.id
       join public.organization_members om on om.organization_id=c.organization_id and om.user_id=cm.user_id
-      where c.id=%s and cm.user_id=%s and cm.left_at is null
+      where c.id=%s and cm.user_id=%s and cm.left_at is null and c.archived_at is null
     """, [conversation_id, user_id])
     row = cursor.fetchone()
     if row is None:
@@ -241,12 +241,15 @@ async def add_group_members(conversation_id: UUID, payload: GroupMembersAdd,
                 cursor.execute("""
                   insert into public.conversation_members (conversation_id,user_id,member_role,last_read_at)
                   values (%s,%s,'member',now())
-                  on conflict (conversation_id,user_id) do update set left_at=null, joined_at=now(), last_read_at=now()
+                  on conflict (conversation_id,user_id) do update
+                    set left_at=null, joined_at=now(), last_read_at=now()
+                    where public.conversation_members.left_at is not null
                 """, [conversation_id, target_id])
-                cursor.execute("""
-                  insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
-                  values (%s,%s,'member_added',%s)
-                """, [conversation_id,user_id,target_id])
+                if cursor.rowcount:
+                    cursor.execute("""
+                      insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
+                      values (%s,%s,'member_added',%s)
+                    """, [conversation_id,user_id,target_id])
             return {"added": [str(x) for x in member_ids]}
 
 @router.delete("/conversations/{conversation_id}/members/{target_user_id}")
