@@ -13,8 +13,8 @@ def validate_security_event_window(since: datetime | None, until: datetime | Non
     for field_name, value in (("since", since), ("until", until)):
         if value is not None and (value.tzinfo is None or value.utcoffset() is None):
             raise HTTPException(status_code=422, detail=f"'{field_name}' must include a timezone")
-    validate_security_event_window(since, until)
-
+    if since and until and since > until:
+        raise HTTPException(status_code=422, detail="'since' must be earlier than or equal to 'until'")
 
 
 @router.get("/application/{application_id}")
@@ -56,8 +56,7 @@ async def security_events(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_admin(user_id, organization_id)
-    if since and until and since > until:
-        raise HTTPException(status_code=422, detail="'since' must be earlier than or equal to 'until'")
+    validate_security_event_window(since, until)
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
