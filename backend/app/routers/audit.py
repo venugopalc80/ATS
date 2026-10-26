@@ -8,6 +8,14 @@ from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_conn
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
 
+def validate_security_event_window(since: datetime | None, until: datetime | None) -> None:
+    """Reject ambiguous timestamps before comparing or querying PostgreSQL."""
+    for field_name, value in (("since", since), ("until", until)):
+        if value is not None and (value.tzinfo is None or value.utcoffset() is None):
+            raise HTTPException(status_code=422, detail=f"'{field_name}' must include a timezone")
+    validate_security_event_window(since, until)
+
+
 
 @router.get("/application/{application_id}")
 async def application_audit(
