@@ -339,3 +339,11 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - **Idea 04:** remains **41.7% evidenced / 58.3% pending** against six provisional acceptance criteria. This concurrency hardening improves correctness but does not close a full acceptance criterion.
 - **AQERITH overall:** **not yet verified**; detailed acceptance criteria reviewed for **5/49 ideas (10.2% evidence coverage)**, which is not implementation completion.
 - Next: verify CI and Vercel on the current head; then pursue isolated PostgreSQL migration tests and authenticated tenant-isolation tests. Keep PR #69 in draft and do not apply migrations to staging or production while staging schema/migration-ledger drift remains unresolved.
+
+
+### Current-head CI and Vercel check (2026-10-26, 11:11 UTC)
+
+- Current PR #69 head `cacf02c8a75a52a9629cef6d75d2c277fee27894`; GitHub Actions run #692 is in progress.
+- Backend unit tests passed and frontend TypeScript typecheck passed; frontend production build was still running at the latest poll. Run: https://github.com/venugopalc80/ATS/actions/runs/40312978591.
+- Current-head Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` are failing with the team's build-rate-limit status. This is not evidence of an application build failure, but it prevents preview acceptance.
+- No database writes, migrations, merges, or production deployments occurred.
