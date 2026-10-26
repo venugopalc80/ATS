@@ -35,7 +35,8 @@ Do not send real candidate data to an external provider before these gates have 
 - AI run records store references, hashes, output, feedback and expiry timestamps. Raw CV text is not copied into run history, but it may be included in the live provider request for a task that uses CV evidence.
 - `POST /api/ai/governance/retention-cleanup?organization_id=...` deletes expired AI runs for the selected organisation and writes an aggregate cleanup audit event.
 - The cleanup endpoint is administrator-only. **A production scheduler has not been configured in this PR.** Before production enablement, schedule this endpoint through a trusted server-side job, or implement an approved database/worker scheduler, and test missed runs and retries.
-- Define and review retention separately for versioned job-description drafts, interview kits, incidents, evaluations and fairness audit records. The AI-run cleanup endpoint does not delete these records.
+- Generated job-description and interview-kit drafts now receive `retention_expires_at` using the same organisation-specific retention period as the originating AI run. Cleanup removes only expired drafts in `draft` or `in_review` state, then removes expired AI runs; approved or published job-description records and approved interview kits are deliberately preserved for a separate records-retention policy.
+- Evaluation, fairness, incident and human-reviewed recommendation records still need separately approved retention schedules; this cleanup does not delete those records.
 - Fairness audit records are for approved aggregate datasets only. Do not infer protected characteristics or upload individual-level sensitive audit data. Small or invalid sample sizes receive an explicit uncertainty note.
 
 ## Known limitations and required follow-up
@@ -50,9 +51,9 @@ Do not send real candidate data to an external provider before these gates have 
 
 ## Verification checklist
 
-- [ ] GitHub Actions Python compile check passes on the latest PR head.
-- [ ] Backend unit tests pass on the latest PR head.
-- [ ] Frontend TypeScript check passes on the latest PR head.
+- [x] GitHub Actions Python compile check passes on the latest verified feature-branch commit `6586e1be6b0386e7670e282cf03f702c43d7e53c` (Section 7 run #55).
+- [x] Backend unit tests pass on the latest verified feature-branch commit `6586e1be6b0386e7670e282cf03f702c43d7e53c` (Section 7 run #55).
+- [x] Frontend TypeScript check passes on the latest verified feature-branch commit `6586e1be6b0386e7670e282cf03f702c43d7e53c` (Section 7 run #55).
 - [x] Apply migrations to `ATS-Staging`; verify AI tables, RLS policies and browser grants.\n- [ ] Verify migration replay/upgrade behaviour from a clean disposable database.
 - [ ] Verify cross-tenant reads/writes fail for all AI endpoints.
 - [ ] Verify non-admins cannot configure use cases/models, inspect governance data, approve models, create fairness audits, remediate incidents or run retention cleanup.
@@ -90,3 +91,14 @@ Do not send real candidate data to an external provider before these gates have 
 - The Section 7 workflow passed on commit `25fcc5060398b6fae2af0d23ce036291e64a9f33` (run #44: backend tests and frontend TypeScript checks succeeded), including model-approval gates and small-sample fairness warnings.
 - Follow-up hardening validates evaluation pass criteria before recording results: `minimum_cases` must be a positive integer and `max_failure_rate` must be numeric and between 0 and 1. Invalid criteria return HTTP 409 before evaluation result rows are written.
 - Added regression coverage for zero/invalid minimum case counts, out-of-range failure rates, booleans and non-numeric failure-rate values. The code/test commit is `809b5cdbb9c8812909b96fd38d23fffbde291a60`; its Section 7 Actions run #48 was still in progress at the time of this note, so this newest change remains unverified until that run completes.
+
+
+## Retention hardening (2026-10-26)
+
+- Added `retention_expires_at` columns and partial indexes for AI-generated job-description versions and interview kits on the feature branch.
+- Updated generation to set draft expiry from the organisation's approved use-case retention period.
+- Expanded administrator-triggered cleanup to remove only expired `draft`/`in_review` job-description versions and interview kits, plus expired AI-run records. Reviewed/approved/published artifacts are not automatically deleted.
+- Added a regression test for tenant-scoped cleanup filters, draft-status restrictions and aggregate audit metadata.
+- Applied the additive retention migration to ATS-Staging (`riauyrhfnlsxmtgipuxi`) and verified both columns and both partial indexes through read-only catalog queries. No production database changes were made.
+- GitHub Actions Section 7 run #55 passed backend compile/tests and frontend typecheck on commit `6586e1be6b0386e7670e282cf03f702c43d7e53c`. The associated Vercel checks were pending at the first status read; the latest confirmed build status still needs checking before preview QA.
+- Staging security advisor continues to report existing broader findings: RLS-enabled assessment, candidate-document, conversation and recovery-drill tables without policies; `public.is_org_member(uuid)` executable by authenticated users as SECURITY DEFINER; `vector` in `public`; and leaked-password protection disabled. These findings are not caused by this retention migration and require separate, impact-reviewed remediation.
