@@ -4,7 +4,7 @@ from uuid import uuid4
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from app.routers.ai import GenerateInput, RecommendationInput, ReviewInput, router
+from app.routers.ai import GenerateInput, ModelInput, RecommendationInput, ReviewInput, router
 
 
 class AIRouterContractTests(unittest.TestCase):
@@ -17,6 +17,17 @@ class AIRouterContractTests(unittest.TestCase):
     def test_generate_request_requires_valid_task(self):
         with self.assertRaises(ValueError):
             GenerateInput(organization_id=uuid4(), task="reject_candidate")
+
+    def test_model_cannot_be_registered_directly_as_approved(self):
+        with self.assertRaises(ValueError):
+            ModelInput(
+                provider="approved-provider",
+                model_name="test-model",
+                model_version="v1",
+                intended_purpose="Administrative recruitment assistance only",
+                data_processing_approved=True,
+                status="approved",
+            )
 
     def test_recommendation_requires_source_references_and_evidence(self):
         with self.assertRaises(ValueError):
