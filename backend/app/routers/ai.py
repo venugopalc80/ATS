@@ -350,12 +350,12 @@ async def assistant(
                 cur.execute(
                     """insert into public.ai_job_description_versions
                        (organization_id, job_id, version_number, content, source_requirements,
-                        quality_findings, ai_run_id, status, created_by)
-                       values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,'draft',%s)
-                       returning id, version_number, status""",
+                        quality_findings, ai_run_id, status, created_by, retention_expires_at)
+                       values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,'draft',%s,now()+(%s * interval '1 day'))
+                       returning id, version_number, status, retention_expires_at""",
                     [payload.organization_id, payload.job_id, version_number, output_text,
                      json.dumps(refs), json.dumps(["Human review required; verify salary, benefits, qualifications, working arrangements, clarity and exclusionary wording."]),
-                     run["id"], user_id],
+                     run["id"], user_id, use_case["retention_days"]],
                 )
                 output["draft_record"] = cur.fetchone()
             elif payload.task == "interview_questions":
@@ -368,12 +368,12 @@ async def assistant(
                 cur.execute(
                     """insert into public.ai_interview_kits
                        (organization_id, job_id, job_version_reference, version_number, competencies,
-                        questions, ai_run_id, status, created_by)
-                       values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,'draft',%s)
-                       returning id, version_number, status""",
+                        questions, ai_run_id, status, created_by, retention_expires_at)
+                       values (%s,%s,%s,%s,%s::jsonb,%s::jsonb,%s,'draft',%s,now()+(%s * interval '1 day'))
+                       returning id, version_number, status, retention_expires_at""",
                     [payload.organization_id, payload.job_id, str(payload.job_id), version_number,
                      json.dumps([]), json.dumps({"draft_text": output_text, "review_required": True}),
-                     run["id"], user_id],
+                     run["id"], user_id, use_case["retention_days"]],
                 )
                 output["draft_record"] = cur.fetchone()
             cur.execute(
@@ -898,18 +898,41 @@ async def cleanup_expired_ai_runs(organization_id: UUID, user_id: UUID = Depends
     assert_org_admin(user_id, organization_id)
     try:
         with get_connection() as conn, conn.cursor() as cur:
+            # Only remove expired, unreviewed generated drafts. Approved/published artefacts
+            # remain available for the organisation's separate records-retention policy.
+            cur.execute(
+                """delete from public.ai_job_description_versions
+                   where organization_id=%s and retention_expires_at <= now()
+                     and status in ('draft','in_review')
+                   returning id""",
+                [organization_id],
+            )
+            deleted_job_description_drafts = [str(row["id"]) for row in cur.fetchall()]
+            cur.execute(
+                """delete from public.ai_interview_kits
+                   where organization_id=%s and retention_expires_at <= now()
+                     and status in ('draft','in_review')
+                   returning id""",
+                [organization_id],
+            )
+            deleted_interview_kits = [str(row["id"]) for row in cur.fetchall()]
             cur.execute(
                 """delete from public.ai_runs where organization_id=%s and retention_expires_at <= now()
                    returning id""",
                 [organization_id],
             )
-            deleted_ids = [str(row["id"]) for row in cur.fetchall()]
+            deleted_run_ids = [str(row["id"]) for row in cur.fetchall()]
+            cleanup_summary = {
+                "deleted_ai_runs": len(deleted_run_ids),
+                "deleted_job_description_drafts": len(deleted_job_description_drafts),
+                "deleted_interview_kits": len(deleted_interview_kits),
+            }
             cur.execute(
                 """insert into public.audit_events (organization_id, actor_user_id, action, entity_type, metadata)
-                   values (%s,%s,'ai_retention_cleanup','ai_run',%s::jsonb)""",
-                [organization_id, user_id, json.dumps({"deleted_count": len(deleted_ids)})],
+                   values (%s,%s,'ai_retention_cleanup','ai_records',%s::jsonb)""",
+                [organization_id, user_id, json.dumps(cleanup_summary)],
             )
-            return {"deleted_count": len(deleted_ids), "cleanup_at": datetime.now(timezone.utc)}
+            return cleanup_summary | {"cleanup_at": datetime.now(timezone.utc)}
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_error(exc) from exc
 
