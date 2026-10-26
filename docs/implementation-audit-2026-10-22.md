@@ -407,3 +407,23 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - This is the first green run that exercises the actual timestamped Idea 04 migration files against disposable PostgreSQL and verifies rerun/partial-state recovery.
 - Run: https://github.com/venugopalc80/ATS/actions/runs/40321305007.
 - Vercel checks for `ats`, `ats-staging-api`, and `aqerith` remain blocked by the team's build-rate limit; no preview UX acceptance is claimed.
+
+
+### HTTP-level authorization and public response privacy checks (2026-10-26)
+
+- Added `backend/tests/test_application_pipeline_http_authorization.py` on PR #69 to exercise the real FastAPI router and response handling for:
+  - cross-tenant application reads returning 403;
+  - cross-tenant stage-history reads being denied before the history service is called;
+  - cross-tenant transitions being denied before the transition write;
+  - non-admin stage-configuration writes being denied before the configuration service is called.
+- These tests override the authenticated-user dependency and mock organisation membership/service boundaries. They are stronger than direct function-only tests because requests pass through FastAPI routing and response serialization, but they are **not** live Supabase-authenticated or database-backed tenant-isolation tests.
+- Added a public careers submission response-contract assertion: anonymous submission responses contain only `success`, `application_id`, and `message`; recruiter-only matching/review fields are not returned by that endpoint.
+- Current PR #69 head: `381978574a656a182b767da15fadd83bfeff17a5`. Current-head CI run #760 passed both jobs, including backend unit tests, the disposable PostgreSQL 16 migration smoke test, frontend typecheck, and production build: https://github.com/venugopalc80/ATS/actions/runs/40349860950.
+- Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` remain blocked by the team's build-rate limit. Preview UX acceptance is not claimed.
+- No staging/production migrations or data writes, merge, or production deployment occurred.
+
+### Current Idea 04 score and remaining gates (2026-10-26)
+
+- **Idea 04 remains 41.7% evidenced / 58.3% pending** against the six provisional acceptance criteria. Additional green regression tests increase confidence but do not close the remaining acceptance criteria.
+- **AQERITH overall completion remains unverified.** Detailed acceptance criteria have been reviewed for 5/49 ideas (10.2% audit coverage), which is not implementation completion.
+- Remaining release gates: live authenticated DB/API tenant-isolation tests; staging migration-ledger drift reconciliation; confirmation of backend-vs-browser database privileges; broader candidate-facing confidentiality review; bulk assignment/stage actions and SLA monitoring; reconcile overlapping draft PR #70; Vercel preview acceptance.
