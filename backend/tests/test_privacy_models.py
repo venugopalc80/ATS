@@ -417,3 +417,66 @@ def test_processing_record_rejects_blank_purpose():
     payload["purpose"] = "   "
     with pytest.raises(ValidationError, match="purpose must not be blank"):
         ProcessingRecordCreate(**payload)
+
+
+
+def test_privacy_request_concurrent_status_change_returns_conflict(monkeypatch):
+    from fastapi import HTTPException
+
+    organization_id = uuid4()
+    request_id = uuid4()
+    user_id = uuid4()
+    state = {"queries": [], "update_attempted": False}
+
+    class FakeCursor:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return False
+
+        def execute(self, query, params=None):
+            state["queries"].append((query, params))
+            if query.lstrip().lower().startswith("update public.privacy_rights_requests"):
+                state["update_attempted"] = True
+
+        def fetchone(self):
+            last_query = state["queries"][-1][0].lstrip().lower()
+            if last_query.startswith("select organization_id, status"):
+                return {
+                    "organization_id": organization_id,
+                    "status": "received",
+                    "identity_verified_at": None,
+                    "identity_verified_by": None,
+                    "identity_verification_method": None,
+                }
+            if last_query.startswith("update public.privacy_rights_requests"):
+                # Simulate another request winning the conditional status update.
+                return None
+            return None
+
+    class FakeConnection:
+        def cursor(self):
+            return FakeCursor()
+
+    class FakeConnectionContext:
+        def __enter__(self):
+            return FakeConnection()
+
+        def __exit__(self, *args):
+            return False
+
+    monkeypatch.setattr(privacy_module, "get_connection", lambda: FakeConnectionContext())
+    monkeypatch.setattr(privacy_module, "assert_org_admin", lambda user, org: None)
+
+    with pytest.raises(HTTPException) as error:
+        asyncio.run(privacy_module.update_rights_request(
+            request_id=request_id,
+            payload=PrivacyRequestUpdate(status="identity_verification"),
+            user_id=user_id,
+        ))
+
+    assert error.value.status_code == 409
+    assert "changed while this update" in error.value.detail
+    assert state["update_attempted"] is True
+    assert not any("privacy.rights_request_status_changed" in query for query, _ in state["queries"])
