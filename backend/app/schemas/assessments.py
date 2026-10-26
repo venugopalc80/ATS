@@ -23,6 +23,13 @@ class AssessmentTemplateCreate(BaseModel):
     accessibility_options: dict[str, Any] = Field(default_factory=dict)
     provider_key: str | None = Field(default=None, min_length=1, max_length=100)
 
+    @field_validator("provider_key")
+    @classmethod
+    def provider_key_must_be_env_safe(cls, value):
+        if value is not None and (not value or any(not (char.isalnum() or char == "_") for char in value)):
+            raise ValueError("Provider key may contain only letters, numbers, and underscores")
+        return value
+
     @model_validator(mode="after")
     def provider_for_external_only(self):
         if self.assessment_type == "external_test" and not self.provider_key:
