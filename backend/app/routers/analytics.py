@@ -739,6 +739,16 @@ async def analytics_export(
     """Export an allowlisted analytics report as CSV; never accepts user-defined SQL or column expressions."""
     assert_org_member(user_id, organization_id)
     _validate_dates(date_from, date_to)
+    if report_type in {"workload", "forecast"} and (
+        date_from is not None or date_to is not None or job_id is not None
+    ):
+        raise HTTPException(
+            status_code=422,
+            detail=(
+                f"{report_type} exports do not support date or job filters yet; "
+                "remove those filters rather than receiving an unfiltered report."
+            ),
+        )
     if report_type == "kpis":
         payload = await analytics_kpis(
             organization_id=organization_id, date_from=date_from, date_to=date_to,
