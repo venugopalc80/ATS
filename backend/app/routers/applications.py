@@ -48,7 +48,7 @@ async def create_application(
 ) -> ApplicationOut:
     assert_org_member(user_id, payload.organization_id)
     try:
-        row = await service.create_application(payload)
+        row = await service.create_application(payload, user_id)
         return ApplicationOut.model_validate(row)
     except ValueError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
