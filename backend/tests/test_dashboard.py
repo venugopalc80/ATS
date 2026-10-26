@@ -144,7 +144,10 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         # Every data query must include the requested organisation scope.
         self.assertTrue(cursor.queries)
         for sql, params in cursor.queries:
-            self.assertIn("organization_id", sql, f"Missing tenant scope in query: {sql}")
+            if "select timezone from public.organizations" in sql:
+                self.assertIn("where id=%s", sql)
+            else:
+                self.assertIn("organization_id", sql, f"Missing tenant scope in query: {sql}")
             self.assertIn(ORG, params, f"Missing requested organisation parameter: {sql}")
 
 
