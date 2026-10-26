@@ -1,4 +1,4 @@
-# Section 9 progress — 2026-10-22
+# Section 9 progress — 2026-10-26
 
 Progress percentages are engineering estimates of completed feature scope, not automated coverage or elapsed time.
 
@@ -15,6 +15,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 ### Idea 46 — Billing
 - Schema for plan catalogue, entitlement definitions, organisation subscriptions, provider webhook ledger, usage periods and subscription lifecycle history.
 - Billing APIs for plan listing, owner/admin subscription read and server-configured Stripe Checkout creation.
+- Checkout retry idempotency: the billing page reuses a per-organisation/plan attempt UUID across reloads and transient failures, and the backend passes a stable derived key to Stripe; cancelled checkout attempts clear stored keys so a new attempt can be created.
 - Stripe webhook signature verification, idempotent event receipts, subscription state writes and append-only lifecycle history.
 - Billing page and unit tests authored for entitlement logic, subscription API states and webhook safeguards.
 - Stripe SDK added to backend requirements.
@@ -46,14 +47,14 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Verified the newly added tables have RLS enabled and policies in place for their intended browser roles.
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - No production database changes, merges or production deployments were performed.
-- GitHub Actions Section 9 billing/unit-test workflow and Dashboard Update 1 Acceptance workflow passed on commit 2985a4c3f9355803aa599383faaa50cf8333ae96: Section 9 backend unit tests, backend acceptance tests, frontend typecheck and production build passed. The subsequent monotonic webhook event-ordering patch requires a fresh run; end-to-end Stripe checkout/webhook tests remain pending.
+- GitHub Actions Section 9 billing/unit-test workflow and Dashboard Update 1 Acceptance workflow both passed on commit e7b6bb20575843a6891a958dc6fff5f023409b84, including Section 9 backend tests, Stripe webhook safeguards, backend acceptance tests, frontend typecheck and production build. Checkout idempotency has since been added with a targeted backend test; fresh CI for those newest commits is pending. End-to-end Stripe checkout/webhook tests remain pending.
 - Vercel preview deployments reported the account's daily deployment limit has been reached; preview deployment validation is blocked until the limit resets or the account limit changes.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
 
 ## Main remaining work
 
 - Seed and approve commercial plan/pricing decisions; configure Stripe test secrets and plan price IDs.
-- Added monotonic Stripe subscription event ordering: stale provider events are recorded but cannot roll back newer subscription state. Checkout idempotency, provider reconciliation and payment-failure/cancellation edge cases remain pending.
+- Added stale Stripe subscription event protection using provider event timestamps; equal-second event ordering and provider reconciliation still need further hardening. Checkout retries now use Stripe idempotency keys. Payment-failure/cancellation edge cases remain pending.
 - Wire entitlement enforcement into real job, candidate, seat and AI operations; add race-safe quota enforcement.
 - Finish subscription and usage UI, settings/help/support UX and role-based access acceptance checks.
 - Add integration tests for tenant isolation, access grant expiry/revocation, webhook idempotency and settings version concurrency.
