@@ -217,3 +217,30 @@ class RequisitionListQueryTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("and status=%s", sql)
         self.assertIn("title ilike %s or requisition_code ilike %s or department ilike %s", sql)
         self.assertEqual(params, [ORG, "draft", "%platform%", "%platform%", "%platform%", 10, 20])
+
+
+class RequisitionDatabaseFailureTests(unittest.IsolatedAsyncioTestCase):
+    async def test_create_returns_503_when_link_validation_database_is_unavailable(self):
+        payload = RequisitionCreate(organization_id=ORG, title="Engineer", justification="Growth")
+        with patch.object(requisitions_router, "assert_org_member"), \
+             patch.object(requisitions_router, "get_org_role", return_value="admin"), \
+             patch.object(requisitions_router, "validate_org_links", side_effect=requisitions_router.DatabaseConfigurationError("missing config")):
+            with self.assertRaises(HTTPException) as raised:
+                await requisitions_router.create_requisition(payload, USER)
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail, "Database operation failed")
+
+    async def test_update_returns_503_when_link_validation_database_is_unavailable(self):
+        rid = UUID("33333333-3333-4333-8333-333333333333")
+        row = {
+            "id": rid, "organization_id": ORG, "status": "draft",
+            "requested_by": USER, "client_id": None,
+            "hiring_manager_id": None, "recruiter_id": None,
+        }
+        with patch.object(requisitions_router, "authorised_row", return_value=row), \
+             patch.object(requisitions_router, "get_org_role", return_value="admin"), \
+             patch.object(requisitions_router, "validate_org_links", side_effect=requisitions_router.DatabaseConnectionError("unavailable")):
+            with self.assertRaises(HTTPException) as raised:
+                await requisitions_router.update_requisition(rid, RequisitionUpdate(title="Updated"), USER)
+        self.assertEqual(raised.exception.status_code, 503)
+        self.assertEqual(raised.exception.detail, "Database operation failed")
