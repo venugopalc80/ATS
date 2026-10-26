@@ -26,8 +26,8 @@ class AssessmentTemplateCreate(BaseModel):
     @field_validator("provider_key")
     @classmethod
     def provider_key_must_be_env_safe(cls, value):
-        if value is not None and (not value or any(not (char.isalnum() or char == "_") for char in value)):
-            raise ValueError("Provider key may contain only letters, numbers, and underscores")
+        if value is not None and (not value or any(not (("A" <= char <= "Z") or ("a" <= char <= "z") or ("0" <= char <= "9") or char == "_") for char in value)):
+            raise ValueError("Provider key may contain only ASCII letters, numbers, and underscores")
         return value
 
     @model_validator(mode="after")
