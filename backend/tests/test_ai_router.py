@@ -326,6 +326,44 @@ class EvaluationCriteriaValidationTests(unittest.TestCase):
                 self.assertEqual(cursor.execute.call_count, 1)
 
 
+class EvaluationDuplicateCaseTests(unittest.TestCase):
+    def test_duplicate_case_keys_are_rejected_before_results_are_written(self):
+        import asyncio
+        from unittest.mock import MagicMock, patch
+        from fastapi import HTTPException
+        from app.routers.ai import EvaluationResultInput, EvaluationResultsInput, complete_evaluation
+
+        organization_id = uuid4()
+        evaluation_id = uuid4()
+        cursor = MagicMock()
+        cursor.fetchone.return_value = {
+            "id": evaluation_id,
+            "status": "running",
+            "pass_criteria": {"minimum_cases": 2, "max_failure_rate": 0.0},
+        }
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__.return_value = cursor
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.cursor.return_value = cursor_cm
+        payload = EvaluationResultsInput(
+            organization_id=organization_id,
+            results=[
+                EvaluationResultInput(test_case_key="case-a", passed=True),
+                EvaluationResultInput(test_case_key="case-a", passed=False),
+            ],
+        )
+
+        with patch("app.routers.ai.assert_org_admin"):
+            with patch("app.routers.ai.get_connection", return_value=connection):
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(complete_evaluation(evaluation_id, payload, user_id=uuid4()))
+
+        self.assertEqual(caught.exception.status_code, 422)
+        self.assertIn("unique test_case_key", caught.exception.detail)
+        self.assertEqual(cursor.execute.call_count, 1)
+
+
 class RetentionCleanupTests(unittest.TestCase):
     def test_cleanup_removes_only_expired_unreviewed_drafts_and_runs(self):
         import asyncio
