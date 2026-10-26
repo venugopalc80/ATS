@@ -133,7 +133,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
                     {"user_id": reactivated_id},
                     {"user_id": already_active_id},
                 ]
-                self.insert_rowcounts = [1, 0]
+                self.reactivated_id = reactivated_id
                 self.rowcount = 1
 
             def fetchone(self):
@@ -147,7 +147,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             def execute(self, query, params=None):
                 super().execute(query, params)
                 if "insert into public.conversation_members" in query:
-                    self.rowcount = self.insert_rowcounts.pop(0)
+                    self.rowcount = 1 if params[1] == self.reactivated_id else 0
 
         cursor = AddMembersCursor()
         connection = FakeConnection(cursor)
