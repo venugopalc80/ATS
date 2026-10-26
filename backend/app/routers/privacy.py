@@ -725,15 +725,21 @@ async def update_rights_request(
                            exception_details = %s, retention_justification = %s,
                            completed_at = %s, identity_verified_at = %s, identity_verified_by = %s,
                            identity_verification_method = %s, updated_by = %s, updated_at = now()
-                       where id = %s
+                       where id = %s and status = %s
                        returning id, organization_id, candidate_id, request_type, status,
                                  affected_systems, exception_details, retention_justification,
                                  received_at, due_at, completed_at, updated_at""",
                     [payload.status, json.dumps(payload.affected_systems), payload.exception_details,
                      payload.retention_justification, completed_at, identity_verified_at,
-                     identity_verified_by, identity_verification_method, user_id, request_id],
+                     identity_verified_by, identity_verification_method, user_id, request_id,
+                     existing["status"]],
                 )
                 row = cursor.fetchone()
+                if row is None:
+                    raise HTTPException(
+                        status_code=409,
+                        detail="Privacy request changed while this update was being processed; refresh and retry",
+                    )
                 cursor.execute(
                     """insert into public.audit_events
                        (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
