@@ -32,7 +32,9 @@ def _same_draft_request(
 ) -> bool:
     """Only treat an idempotency retry as identical when all material fields match."""
     return (
-        message["thread_id"] == thread_id
+        message["visibility"] == "candidate"
+        and message["status"] == "draft"
+        and message["thread_id"] == thread_id
         and message["body_text"] == body_text.strip()
         and message["subject"] == subject
         and message["channel"] == channel
