@@ -4,7 +4,7 @@ from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id
-from app.db import DatabaseConfigurationError, DatabaseConnectionError
+from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.schemas.candidates import CandidateBase, CandidateCreate, CandidateOut, CandidateUpdate
 from app.services.candidate_service import CandidateService
 
