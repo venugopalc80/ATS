@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import patch
 from uuid import uuid4
 
+from fastapi import HTTPException
+
 from app.routers import collaboration
 
 
@@ -98,7 +100,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         connection = FakeConnection(cursor)
 
         with patch.object(collaboration, "get_connection", return_value=connection):
-            with self.assertRaises(Exception) as error:
+            with self.assertRaises(HTTPException) as error:
                 asyncio.run(
                     collaboration.list_messages(
                         conversation_id=conversation_id,
@@ -108,7 +110,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
                     )
                 )
 
-        self.assertEqual(getattr(error.exception, "status_code", None), 404)
+        self.assertEqual(error.exception.status_code, 404)
         self.assertIn("cm.user_id=%s", cursor.query)
         self.assertEqual(cursor.params, [conversation_id, user_id])
 
