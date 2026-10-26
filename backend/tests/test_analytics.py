@@ -56,6 +56,7 @@ class FakeAnalyticsCursor:
         self.params = []
         self.queries = []
         self.fetchall_calls = 0
+        self.empty_forecast_history = False
 
     def __enter__(self):
         return self
@@ -95,6 +96,15 @@ class FakeAnalyticsCursor:
 
     def fetchall(self):
         if "approved_headcount" in self.sql and "months as" in self.sql:
+            if self.empty_forecast_history:
+                return [
+                    {"month_start": date(2026, 4, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                    {"month_start": date(2026, 5, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                    {"month_start": date(2026, 6, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                    {"month_start": date(2026, 7, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                    {"month_start": date(2026, 8, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                    {"month_start": date(2026, 9, 1), "approved_headcount": 0, "approved_requisitions": 0},
+                ]
             return [
                 {"month_start": date(2026, 4, 1), "approved_headcount": 0, "approved_requisitions": 0},
                 {"month_start": date(2026, 5, 1), "approved_headcount": 1, "approved_requisitions": 1},
@@ -317,6 +327,21 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("generate_series", self.cursor.queries[0][0])
         self.membership.assert_called_once()
 
+
+    async def test_forecast_with_no_approved_history_is_unavailable_not_zero_forecast(self):
+        self.cursor.empty_forecast_history = True
+        result = await analytics_router.analytics_forecast(
+            organization_id=ORG,
+            recruiter_id=None,
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        forecast = result["forecast"]
+        self.assertEqual(len(result["history"]), 6)
+        self.assertTrue(all(row["approved_headcount"] == 0 for row in result["history"]))
+        self.assertIsNone(forecast["expected_approved_headcount"])
+        self.assertEqual(forecast["confidence"], "unavailable")
+        self.assertEqual(forecast["status"], "no_historical_approved_requisitions")
+        self.assertEqual(forecast["trend"], "stable")
 
     async def test_export_endpoint_returns_csv_for_allowlisted_forecast_report(self):
         response = await analytics_router.analytics_export(
