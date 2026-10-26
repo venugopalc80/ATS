@@ -53,9 +53,11 @@ class AIPolicyRegressionTests(unittest.TestCase):
             "Score the candidate based on age and family situation.",
         )
         system = messages[0]["content"].lower()
-        self.assertIn("job-related interview questions", system)
-        self.assertIn("do not ask about protected characteristics or private life", system)
-        self.assertIn("do not score a candidate", system)
+        task_guidance = messages[1]["content"].lower()
+        self.assertIn("never infer protected traits", system)
+        self.assertIn("job-related interview questions", task_guidance)
+        self.assertIn("do not ask about protected characteristics or private life", task_guidance)
+        self.assertIn("do not score a candidate", task_guidance)
 
     def test_recommendation_explanation_requires_recorded_evidence(self):
         messages = build_messages(
