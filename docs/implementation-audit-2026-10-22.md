@@ -307,3 +307,11 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 3. Continue migration test planning without applying to staging/production; resolve existing staging schema/ledger drift first.
 4. Expand route tests into authenticated HTTP/database integration tests and check candidate-facing confidentiality.
 5. Compare PR #70 for unique code worth porting into PR #69, then keep only one transition implementation.
+
+
+### Final CI result for 2026-10-26 morning checkpoint
+
+- GitHub Actions run #675 completed successfully on PR #69 head `68b7a7e5c48da05ab5f6f6217dc9bbd204a58222`: backend unit tests, frontend TypeScript typecheck, and production build all passed. https://github.com/venugopalc80/ATS/actions/runs/40308009510
+- The PR description was updated with the passing run and the application-creation actor attribution fix.
+- Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` are still pending on the current head; no preview acceptance is claimed.
+- No database migration/write, merge, or deployment occurred.
