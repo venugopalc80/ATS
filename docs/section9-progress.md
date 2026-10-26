@@ -4,8 +4,8 @@ Progress percentages are engineering estimates of completed feature scope, not a
 
 ## Current estimate
 
-- **Section 9 overall:** approximately **46% complete / 54% pending**.
-- **Idea 46 — Subscription Plans, Billing & Entitlements:** approximately **50% complete / 50% pending**.
+- **Section 9 overall:** approximately **47% complete / 53% pending**.
+- **Idea 46 — Subscription Plans, Billing & Entitlements:** approximately **53% complete / 47% pending**.
 - **Idea 47 — Organisation Settings & Customisation:** approximately **60% complete / 40% pending**.
 - **Idea 48 — Help Centre, Onboarding & Product Guidance:** approximately **60% complete / 40% pending**.
 - **Idea 49 — Platform Administration, Support & Product Health:** approximately **45% complete / 55% pending**.
@@ -43,11 +43,11 @@ Progress percentages are engineering estimates of completed feature scope, not a
 
 ## Staging validation
 
-- Applied billing, subscription history, organisation settings, help/onboarding, platform support and support-grant-scope migrations to ATS-Staging (project ref riauyrhfnlsxmtgipuxi) only.
+- Applied billing, subscription history, organisation settings, help/onboarding, platform support, support-grant-scope and Stripe event-ordering migrations to ATS-Staging (project ref riauyrhfnlsxmtgipuxi) only. Verified `organization_subscriptions.provider_event_created_at` exists as a nullable `bigint` and confirmed the migration is recorded.
 - Verified the newly added tables have RLS enabled and policies in place for their intended browser roles.
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - No production database changes, merges or production deployments were performed.
-- GitHub Actions Section 9 billing/unit-test workflow and Dashboard Update 1 Acceptance workflow both passed on commit e7b6bb20575843a6891a958dc6fff5f023409b84, including Section 9 backend tests, Stripe webhook safeguards, backend acceptance tests, frontend typecheck and production build. Checkout idempotency has since been added with a targeted backend test; fresh CI for those newest commits is pending. End-to-end Stripe checkout/webhook tests remain pending.
+- GitHub Actions Section 9 billing/unit-test workflow and Dashboard Update 1 Acceptance workflow both passed on commit 105b7d630cd7187784aacd6feee48d78e95b3fa6, including Section 9 backend tests, the checkout idempotency test, Stripe webhook safeguards, backend acceptance tests, frontend typecheck and production build. End-to-end Stripe checkout/webhook tests remain pending.
 - Vercel preview deployments reported the account's daily deployment limit has been reached; preview deployment validation is blocked until the limit resets or the account limit changes.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
 
