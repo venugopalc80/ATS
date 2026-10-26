@@ -14,6 +14,7 @@ router = APIRouter(prefix="/api/billing", tags=["billing"])
 class CheckoutRequest(BaseModel):
     organization_id: UUID
     plan_id: UUID
+    idempotency_key: UUID
 
 
 @router.get("/plans")
@@ -137,8 +138,15 @@ async def create_checkout_session(
             "organization_id": str(payload.organization_id),
             "plan_id": str(payload.plan_id),
         }
+        # Stripe deduplicates retried requests using this stable attempt key. The
+        # browser reuses it after network failures/reloads; a cancelled attempt
+        # gets a fresh key before the user retries.
+        stripe_idempotency_key = (
+            f"aqerith-checkout-{payload.organization_id}-{payload.plan_id}-{payload.idempotency_key}"
+        )
         session = stripe.checkout.Session.create(
             api_key=secret_key,
+            idempotency_key=stripe_idempotency_key,
             mode="subscription",
             line_items=[{"price": price_id, "quantity": 1}],
             success_url=f"{frontend_url}/billing?checkout=success",
