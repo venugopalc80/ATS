@@ -344,6 +344,6 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 ### Current-head CI and Vercel check (2026-10-26, 11:11 UTC)
 
 - Current PR #69 head `cacf02c8a75a52a9629cef6d75d2c277fee27894`; GitHub Actions run #692 is in progress.
-- Backend unit tests passed and frontend TypeScript typecheck passed; frontend production build was still running at the latest poll. Run: https://github.com/venugopalc80/ATS/actions/runs/40312978591.
+- GitHub Actions run #692 subsequently completed successfully: backend unit tests, frontend TypeScript typecheck, and frontend production build all passed. Run: https://github.com/venugopalc80/ATS/actions/runs/40312978591.
 - Current-head Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` are failing with the team's build-rate-limit status. This is not evidence of an application build failure, but it prevents preview acceptance.
 - No database writes, migrations, merges, or production deployments occurred.
