@@ -73,7 +73,7 @@ Duration KPIs are grouped by completion event date unless a report explicitly se
 - Start with a transparent baseline before introducing a learned model.
 - Forecast vacancy demand, application/interview workload and expected hiring timelines separately; state which records support each forecast.
 - Compare forecast with actuals for the same target period and cohort. Report error only when actuals are available and sample size is meaningful.
-- Warn when history is sparse, data quality fails validation, the input period is too short or patterns drift. Forecasts are estimates, not guaranteed outcomes.
+- Warn when history is sparse, data quality fails validation, the input period is too short or patterns drift. If all six months have zero approved requisition activity, return an unavailable forecast and an `insufficient_history` trend rather than presenting a flat zero-demand trend. Forecasts are estimates, not guaranteed outcomes.
 - Adjusted assumptions create a new versioned run; they do not overwrite historical results.
 
 ## Idea 33 — Custom Reports & Scheduled Exports
