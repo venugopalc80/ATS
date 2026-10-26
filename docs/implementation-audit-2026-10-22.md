@@ -370,3 +370,10 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - Corrected the expected actor type to `UUID` in commit `46dd9286fb3f698eadf1e31283b9d1ca5c79695c`.
 - Current run #721 is queued for that corrected head. Do not call the migration smoke test green until the rerun completes successfully.
 - Vercel checks still fail because of the team build-rate limit. No staging/production database changes occurred.
+
+
+### Partial-state migration test added (2026-10-26)
+
+- Extended the disposable PostgreSQL smoke test to remove the stage-history update trigger and one seeded stage row after initial migration, then rerun migrations and verify both are restored.
+- This covers partial-state repair in addition to rerun/idempotency. Current code commit: `3cca5999ba26a246d274f782f8f98f6ec05ace17`.
+- The UUID assertion correction is included. Run #721 is still executing on an earlier head; current-head CI is pending.
