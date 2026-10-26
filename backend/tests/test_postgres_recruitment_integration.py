@@ -5,6 +5,7 @@ They deliberately refuse to run against hosted databases or any other database n
 """
 import os
 import unittest
+from decimal import Decimal
 from urllib.parse import urlparse
 from uuid import uuid4
 
@@ -285,6 +286,12 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
 
 class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTestCase):
     """Exercise the requisition lifecycle against the disposable PostgreSQL service."""
+
+    @classmethod
+    def setUpClass(cls):
+        # Reuse the guarded disposable-database schema bootstrap so this class
+        # also works when selected on its own by unittest.
+        PostgreSQLRecruitmentWorkflowIntegrationTests.setUpClass()
 
     def setUp(self):
         self.organization_id = uuid4()
