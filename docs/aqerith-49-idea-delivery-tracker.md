@@ -138,3 +138,11 @@ ATS-Staging project `riauyrhfnlsxmtgipuxi` was inspected read-only. No SQL write
 - The candidate deletion guard's table reference is valid in staging, but this does not replace authenticated application-level acceptance tests or verify the full deployed application.
 
 **Next action:** compare the staging ledger and checked-in migration history, establish the intended canonical candidate-document schema, then prepare a reviewed forward migration only if required. Never rewrite an already-applied migration in place.
+
+### Read-only production comparison — 2026-10-26
+
+The ATS production database was queried read-only; no writes were executed.
+
+- Production `public.candidate_documents.candidate_id` also uses `ON DELETE CASCADE`; the live `document_type` and SHA-256 constraints match those observed in ATS-Staging.
+- Production's migration ledger differs materially from staging's ledger: production records `candidate_documents_bulk_cv_import`, while staging records `013_candidate_documents` and the reconstructed feature migration sequence.
+- Treat this as a migration-history/schema-provenance concern. Do not apply a migration or alter production as part of this audit. First establish the authoritative migration history and intended schema, then test any proposed forward migration in a safe environment.
