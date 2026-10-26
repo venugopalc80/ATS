@@ -39,18 +39,19 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Support access is bound to a specific case, requires organisation admin approval, expires within a maximum of 60 minutes, can be revoked, and is audit-logged.
 - Platform support queue and health endpoint avoid exposing candidate records by default.
 - The unapproved support queue omits customer-written case subjects; regression coverage verifies subject data is absent before access approval.
+- Basic case metadata and customer-written case content use separate scopes. The case-detail endpoint requires explicit `case_content` approval; `case_metadata` alone cannot reveal subject/description. The scope allowlist was expanded on staging and verified in PostgreSQL.
 - Customer support and restricted platform operations UIs.
-- Regression coverage verifies platform operators cannot read case details without an active organisation-approved access grant.
+- Regression coverage verifies platform operators cannot read case details without an active organisation-approved access grant, expired requests cannot be approved, and message reads are blocked when no active, unrevoked, unexpired grant matches.
 - Platform operators can open a case only with an active organisation-approved grant, view the approved conversation, send customer-visible replies, or add internal notes.
 - Validation tests authored for support request payloads.
 
 ## Staging validation
 
-- Applied billing, subscription history, organisation settings, help/onboarding, platform support, support-grant-scope and Stripe event-ordering migrations to ATS-Staging (project ref riauyrhfnlsxmtgipuxi) only. Verified `organization_subscriptions.provider_event_created_at` exists as a nullable `bigint` and confirmed the migration is recorded.
+- Applied billing, subscription history, organisation settings, help/onboarding, platform support, support-grant-scope, Stripe event-ordering and support-content-scope migrations to ATS-Staging (project ref riauyrhfnlsxmtgipuxi) only. Verified `organization_subscriptions.provider_event_created_at` exists as a nullable `bigint`, confirmed the support grant scope constraint explicitly permits `case_content`, and checked there are no active metadata-only grants that would lose access after this tightening.
 - Verified the newly added tables have RLS enabled and policies in place for their intended browser roles.
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - No production database changes, merges or production deployments were performed.
-- GitHub Actions Section 9 billing/unit-test workflow (run 49) and Dashboard Update 1 Acceptance workflow (run 715) passed on commit 591b4086c25ff475a57b79775401647ff607b924. This includes backend tests, Stripe webhook safeguards, support queue privacy/access-grant regression tests, frontend typecheck and production build. End-to-end Stripe checkout/webhook tests remain pending.
+- GitHub Actions Section 9 billing/unit-test workflow (run 55) and Dashboard Update 1 Acceptance workflow (run 746) passed on commit c2524abcd47e709a6e74d12e817dc0d799c18686. This includes backend tests, Stripe webhook safeguards, support queue privacy and access-grant regression tests, frontend typecheck and production build. End-to-end Stripe checkout/webhook tests remain pending.
 - Vercel preview deployments reported the account's daily deployment limit has been reached; preview deployment validation is blocked until the limit resets or the account limit changes.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
 
@@ -60,8 +61,8 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Added stale Stripe subscription event protection using provider event timestamps and tenant-binding validation before stale-event handling; equal-second event ordering and provider reconciliation still need further hardening. Checkout retries now use Stripe idempotency keys. Payment-failure/cancellation edge cases remain pending.
 - Wire entitlement enforcement into real job, candidate, seat and AI operations; add race-safe quota enforcement.
 - Finish subscription and usage UI, settings/help/support UX and role-based access acceptance checks.
-- Add integration tests for access-grant expiry/revocation, webhook duplicate delivery and settings version concurrency. Basic regression coverage now verifies cross-tenant stale webhook rejection and denial of case details without an active approved grant.
-- Re-run backend tests, frontend typecheck/build after the latest UI changes, and staging smoke tests. The Section 9 workflow now includes frontend typecheck/build steps and triggers on platform operations UI changes. Keep PR in draft until checks pass.
+- Add deeper integration tests for access-grant expiry/revocation, webhook duplicate delivery and settings version concurrency. Basic regression coverage now verifies cross-tenant stale webhook rejection, expiry-aware approval, scope separation, and denial of case details/messages without a matching active approved grant.
+- Re-run backend tests, frontend typecheck/build after the latest code changes, and staging smoke tests. The Section 9 workflow includes frontend typecheck/build steps and the acceptance workflow has passed; the latest migration filename was aligned to the staging migration version. Keep PR in draft until full release checks pass.
 - Provision platform operators through a separate privileged process; customer organisation roles must never grant platform access.
 
 ## Safety
