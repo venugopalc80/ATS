@@ -804,15 +804,22 @@ async def analytics_export(
         )
         waiting = {row["stage"]: row for row in payload["stage_waiting_time"]}
         conversion = {row["stage"]: row for row in payload["stage_conversions"]}
+        presence = {row["stage"]: row for row in payload["current_stage_presence"]}
         stages = {row["stage"]: row for row in payload["stages"]}
         rows = []
-        for stage in sorted(set(stages) | set(waiting) | set(conversion)):
+        for stage in sorted(set(stages) | set(waiting) | set(conversion) | set(presence)):
             rows.append({
+                "record_type": "stage",
                 "stage": stage,
                 **stages.get(stage, {}),
                 **waiting.get(stage, {}),
                 **conversion.get(stage, {}),
+                **presence.get(stage, {}),
             })
+        rows.extend(
+            {"record_type": "outcome", "status": status, "distinct_applications": count}
+            for status, count in payload["outcomes"].items()
+        )
     elif report_type == "workload":
         payload = await analytics_workload(
             organization_id=organization_id, recruiter_id=recruiter_id, user_id=user_id,
