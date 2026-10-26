@@ -68,6 +68,7 @@ class CollaborationAuthorizationTests(unittest.TestCase):
 
         self.assertTrue(added)
         self.assertIn("joined_at=now()", cursor.query)
+        self.assertIn("member_role='member'", cursor.query)
 
     def test_inactive_or_non_org_member_is_hidden(self):
         cursor = FakeCursor(one=None)
