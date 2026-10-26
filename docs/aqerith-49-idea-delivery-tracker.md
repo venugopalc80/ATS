@@ -105,3 +105,23 @@ A project Library source titled **Pasted markdown.md** contains detailed feature
 - **Roadmap title coverage:** 5 of 49 titles have now been confirmed against the source segment (10.2%). This is title coverage only, not implementation completion.
 - **Verified product delivery:** Not yet calculable; the canonical 49-row acceptance register and production deployment evidence are incomplete.
 - **Pending:** Retrieve the remaining source sections; map each idea to main/PRs/migrations/tests; verify current deployed commit; then calculate verified delivery and evidence coverage.
+
+## Evidence refresh — 2026-10-26
+
+This is a dated evidence snapshot, not a product-completion percentage. CI evidence below is tied to the exact recorded head commit.
+
+| Workstream | PR / commit checked | Automated evidence | Remaining acceptance |
+|---|---|---|---|
+| Candidate deletion guard | [PR #83](https://github.com/venugopalc80/ATS/pull/83), `9105c039e130f0adfe4d7bb16b5157e5e536205d` | [Run 40145143247](https://github.com/venugopalc80/ATS/actions/runs/40145143247) passed backend unit tests, frontend typecheck and production build | Staging schema parity; authenticated linked-record deletion tests; review archive/restore and role controls |
+| Section 6 analytics | [PR #80](https://github.com/venugopalc80/ATS/pull/80), `4b381fc3c785c7b18463d066f892ae53c9ab3109` | [Run 40312149553](https://github.com/venugopalc80/ATS/actions/runs/40312149553) passed backend unit tests, frontend typecheck and production build | Metric/tenant/export acceptance against current staging; browser acceptance and deployed preview verification |
+| Section 9 commercial operations | [PR #81](https://github.com/venugopalc80/ATS/pull/81), `13b1ba417c67820e9b127e31db6af48aa912b0ed` | [Run 40312283758](https://github.com/venugopalc80/ATS/actions/runs/40312283758) passed billing-focused unit checks, frontend typecheck and production build; [run 40312283887](https://github.com/venugopalc80/ATS/actions/runs/40312283887) also passed generic backend/frontend checks | Entitlement enforcement across actual recruitment operations; Stripe test checkout/webhooks end to end; tenant isolation and support-grant expiry/revocation |
+
+### Newly identified migration risk
+
+On the checked-in `main` branch, both `supabase/migrations/013_candidate_documents.sql` and `supabase/migrations/20261012090000_candidate_documents.sql` use `CREATE TABLE IF NOT EXISTS public.candidate_documents`, but define different constraints/indexes. With `IF NOT EXISTS`, the later file does not reconcile an already-created table. The effective staging schema and migration ledger therefore need inspection before treating document retention/deletion safeguards as accepted. Do not rewrite an applied migration in place; use a reviewed forward migration if the actual schema needs correction.
+
+### Status rules reaffirmed
+
+- These CI runs are code-level evidence only; they do not establish staging acceptance or a production release.
+- PRs #80, #81 and #83 remain drafts; no production change is implied by this snapshot.
+- Overall verified delivery and evidence coverage percentages remain **not yet verified** until the canonical 49-idea register and release evidence are reconciled.
