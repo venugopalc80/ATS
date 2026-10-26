@@ -23,6 +23,8 @@ ACTOR_UUID = UUID(ACTOR)
 ORG = "11111111-1111-4111-8111-111111111111"
 JOB = "33333333-3333-4333-8333-333333333333"
 CANDIDATE = "66666666-6666-4666-8666-666666666666"
+JOB2 = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+CANDIDATE2 = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
 APPLICATION = "77777777-7777-4777-8777-777777777777"
 NEW_ORG = "88888888-8888-4888-8888-888888888888"
 
@@ -116,7 +118,8 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                   status text not null default 'new'
                     check (status in ('new','screening','submitted','interview','offer','hired','rejected','withdrawn')),
                   created_at timestamptz not null default now(),
-                  updated_at timestamptz not null default now()
+                  updated_at timestamptz not null default now(),
+                  unique(job_id, candidate_id)
                 )
             """)
             cursor.execute(
@@ -139,6 +142,13 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
             cursor.execute(
                 "insert into public.candidates(id,organization_id) values (%s,%s)",
                 (CANDIDATE, ORG),
+            )
+            cursor.execute(
+                "insert into public.jobs(id,organization_id) values (%s,%s)", (JOB2, ORG)
+            )
+            cursor.execute(
+                "insert into public.candidates(id,organization_id) values (%s,%s)",
+                (CANDIDATE2, ORG),
             )
             # Simulate an application that predates migration 014, for baseline backfill.
             cursor.execute(
@@ -201,7 +211,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
             cursor.execute(
                 "insert into public.applications(id,organization_id,job_id,candidate_id,status) "
                 "values (%s,%s,%s,%s,'new')",
-                ("99999999-9999-4999-8999-999999999999", ORG, JOB, CANDIDATE),
+                ("99999999-9999-4999-8999-999999999999", ORG, JOB2, CANDIDATE2),
             )
             cursor.execute(
                 "select new_stage,actor_user_id,reason from public.application_stage_history "
