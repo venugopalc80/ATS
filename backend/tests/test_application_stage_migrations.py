@@ -8,6 +8,7 @@ from __future__ import annotations
 import os
 import unittest
 from pathlib import Path
+from uuid import UUID
 
 import psycopg
 
@@ -18,6 +19,7 @@ MIGRATIONS = [
     ROOT / "supabase" / "migrations" / "20261026120100_application_stage_config.sql",
 ]
 ACTOR = "22222222-2222-4222-8222-222222222222"
+ACTOR_UUID = UUID(ACTOR)
 ORG = "11111111-1111-4111-8111-111111111111"
 JOB = "33333333-3333-4333-8333-333333333333"
 CANDIDATE = "66666666-6666-4666-8666-666666666666"
@@ -198,7 +200,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 "where application_id=%s",
                 ("99999999-9999-4999-8999-999999999999",),
             )
-            self.assertEqual(cursor.fetchone(), ("new", ACTOR, "application_created"))
+            self.assertEqual(cursor.fetchone(), ("new", ACTOR_UUID, "application_created"))
 
             # A transition records both actor and reason.
             cursor.execute("select set_config('app.transition_reason', %s, true)", ("CV reviewed",))
@@ -211,7 +213,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 "where application_id=%s order by created_at desc limit 1",
                 ("99999999-9999-4999-8999-999999999999",),
             )
-            self.assertEqual(cursor.fetchone(), ("new", "screening", ACTOR, "CV reviewed"))
+            self.assertEqual(cursor.fetchone(), ("new", "screening", ACTOR_UUID, "CV reviewed"))
 
             # Browser roles have no direct table privileges; RLS is enabled as defence in depth.
             for table in ("application_stage_history", "application_stage_config"):
