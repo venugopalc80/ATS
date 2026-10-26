@@ -68,6 +68,11 @@ export default function BillingPage() {
     if (params.get("checkout") === "success") {
       setMessage("Checkout returned successfully. Your subscription status will update after Stripe confirms it.");
     } else if (params.get("checkout") === "cancelled") {
+      // A cancelled Checkout Session cannot be resumed; allow a fresh attempt.
+      for (let index = sessionStorage.length - 1; index >= 0; index -= 1) {
+        const key = sessionStorage.key(index);
+        if (key?.startsWith("aqerith:checkout:")) sessionStorage.removeItem(key);
+      }
       setMessage("Checkout was cancelled. No subscription change was confirmed.");
     }
   }, [load]);
@@ -76,10 +81,18 @@ export default function BillingPage() {
     setBusyPlan(planId);
     setMessage("");
     try {
+      // Keep one idempotency key per organisation/plan attempt so retries after
+      // a timeout or reload reuse the same Stripe Checkout Session.
+      const storageKey = `aqerith:checkout:${organizationId}:${planId}`;
+      let idempotencyKey = sessionStorage.getItem(storageKey);
+      if (!idempotencyKey) {
+        idempotencyKey = crypto.randomUUID();
+        sessionStorage.setItem(storageKey, idempotencyKey);
+      }
       const response = await apiFetch(API_BASE + "/api/billing/checkout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ organization_id: organizationId, plan_id: planId }),
+        body: JSON.stringify({ organization_id: organizationId, plan_id: planId, idempotency_key: idempotencyKey }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(body.detail || "Unable to start checkout.");
