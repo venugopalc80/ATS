@@ -29,6 +29,24 @@ class AssessmentSchemaTests(unittest.TestCase):
                 provider_key="vendor-x",
             )
 
+    def test_provider_key_rejects_unicode_letters_and_punctuation(self):
+        for provider_key in ("vendør", "vendor-x", "vendor.x", "vendor x"):
+            with self.subTest(provider_key=provider_key):
+                with self.assertRaises(ValidationError):
+                    AssessmentTemplateCreate(
+                        organization_id=uuid4(), name="External test", assessment_type="external_test",
+                        instructions="Complete the role-related exercise", role_requirements=["Python"],
+                        provider_key=provider_key,
+                    )
+
+    def test_provider_key_accepts_ascii_env_safe_name(self):
+        template = AssessmentTemplateCreate(
+            organization_id=uuid4(), name="External test", assessment_type="external_test",
+            instructions="Complete the role-related exercise", role_requirements=["Python"],
+            provider_key="vendor_2",
+        )
+        self.assertEqual(template.provider_key, "vendor_2")
+
     def test_template_requires_role_relevant_requirements_before_publish_flow(self):
         template = AssessmentTemplateCreate(
             organization_id=uuid4(), name="API exercise", assessment_type="technical_exercise",
