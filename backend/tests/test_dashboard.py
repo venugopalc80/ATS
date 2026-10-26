@@ -14,6 +14,8 @@ USER = UUID("22222222-2222-4222-8222-222222222222")
 JOB = UUID("33333333-3333-4333-8333-333333333333")
 INTERVIEW = UUID("44444444-4444-4444-8444-444444444444")
 OFFER = UUID("55555555-5555-4555-8555-555555555555")
+TASK = UUID("66666666-6666-4666-8666-666666666666")
+CANDIDATE = UUID("77777777-7777-4777-8777-777777777777")
 
 
 class FakeCursor:
@@ -73,6 +75,12 @@ class FakeCursor:
                 "scheduled_at": datetime(2026, 10, 13, 10, tzinfo=timezone.utc),
                 "status": "scheduled",
             }]
+        if "from public.recruiter_tasks" in self.sql:
+            return [{
+                "id": TASK, "title": "Call candidate", "task_type": "candidate_follow_up",
+                "priority": "high", "due_at": datetime(2026, 10, 13, 10, tzinfo=timezone.utc),
+                "candidate_id": CANDIDATE, "job_id": None,
+            }]
         if "from public.offers o" in self.sql:
             return [{
                 "id": OFFER, "application_id": "app-2", "title": "Offer for Analyst",
@@ -129,6 +137,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews?interview_id={INTERVIEW}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers?offer_id={OFFER}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "vacancy_health" and item["href"] == f"/jobs?job_id={JOB}" for item in result["priorities"]))
+        self.assertTrue(any(item["type"] == "candidate_follow_up" and item["href"] == f"/candidates/{CANDIDATE}" and item["title"].startswith("Overdue:") for item in result["priorities"]))
         self.assertEqual(result["activity"][0]["actor_name"], "Recruiter")
         # Every data query must include the requested organisation scope.
         self.assertTrue(cursor.queries)

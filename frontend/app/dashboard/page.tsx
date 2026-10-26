@@ -33,6 +33,19 @@ type Priority = {
   href: string;
   due_at: string | null;
 };
+type CandidateOption = { id: string; first_name: string; last_name?: string | null; email?: string | null };
+type RecruiterTask = {
+  id: string;
+  title: string;
+  description: string | null;
+  task_type: "task" | "candidate_follow_up";
+  status: "open" | "completed" | "cancelled";
+  priority: "low" | "normal" | "high" | "urgent";
+  due_at: string | null;
+  candidate_id: string | null;
+  job_id: string | null;
+};
+
 type Activity = {
   id: string;
   action: string;
@@ -94,6 +107,105 @@ export default function Dashboard() {
   const [search, setSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
+  const [tasks, setTasks] = useState<RecruiterTask[]>([]);
+  const [taskCandidates, setTaskCandidates] = useState<CandidateOption[]>([]);
+  const [tasksLoading, setTasksLoading] = useState(true);
+  const [tasksError, setTasksError] = useState("");
+  const [taskTitle, setTaskTitle] = useState("");
+  const [taskDueAt, setTaskDueAt] = useState("");
+  const [taskType, setTaskType] = useState<"task" | "candidate_follow_up">("task");
+  const [taskCandidateId, setTaskCandidateId] = useState("");
+  const [taskPriority, setTaskPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
+  const [taskSaving, setTaskSaving] = useState(false);
+  const [taskMessage, setTaskMessage] = useState("");
+
+  const loadTasks = useCallback(async () => {
+    const org = getActiveOrganizationId();
+    if (!API_BASE || !org) {
+      setTasksError("Select an organisation to load tasks.");
+      setTasksLoading(false);
+      return;
+    }
+    setTasksLoading(true);
+    setTasksError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/tasks?organization_id=" + encodeURIComponent(org) + "&status=open&limit=50");
+      if (!response.ok) throw new Error(response.status === 403 ? "You don't have access to tasks in this organisation." : "Tasks are temporarily unavailable (HTTP " + response.status + ").");
+      setTasks(await response.json());
+      try {
+        const candidatesResponse = await apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(org));
+        if (candidatesResponse.ok) setTaskCandidates(await candidatesResponse.json());
+      } catch {
+        // Candidate selection is optional for ordinary tasks; don't hide task results.
+      }
+    } catch (cause) {
+      setTasksError(cause instanceof Error ? cause.message : "Unable to load tasks.");
+    } finally {
+      setTasksLoading(false);
+    }
+  }, []);
+
+  async function createTask(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const org = getActiveOrganizationId();
+    if (!org || !API_BASE) {
+      setTasksError("Select an organisation before creating a task.");
+      return;
+    }
+    if (taskType === "candidate_follow_up" && !taskCandidateId.trim()) {
+      setTasksError("Choose a candidate for this follow-up.");
+      return;
+    }
+    setTaskSaving(true);
+    setTasksError("");
+    setTaskMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/tasks", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          organization_id: org,
+          title: taskTitle,
+          task_type: taskType,
+          priority: taskPriority,
+          due_at: taskDueAt ? new Date(taskDueAt).toISOString() : null,
+          candidate_id: taskType === "candidate_follow_up" ? taskCandidateId.trim() : null,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail || "Task could not be created (HTTP " + response.status + ").");
+      }
+      setTaskTitle("");
+      setTaskDueAt("");
+      setTaskCandidateId("");
+      setTaskType("task");
+      setTaskPriority("normal");
+      setTaskMessage("Task created.");
+      await loadTasks();
+      await loadDashboard();
+    } catch (cause) {
+      setTasksError(cause instanceof Error ? cause.message : "Unable to create task.");
+    } finally {
+      setTaskSaving(false);
+    }
+  }
+
+  async function completeTask(task: RecruiterTask) {
+    setTasksError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/tasks/" + task.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: "completed" }),
+      });
+      if (!response.ok) throw new Error("Task could not be completed (HTTP " + response.status + ").");
+      setTasks((current) => current.filter((item) => item.id !== task.id));
+      await loadDashboard();
+    } catch (cause) {
+      setTasksError(cause instanceof Error ? cause.message : "Unable to complete task.");
+    }
+  }
 
   const loadDashboard = useCallback(async () => {
     const org = getActiveOrganizationId();
@@ -126,6 +238,7 @@ export default function Dashboard() {
   }, [dateFrom, dateTo]);
 
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
+  useEffect(() => { void loadTasks(); }, [loadTasks]);
 
   const totalPipeline = useMemo(
     () => Object.values(data?.pipeline ?? {}).reduce((total, count) => total + count, 0),
@@ -287,6 +400,33 @@ export default function Dashboard() {
                 ))}
               </div>
             </>}
+          </section>
+
+          <section className="card dashboard-tasks-section" id="tasks">
+            <div className="card-head">
+              <div><span className="card-title">Tasks &amp; candidate follow-ups</span><p className="muted-small">Organisation-scoped reminders. Overdue items appear first in today's priorities.</p></div>
+              <span className="badge blue">{tasksLoading ? "Loading…" : tasks.length + " open"}</span>
+            </div>
+            {tasksError && <div className="dashboard-error" role="alert"><p>{tasksError}</p><button className="btn" type="button" onClick={() => void loadTasks()}>Retry</button></div>}
+            {taskMessage && <p role="status" className="muted-small">{taskMessage}</p>}
+            <form className="dashboard-task-form" onSubmit={createTask}>
+              <label>Task title<input value={taskTitle} onChange={(event) => setTaskTitle(event.target.value)} required maxLength={240} placeholder="e.g. Follow up after screening" /></label>
+              <label>Type<select value={taskType} onChange={(event) => setTaskType(event.target.value as "task" | "candidate_follow_up")}><option value="task">Recruiter task</option><option value="candidate_follow_up">Candidate follow-up</option></select></label>
+              {taskType === "candidate_follow_up" && <label>Candidate<select value={taskCandidateId} onChange={(event) => setTaskCandidateId(event.target.value)} required><option value="">Choose a candidate</option>{taskCandidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{[candidate.first_name, candidate.last_name].filter(Boolean).join(" ")}{candidate.email ? " · " + candidate.email : ""}</option>)}</select></label>}
+              <label>Due date<input type="datetime-local" value={taskDueAt} onChange={(event) => setTaskDueAt(event.target.value)} /></label>
+              <label>Priority<select value={taskPriority} onChange={(event) => setTaskPriority(event.target.value as "low" | "normal" | "high" | "urgent")}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+              <button className="btn primary" type="submit" disabled={taskSaving || !taskTitle.trim()}>{taskSaving ? "Saving…" : "Add task"}</button>
+            </form>
+            {tasksLoading ? <div className="dashboard-loading-lines"><span /><span /></div> : tasksError ? <div className="dashboard-empty"><strong>Tasks unavailable</strong><p>We could not verify open tasks. Retry before assuming there is nothing to do.</p><button className="btn" type="button" onClick={() => void loadTasks()}>Retry tasks</button></div> : tasks.length === 0 ? <div className="dashboard-empty"><strong>No open tasks</strong><p>Add a recruiter task or candidate follow-up to track the next action.</p></div> : (
+              <div className="dashboard-task-list">
+                {tasks.map((task) => <div key={task.id} className="dashboard-task-row">
+                  <div className="dashboard-task-copy"><strong>{task.title}</strong><span>{task.task_type === "candidate_follow_up" ? "Candidate follow-up" : "Recruiter task"} · {task.priority} priority · {formatDate(task.due_at)}</span></div>
+                  {task.candidate_id && <Link className="link" href={"/candidates/" + task.candidate_id}>Candidate</Link>}
+                  {task.job_id && <Link className="link" href={"/jobs?job_id=" + task.job_id}>Vacancy</Link>}
+                  <button className="btn" type="button" onClick={() => void completeTask(task)}>Complete</button>
+                </div>)}
+              </div>
+            )}
           </section>
 
           <div className="dashboard-section-grid dashboard-lower-grid">
