@@ -96,9 +96,9 @@ Do not send real candidate data to an external provider before these gates have 
 ## Retention hardening (2026-10-26)
 
 - Added `retention_expires_at` columns and partial indexes for AI-generated job-description versions and interview kits on the feature branch.
-- Updated generation to set draft expiry from the organisation's approved use-case retention period.
+- Updated generation to set draft expiry from the organisation's approved use-case retention period, and added a backfill migration for older records (use the originating run's expiry where available, otherwise use the use-case retention or a 90-day fallback).
 - Expanded administrator-triggered cleanup to remove only expired `draft`/`in_review` job-description versions and interview kits, plus expired AI-run records. Reviewed/approved/published artifacts are not automatically deleted.
 - Added a regression test for tenant-scoped cleanup filters, draft-status restrictions and aggregate audit metadata.
-- Applied the additive retention migration to ATS-Staging (`riauyrhfnlsxmtgipuxi`) and verified both columns and both partial indexes through read-only catalog queries. No production database changes were made.
+- Applied the additive retention and backfill migrations to ATS-Staging (`riauyrhfnlsxmtgipuxi`) and verified both columns and both partial indexes through read-only catalog queries. No production database changes were made.
 - GitHub Actions Section 7 run #55 passed backend compile/tests and frontend typecheck on commit `6586e1be6b0386e7670e282cf03f702c43d7e53c`. The associated Vercel checks were pending at the first status read; the latest confirmed build status still needs checking before preview QA.
 - Staging security advisor continues to report existing broader findings: RLS-enabled assessment, candidate-document, conversation and recovery-drill tables without policies; `public.is_org_member(uuid)` executable by authenticated users as SECURITY DEFINER; `vector` in `public`; and leaked-password protection disabled. These findings are not caused by this retention migration and require separate, impact-reviewed remediation.
