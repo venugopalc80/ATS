@@ -243,6 +243,43 @@ class ModelApprovalGateTests(unittest.TestCase):
         self.assertEqual(cursor.execute.call_count, 2)
 
 
+    def test_model_approval_succeeds_only_after_processing_approval_and_passed_evaluation(self):
+        import asyncio
+        from unittest.mock import MagicMock, patch
+        from app.routers.ai import approve_model
+
+        organization_id = uuid4()
+        model_id = uuid4()
+        user_id = uuid4()
+        cursor = MagicMock()
+        cursor.fetchone.side_effect = [
+            {"id": model_id, "data_processing_approved": True, "status": "draft"},
+            {"id": uuid4()},
+            {"id": model_id, "provider": "approved-provider", "model_name": "model",
+             "model_version": "v1", "status": "approved", "approved_by": user_id,
+             "approved_at": "2026-10-26T12:00:00Z"},
+        ]
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__.return_value = cursor
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.cursor.return_value = cursor_cm
+
+        with patch("app.routers.ai.assert_org_admin") as admin_check:
+            with patch("app.routers.ai.get_connection", return_value=connection):
+                result = asyncio.run(approve_model(model_id, organization_id, user_id=user_id))
+
+        admin_check.assert_called_once_with(user_id, organization_id)
+        self.assertEqual(result["status"], "approved")
+        self.assertEqual(cursor.execute.call_count, 4)
+        first_query, first_params = cursor.execute.call_args_list[0].args
+        self.assertIn("where id=%s and organization_id=%s", first_query.lower())
+        self.assertEqual(first_params, [model_id, organization_id])
+        evaluation_query, evaluation_params = cursor.execute.call_args_list[1].args
+        self.assertIn("status='passed'", evaluation_query.lower())
+        self.assertEqual(evaluation_params, [organization_id, model_id])
+
+
 class FairnessAuditCautionTests(unittest.TestCase):
     def test_small_sample_groups_are_flagged_in_uncertainty_notes(self):
         import asyncio
