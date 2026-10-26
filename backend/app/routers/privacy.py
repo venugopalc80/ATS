@@ -127,6 +127,9 @@ class RetentionPolicyCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_effective_at_timezone(self):
+        for field_name in ("data_category", "purpose"):
+            if not getattr(self, field_name).strip():
+                raise ValueError(f"{field_name} must not be blank")
         if self.effective_at.tzinfo is None or self.effective_at.utcoffset() is None:
             raise ValueError("Retention policy effective_at must include a timezone")
         return self
@@ -168,6 +171,8 @@ class ProcessingRecordCreate(BaseModel):
 
     @model_validator(mode="after")
     def validate_consent_fields(self):
+        if not self.purpose.strip():
+            raise ValueError("purpose must not be blank")
         for field_name in ("consent_captured_at", "consent_withdrawn_at"):
             value = getattr(self, field_name)
             if value is not None and (value.tzinfo is None or value.utcoffset() is None):
