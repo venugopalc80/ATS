@@ -78,6 +78,8 @@ Duration KPIs are grouped by completion event date unless a report explicitly se
 
 ## Idea 33 — Custom Reports & Scheduled Exports
 
+**Current export-filter contract:** KPI, funnel, source and campaign-efficiency exports accept the applicable period filters. Workload is a current snapshot and forecast uses its six-complete-month baseline; the API rejects date/job filters for these two report types instead of silently implying that the result was filtered. The analytics UI omits period filters for workload and forecast exports.
+
 - Report definitions contain allowlisted fields, metrics, filters, groupings and sort keys. Validate identifiers and operators server-side; never execute user-provided SQL.
 - Reuse the same metric definitions and permission checks as dashboards. Calculations must be reproducible for a saved definition and parameter set.
 - Saved reports are organisation-scoped. Sharing is explicit and limited to users with current access.
