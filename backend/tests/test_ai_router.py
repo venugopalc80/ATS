@@ -413,6 +413,22 @@ class EvaluationDuplicateCaseTests(unittest.TestCase):
 
 
 class RetentionCleanupTests(unittest.TestCase):
+    def test_non_admin_cleanup_is_rejected_before_database_access(self):
+        import asyncio
+        from fastapi import HTTPException
+        from unittest.mock import patch
+        from app.routers.ai import cleanup_expired_ai_runs
+
+        organization_id = uuid4()
+        user_id = uuid4()
+        with patch("app.routers.ai.assert_org_admin", side_effect=HTTPException(status_code=403, detail="Admin required")):
+            with patch("app.routers.ai.get_connection") as get_connection:
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(cleanup_expired_ai_runs(organization_id, user_id=user_id))
+
+        self.assertEqual(caught.exception.status_code, 403)
+        get_connection.assert_not_called()
+
     def test_cleanup_removes_only_expired_unreviewed_drafts_and_runs(self):
         import asyncio
         import json
