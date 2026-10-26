@@ -384,3 +384,10 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - Updated the disposable migration-test fixture to mirror the core schema's unique `(job_id, candidate_id)` application constraint.
 - The post-migration trigger test now uses a separate job/candidate pair instead of relying on an unrealistic duplicate application.
 - Commit: `3204ac58af9080122fb24c73d09e3964fca2c771`. Current-head CI is pending.
+
+
+### Deterministic history assertion correction (2026-10-26)
+
+- The PostgreSQL smoke test successfully exercised migration rerun/partial-state repair and reached the transition-history assertion, but that assertion assumed `created_at desc` always yields the just-inserted event. PostgreSQL `now()` is transaction-stable, so creation and transition events in the same transaction can share a timestamp.
+- Fixed the test to select the expected transition by its unique reason (`CV reviewed`) instead of relying on timestamp ordering.
+- Run #723 failed only at that assertion after the preceding migration and trigger checks had progressed; current fix commit: `61831d18713c6998a5e9e6d29b69c7937f7babd3`. New CI is pending.
