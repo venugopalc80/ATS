@@ -377,3 +377,10 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - Extended the disposable PostgreSQL smoke test to remove the stage-history update trigger and one seeded stage row after initial migration, then rerun migrations and verify both are restored.
 - This covers partial-state repair in addition to rerun/idempotency. Current code commit: `3cca5999ba26a246d274f782f8f98f6ec05ace17`.
 - The UUID assertion correction is included. Run #721 is still executing on an earlier head; current-head CI is pending.
+
+
+### Migration fixture fidelity improvement (2026-10-26)
+
+- Updated the disposable migration-test fixture to mirror the core schema's unique `(job_id, candidate_id)` application constraint.
+- The post-migration trigger test now uses a separate job/candidate pair instead of relying on an unrealistic duplicate application.
+- Commit: `3204ac58af9080122fb24c73d09e3964fca2c771`. Current-head CI is pending.
