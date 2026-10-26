@@ -297,6 +297,13 @@ class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTes
         self.organization_id = uuid4()
         self.user_id = uuid4()
 
+    def tearDown(self):
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("delete from public.job_requisitions where organization_id=%s", [self.organization_id])
+                cursor.execute("delete from public.jobs where organization_id=%s", [self.organization_id])
+                cursor.execute("delete from public.audit_events where organization_id=%s", [self.organization_id])
+
     async def _create_requisition(self):
         from app.schemas.requisitions import RequisitionCreate
         from app.services.requisition_service import RequisitionService
