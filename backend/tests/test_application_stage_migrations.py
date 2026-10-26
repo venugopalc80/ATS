@@ -159,8 +159,16 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 self.connection.commit()
 
     def test_migrations_are_rerunnable_and_history_and_seeding_work(self):
-        # Fresh application, then immediate rerun: verifies safe idempotent setup in a clean DB.
+        # Apply to a clean database, deliberately remove one trigger and one seeded row,
+        # then rerun to verify that partial-state repair is safe as well as idempotent.
         self.run_migrations()
+        with self.connection.cursor() as cursor:
+            cursor.execute("drop trigger applications_stage_history_update on public.applications")
+            cursor.execute(
+                "delete from public.application_stage_config where organization_id=%s and stage_key='screening'",
+                (ORG,),
+            )
+        self.connection.commit()
         self.run_migrations()
 
         with self.connection.cursor() as cursor:
