@@ -115,5 +115,56 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertEqual(cursor.params, [conversation_id, user_id])
 
 
+    def test_add_members_response_only_includes_members_actually_added(self):
+        organization_id = uuid4()
+        conversation_id = uuid4()
+        owner_id = uuid4()
+        reactivated_id = uuid4()
+        already_active_id = uuid4()
+
+        class AddMembersCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.fetchone_rows = [
+                    {"kind": "group", "member_role": "owner"},
+                    {"organization_id": organization_id},
+                ]
+                self.fetchall_rows = [
+                    {"user_id": reactivated_id},
+                    {"user_id": already_active_id},
+                ]
+                self.insert_rowcounts = [1, 0]
+                self.rowcount = 1
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+            def fetchall(self):
+                if "select user_id from public.organization_members" in self.query:
+                    return self.fetchall_rows
+                return []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                if "insert into public.conversation_members" in query:
+                    self.rowcount = self.insert_rowcounts.pop(0)
+
+        cursor = AddMembersCursor()
+        connection = FakeConnection(cursor)
+
+        with patch.object(collaboration, "get_connection", return_value=connection):
+            result = asyncio.run(
+                collaboration.add_group_members(
+                    conversation_id=conversation_id,
+                    payload=collaboration.GroupMembersAdd(
+                        member_ids=[reactivated_id, already_active_id]
+                    ),
+                    user_id=owner_id,
+                )
+            )
+
+        self.assertEqual(result, {"added": [str(reactivated_id)]})
+
+
 if __name__ == "__main__":
     unittest.main()
