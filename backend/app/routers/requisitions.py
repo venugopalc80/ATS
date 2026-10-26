@@ -62,8 +62,8 @@ async def create_requisition(payload: RequisitionCreate, user_id: UUID = Depends
     role = get_org_role(user_id, payload.organization_id)
     if role not in ADMINS | {"hiring_manager", "recruiter"}:
         raise HTTPException(status_code=403, detail="Your organisation role cannot request vacancies")
-    validate_org_links(payload.organization_id, payload.client_id, payload.hiring_manager_id, payload.recruiter_id)
     try:
+        validate_org_links(payload.organization_id, payload.client_id, payload.hiring_manager_id, payload.recruiter_id)
         return RequisitionOut.model_validate(await service.create_requisition(payload, user_id))
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
@@ -105,8 +105,8 @@ async def update_requisition(requisition_id: UUID, payload: RequisitionUpdate, u
     if role not in ADMINS and not (role in {"hiring_manager", "recruiter"} and row["requested_by"] == user_id):
         raise HTTPException(status_code=403, detail="You cannot edit this requisition")
     changes = payload.model_dump(exclude_unset=True)
-    validate_org_links(row["organization_id"], changes.get("client_id", row["client_id"]), changes.get("hiring_manager_id", row["hiring_manager_id"]), changes.get("recruiter_id", row["recruiter_id"]))
     try:
+        validate_org_links(row["organization_id"], changes.get("client_id", row["client_id"]), changes.get("hiring_manager_id", row["hiring_manager_id"]), changes.get("recruiter_id", row["recruiter_id"]))
         updated = await service.update_requisition(requisition_id, payload, user_id)
         return RequisitionOut.model_validate(updated)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
