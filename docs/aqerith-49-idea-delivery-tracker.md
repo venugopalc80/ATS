@@ -125,3 +125,16 @@ On the checked-in `main` branch, both `supabase/migrations/013_candidate_documen
 - These CI runs are code-level evidence only; they do not establish staging acceptance or a production release.
 - PRs #80, #81 and #83 remain drafts; no production change is implied by this snapshot.
 - Overall verified delivery and evidence coverage percentages remain **not yet verified** until the canonical 49-idea register and release evidence are reconciled.
+
+### Read-only staging schema check — 2026-10-26
+
+ATS-Staging project `riauyrhfnlsxmtgipuxi` was inspected read-only. No SQL writes or migrations were run.
+
+- The staging migration ledger lists `013_candidate_documents`; it does not list `20261012090000_candidate_documents` as a migration name.
+- The live `public.candidate_documents` table exists and its `candidate_id` FK uses `ON DELETE CASCADE`.
+- The live table has a SHA-256 format check, `candidate_documents_org_sha256_idx`, and `candidate_documents_search_org_created_idx`, which are not all represented in `013_candidate_documents.sql`.
+- The live `uploaded_by` column has no foreign-key constraint.
+- These observations indicate that the live schema and the checked-in candidate-document migration files do not map cleanly by migration name alone. The exact source of each live constraint/index must be reconciled against the full migration history before changing the schema.
+- The candidate deletion guard's table reference is valid in staging, but this does not replace authenticated application-level acceptance tests or verify the full deployed application.
+
+**Next action:** compare the staging ledger and checked-in migration history, establish the intended canonical candidate-document schema, then prepare a reviewed forward migration only if required. Never rewrite an already-applied migration in place.
