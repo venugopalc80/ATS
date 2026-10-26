@@ -31,7 +31,7 @@
 - [x] Add table sorting and visible pagination controls to the workspace; fetch additional 100-row API chunks as users advance, so records beyond the first 100 can be reached without loading the entire register up front
 - [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
 - [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new requisition and job assignment audit metadata, invalid job status transitions, and route ordering
-- [ ] Add PostgreSQL-backed job status-transition persistence tests; requisition lifecycle persistence is now covered in CI, while staging/browser acceptance remains required
+- [x] Add PostgreSQL-backed job status-transition persistence test covering draft → open persistence, invalid open → draft rejection, and persisted old/new status audit metadata; verified with requisition lifecycle coverage in [GitHub Actions run 40307114569](https://github.com/venugopalc80/ATS/actions/runs/40307114569) (56 backend tests, frontend typecheck and production build passed)
 - [x] Verify latest requisition-list query regression tests in GitHub Actions run 39807839661: 51 backend tests run, 4 skipped; backend suite passed, frontend typecheck passed, and production build passed
 - [ ] Resolve Vercel preview build-rate limit (latest checks report deployment rate limited; retry after the limit window or use an approved build-capacity change)
 - [x] Latest backend unit-test run 39805425180 passed: 48 tests run, 4 skipped, including route ordering, job status-transition and assignment-role regression tests
@@ -40,7 +40,7 @@
 - [x] Latest automated checks in [GitHub Actions run 39807839661](https://github.com/venugopalc80/ATS/actions/runs/39807839661) passed on commit `8b0363251bf2697df8f3468096c05b22b7982fd3`: 51 backend tests (4 skipped), frontend typecheck, and production build
 - [x] GitHub Actions run [39843992295](https://github.com/venugopalc80/ATS/actions/runs/39843992295) passed on commit `edbecae3b60919c4bd3a9b8f6dfb4ff6f02db1e7`: all 51 backend tests passed with disposable PostgreSQL enabled (including four PostgreSQL recruitment integration tests; no tests skipped), plus frontend typecheck and production build
 - [x] Add PostgreSQL-backed requisition lifecycle integration tests for create → submit → approve → convert, idempotent conversion retry, persisted audit events, and reject → resubmit → approve; verified by [GitHub Actions run 40306886614](https://github.com/venugopalc80/ATS/actions/runs/40306886614) with 55 backend tests passing against disposable PostgreSQL
-- [ ] Add PostgreSQL-backed job status-transition persistence tests; current job status-transition checks are unit/regression tests
+- [x] Verify job status-transition persistence against disposable PostgreSQL: allowed transition persists, invalid transition is rejected without changing stored status, and `job.updated` audit metadata records old/new status
 - [ ] Vercel preview checks remain blocked by deployment build-rate limiting
 - [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
 - [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
