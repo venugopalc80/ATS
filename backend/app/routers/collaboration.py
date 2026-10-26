@@ -247,13 +247,15 @@ async def add_group_members(conversation_id: UUID, payload: GroupMembersAdd,
                 raise HTTPException(status_code=404, detail="Conversation not found")
             member_ids = list(set(payload.member_ids))
             _check_org_members(cursor, conversation["organization_id"], member_ids)
+            added_ids = []
             for target_id in member_ids:
                 if _add_or_reactivate_group_member(cursor, conversation_id, target_id):
                     cursor.execute("""
                       insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
                       values (%s,%s,'member_added',%s)
                     """, [conversation_id,user_id,target_id])
-            return {"added": [str(x) for x in member_ids]}
+                    added_ids.append(str(target_id))
+            return {"added": added_ids}
 
 @router.delete("/conversations/{conversation_id}/members/{target_user_id}")
 async def remove_group_member(conversation_id: UUID, target_user_id: UUID,
