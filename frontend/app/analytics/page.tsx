@@ -118,8 +118,12 @@ export default function AnalyticsPage() {
     setError("");
     try {
       const params = new URLSearchParams({ organization_id: organizationId, report_type: reportType });
-      if (dateFrom) params.set("date_from", dateFrom);
-      if (dateTo) params.set("date_to", dateTo);
+      // Workload is a current snapshot and forecast uses its own six-complete-month
+      // baseline. Do not pass the dashboard's application-period filters to either report.
+      if (!["workload", "forecast"].includes(reportType)) {
+        if (dateFrom) params.set("date_from", dateFrom);
+        if (dateTo) params.set("date_to", dateTo);
+      }
       const response = await apiFetch(API_BASE + "/api/analytics/export?" + params.toString());
       if (!response.ok) throw new Error("Report export failed (HTTP " + response.status + ").");
       const blob = await response.blob();
