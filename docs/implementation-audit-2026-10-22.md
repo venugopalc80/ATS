@@ -399,3 +399,11 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - The smoke test now verifies both timestamped migrations can be applied, that rerunning after deliberately dropping the stage-history update trigger and deleting the `screening` stage restores both, that existing applications receive a baseline history row, that authenticated backend actor/reason context is captured, that existing/new organisations receive ten stages, and that browser roles have no direct SELECT grants while RLS is enabled.
 - Run #724 frontend typecheck also passed; production build was still in progress at the latest poll. Run: https://github.com/venugopalc80/ATS/actions/runs/40321305007.
 - Vercel preview checks remain blocked by the team's build-rate limit. No staging/production migrations or writes occurred.
+
+
+### Full CI green after migration smoke-test addition (2026-10-26)
+
+- Run #724 completed successfully: backend unit tests, PostgreSQL 16 migration smoke tests, frontend TypeScript typecheck, and frontend production build all passed.
+- This is the first green run that exercises the actual timestamped Idea 04 migration files against disposable PostgreSQL and verifies rerun/partial-state recovery.
+- Run: https://github.com/venugopalc80/ATS/actions/runs/40321305007.
+- Vercel checks for `ats`, `ats-staging-api`, and `aqerith` remain blocked by the team's build-rate limit; no preview UX acceptance is claimed.
