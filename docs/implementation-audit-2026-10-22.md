@@ -280,3 +280,30 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - The new tests cover route-level guard behaviour with mocked service methods: non-members cannot proceed to transition writes and non-admins cannot proceed to stage configuration writes. They are useful regression tests but are not full authenticated HTTP/database integration tests.
 - Vercel `ats-staging-api` is successful for this commit; `ats` and `aqerith` status checks remain pending at the latest check.
 - PR #69 description now reflects current head and CI #604. PR remains draft/unmerged; no database migration or deployment occurred.
+
+
+## Checkpoint — 2026-10-26 morning
+
+### Newly discovered and fixed: creation actor attribution
+
+- Code review found that the authenticated recruiter application-creation route passed the payload to the service but did not pass the acting user ID. The database trigger therefore could record the initial stage event with a null actor, even though subsequent stage transitions carried the actor.
+- Fixed the service boundary: `ApplicationService.create_application(payload, actor_user_id)` now sets transaction-local `app.actor_user_id` before inserting the application. The authenticated API route passes the authenticated `user_id`. Public careers submissions intentionally remain anonymous.
+- Added a regression test asserting the actor setting is executed before the application insert and contains the authenticated user's UUID.
+- Current PR #69 head: `68b7a7e5c48da05ab5f6f6217dc9bbd204a58222`.
+- CI run #675 is in progress: backend test step completed successfully; frontend dependency installation was still running at the latest check. Prior head run #604 passed backend tests, frontend typecheck, and production build.
+- Current Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` are pending.
+- PR #69 description was updated to reflect current head, the actor-attribution fix, and the accurate CI state.
+- No database writes, migrations, merges, or deployments were performed.
+
+### Current score
+
+- **Idea 04:** **41.7% evidenced / 58.3% pending** against six provisional acceptance criteria. This bug fix improves audit correctness but does not yet close an entire acceptance criterion.
+- **AQERITH overall:** completion remains **not yet verified**; detailed acceptance criteria reviewed for **5/49 ideas (10.2% evidence coverage)**, not product implementation completion.
+
+### Next actions
+
+1. Wait for run #675 and capture final backend/frontend conclusions.
+2. Inspect Vercel checks when they settle; verify actual preview behaviour before accepting.
+3. Continue migration test planning without applying to staging/production; resolve existing staging schema/ledger drift first.
+4. Expand route tests into authenticated HTTP/database integration tests and check candidate-facing confidentiality.
+5. Compare PR #70 for unique code worth porting into PR #69, then keep only one transition implementation.
