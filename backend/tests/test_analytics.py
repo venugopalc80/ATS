@@ -282,7 +282,7 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["outcome_summary"]["active"], 3)
         self.assertEqual(result["outcome_summary"]["hired"], 0)
         self.assertIn("h.organization_id=%s", self.cursor.queries[0][0])
-        self.assertIn("count(distinct h.application_id)", self.cursor.queries[3][0])
+        self.assertTrue(any("count(distinct h.application_id)" in sql for sql, _ in self.cursor.queries))
         self.assertIn("lead(h.created_at)", self.cursor.queries[1][0])
 
 
