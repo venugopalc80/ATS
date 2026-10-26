@@ -29,7 +29,7 @@ NEW_ORG = "88888888-8888-4888-8888-888888888888"
 class ApplicationStageMigrationSmokeTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.connection = psycopg.connect(os.environ["TEST_DATABASE_URL"], autocommit=True)
+        cls.connection = psycopg.connect(os.environ["TEST_DATABASE_URL"], autocommit=False)
         with cls.connection.cursor() as cursor:
             cursor.execute("select current_database()")
             database_name = cursor.fetchone()[0]
@@ -144,6 +144,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 "values (%s,%s,%s,%s,'new')",
                 (APPLICATION, ORG, JOB, CANDIDATE),
             )
+        cls.connection.commit()
 
     @classmethod
     def tearDownClass(cls):
@@ -153,6 +154,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
         with self.connection.cursor() as cursor:
             for migration in MIGRATIONS:
                 cursor.execute(migration.read_text(encoding="utf-8"), prepare=False)
+                self.connection.commit()
 
     def test_migrations_are_rerunnable_and_history_and_seeding_work(self):
         # Fresh application, then immediate rerun: verifies safe idempotent setup in a clean DB.
@@ -223,6 +225,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 self.assertFalse(anon_select, f"anon unexpectedly has SELECT on {table}")
                 self.assertFalse(authenticated_select, f"authenticated unexpectedly has SELECT on {table}")
                 self.assertTrue(rls_enabled, f"RLS is not enabled on {table}")
+        self.connection.commit()
 
 
 if __name__ == "__main__":
