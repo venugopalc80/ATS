@@ -63,6 +63,16 @@ def _check_org_members(cursor, organization_id: UUID, user_ids: list[UUID]):
     if set(user_ids) != found:
         raise HTTPException(status_code=422, detail="One or more members do not belong to this organization")
 
+def _add_or_reactivate_group_member(cursor, conversation_id: UUID, target_id: UUID) -> bool:
+    cursor.execute("""
+      insert into public.conversation_members (conversation_id,user_id,member_role,last_read_at)
+      values (%s,%s,'member',now())
+      on conflict (conversation_id,user_id) do update
+        set left_at=null, joined_at=now(), last_read_at=now()
+        where public.conversation_members.left_at is not null
+    """, [conversation_id, target_id])
+    return cursor.rowcount > 0
+
 @router.get("/contacts")
 async def contacts(organization_id: UUID, q: str = Query(default="", max_length=100),
                    user_id: UUID = Depends(get_current_user_id)):
@@ -238,14 +248,7 @@ async def add_group_members(conversation_id: UUID, payload: GroupMembersAdd,
             member_ids = list(set(payload.member_ids))
             _check_org_members(cursor, conversation["organization_id"], member_ids)
             for target_id in member_ids:
-                cursor.execute("""
-                  insert into public.conversation_members (conversation_id,user_id,member_role,last_read_at)
-                  values (%s,%s,'member',now())
-                  on conflict (conversation_id,user_id) do update
-                    set left_at=null, joined_at=now(), last_read_at=now()
-                    where public.conversation_members.left_at is not null
-                """, [conversation_id, target_id])
-                if cursor.rowcount:
+                if _add_or_reactivate_group_member(cursor, conversation_id, target_id):
                     cursor.execute("""
                       insert into public.conversation_events (conversation_id,actor_user_id,event_type,target_user_id)
                       values (%s,%s,'member_added',%s)
