@@ -479,3 +479,39 @@ class ApplicationCreationAuditActorTests(unittest.IsolatedAsyncioTestCase):
         self.assertLess(actor_setting_index, insert_index)
         self.assertEqual(cursor.queries[actor_setting_index][1], [str(USER)])
         self.assertEqual(result["status"], "new")
+
+
+class ApplicationCreationRouteActorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_authenticated_create_route_passes_user_id_to_service(self):
+        row = {
+            "id": APPLICATION,
+            "organization_id": ORG,
+            "job_id": JOB,
+            "candidate_id": CANDIDATE,
+            "source": "referral",
+            "status": "new",
+            "match_score": None,
+            "match_explanation": None,
+            "human_reviewed": False,
+            "human_reviewed_by": None,
+            "human_reviewed_at": None,
+            "created_at": NOW,
+            "updated_at": NOW,
+        }
+        payload = ApplicationCreate(
+            organization_id=ORG,
+            job_id=JOB,
+            candidate_id=CANDIDATE,
+            source="referral",
+        )
+        with patch.object(applications, "assert_org_member"):
+            with patch.object(
+                applications.service,
+                "create_application",
+                new_callable=AsyncMock,
+                return_value=row,
+            ) as create:
+                result = await applications.create_application(payload, USER)
+
+        create.assert_awaited_once_with(payload, USER)
+        self.assertEqual(result.id, APPLICATION)
