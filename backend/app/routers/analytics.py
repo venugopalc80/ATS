@@ -343,6 +343,33 @@ async def analytics_funnel(
                 )
                 outcomes = {row["status"]: row["distinct_applications"] for row in cursor.fetchall()}
                 cursor.execute(
+                    f"""with cohort_apps as (
+                            select distinct h.application_id
+                            from public.application_stage_history h
+                            join public.applications a on a.id=h.application_id
+                            join public.jobs j on j.id=a.job_id
+                            where {where}
+                        ), latest_events as (
+                            select distinct on (h.application_id)
+                                   h.application_id, h.new_stage, h.created_at, h.id
+                            from public.application_stage_history h
+                            join cohort_apps ca on ca.application_id=h.application_id
+                            where h.organization_id=%s
+                            order by h.application_id, h.created_at desc, h.id desc
+                        )
+                        select le.new_stage as stage,
+                               count(*)::int as latest_applications,
+                               count(*) filter (
+                                   where a.status not in ('hired','rejected','withdrawn')
+                               )::int as still_in_stage
+                        from latest_events le
+                        join public.applications a on a.id=le.application_id
+                        group by le.new_stage
+                        order by le.new_stage""",
+                    [*params, organization_id],
+                )
+                current_stage_presence = [dict(row) for row in cursor.fetchall()]
+                cursor.execute(
                     f"""select count(distinct h.application_id)::int as cohort_size
                         from public.application_stage_history h
                         join public.applications a on a.id=h.application_id
@@ -414,6 +441,17 @@ async def analytics_funnel(
             "stage_waiting_time": waiting_time,
             "stage_conversions": stage_conversions,
             "outcomes": outcomes,
+            "current_stage_presence": current_stage_presence,
+            "outcome_summary": {
+                "withdrawn": outcomes.get("withdrawn", 0),
+                "rejected": outcomes.get("rejected", 0),
+                "hired": outcomes.get("hired", 0),
+                "active": sum(
+                    count for status, count in outcomes.items()
+                    if status not in {"withdrawn", "rejected", "hired"}
+                ),
+                "definition": "Current application status for distinct applications with at least one stage-history event in the selected event cohort; status counts are not mutually exclusive with stage-entry counts.",
+            },
             "limitations": [
                 "Stage-entry events are counted from recorded history; applications with no history event are not represented in stage counts.",
                 "Distinct application counts by stage are not mutually exclusive and must not be summed as a total funnel population.",
