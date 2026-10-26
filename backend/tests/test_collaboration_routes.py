@@ -83,7 +83,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
                 )
             )
 
-        self.assertEqual(cursor.params, [organization_id, user_id, "50%_off", "%50\\\\%\\\\_off%"])
+        self.assertEqual(cursor.params, [organization_id, user_id, "50%_off", "%50\\%\\_off%"])
 
 
 if __name__ == "__main__":
