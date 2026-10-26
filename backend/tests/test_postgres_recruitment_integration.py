@@ -5,6 +5,7 @@ They deliberately refuse to run against hosted databases or any other database n
 """
 import os
 import unittest
+from unittest.mock import patch
 from decimal import Decimal
 from urllib.parse import urlparse
 from uuid import uuid4
@@ -379,6 +380,50 @@ class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTes
                     [converted["job"]["id"]],
                 )
                 self.assertEqual(cursor.fetchone()["total"], 1)
+
+    async def test_job_status_transition_persists_and_invalid_transition_is_rejected(self):
+        from fastapi import BackgroundTasks, HTTPException
+        from app.routers import jobs as jobs_router
+        from app.schemas.jobs import JobUpdate
+
+        job_id = uuid4()
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "insert into public.jobs (id, organization_id, title, status) values (%s,%s,%s,'draft')",
+                    [job_id, self.organization_id, "Status Transition Integration Role"],
+                )
+
+        with patch.object(jobs_router, "assert_org_member"), patch.object(
+            jobs_router, "get_org_role", return_value="recruiter"
+        ):
+            opened = await jobs_router.update_job(
+                job_id, JobUpdate(status="open"), BackgroundTasks(), self.user_id
+            )
+            self.assertEqual(opened.status, "open")
+
+            with self.assertRaises(HTTPException) as error:
+                await jobs_router.update_job(
+                    job_id, JobUpdate(status="draft"), BackgroundTasks(), self.user_id
+                )
+            self.assertEqual(error.exception.status_code, 409)
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select status from public.jobs where id=%s", [job_id])
+                self.assertEqual(cursor.fetchone()["status"], "open")
+                cursor.execute(
+                    "select metadata from public.audit_events where entity_id=%s and action='job.updated'",
+                    [job_id],
+                )
+                audit_rows = cursor.fetchall()
+                self.assertEqual(len(audit_rows), 1)
+                metadata = audit_rows[0]["metadata"]
+                self.assertEqual(metadata["previous_status"], "draft")
+                self.assertEqual(metadata["status"], "open")
+                self.assertEqual(
+                    metadata["changes"]["status"], {"old": "draft", "new": "open"}
+                )
 
     async def test_rejected_requisition_can_be_resubmitted_and_approved(self):
         from app.services.requisition_service import RequisitionService
