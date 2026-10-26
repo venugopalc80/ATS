@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.routers import applications, public_jobs
-from app.schemas.applications import ApplicationStageConfigUpdate, ApplicationTransition, ApplicationUpdate
+from app.schemas.applications import ApplicationCreate, ApplicationStageConfigUpdate, ApplicationTransition, ApplicationUpdate
 from app.services.application_service import ApplicationService
 
 
@@ -408,3 +408,74 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ApplicationCreationAuditActorTests(unittest.IsolatedAsyncioTestCase):
+    async def test_authenticated_application_creation_sets_actor_before_insert(self):
+        class CreationCursor:
+            def __init__(self):
+                self.sql = ""
+                self.params = []
+                self.queries = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, sql, params=None):
+                self.sql = " ".join(sql.split()).lower()
+                self.params = params or []
+                self.queries.append((self.sql, self.params))
+
+            def fetchone(self):
+                if "select exists(select 1 from public.jobs" in self.sql:
+                    return {"job_ok": True, "candidate_ok": True}
+                if self.sql.startswith("insert into public.applications"):
+                    return {
+                        "id": APPLICATION,
+                        "organization_id": ORG,
+                        "job_id": JOB,
+                        "candidate_id": CANDIDATE,
+                        "source": "referral",
+                        "status": "new",
+                        "match_score": None,
+                        "match_explanation": None,
+                        "human_reviewed": False,
+                        "human_reviewed_by": None,
+                        "human_reviewed_at": None,
+                        "created_at": NOW,
+                        "updated_at": NOW,
+                    }
+                raise AssertionError(f"Unexpected fetchone query: {self.sql}")
+
+        cursor = CreationCursor()
+
+        @contextmanager
+        def fake_connection():
+            with FakeConnection(cursor) as connection:
+                yield connection
+
+        with patch("app.services.application_service.get_connection", fake_connection):
+            result = await ApplicationService().create_application(
+                ApplicationCreate(
+                    organization_id=ORG,
+                    job_id=JOB,
+                    candidate_id=CANDIDATE,
+                    source="referral",
+                ),
+                USER,
+            )
+
+        actor_setting_index = next(
+            i for i, (sql, _) in enumerate(cursor.queries)
+            if sql.startswith("select set_config('app.actor_user_id'")
+        )
+        insert_index = next(
+            i for i, (sql, _) in enumerate(cursor.queries)
+            if sql.startswith("insert into public.applications")
+        )
+        self.assertLess(actor_setting_index, insert_index)
+        self.assertEqual(cursor.queries[actor_setting_index][1], [str(USER)])
+        self.assertEqual(result["status"], "new")
