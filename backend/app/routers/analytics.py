@@ -694,6 +694,7 @@ async def analytics_forecast(
         else:
             trend = "stable"
         if nonzero_months == 0:
+            trend = "insufficient_history"
             confidence = "unavailable"
             status = "no_historical_approved_requisitions"
             forecast_value = None
