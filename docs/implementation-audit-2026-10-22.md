@@ -323,3 +323,19 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - Current PR #69 head: `8b98ca03b628ef5a12ef46312851bd4c278c86da`.
 - CI run #677 is queued for the current head: https://github.com/venugopalc80/ATS/actions/runs/40308229057. Run #675 passed on the previous head, including backend tests, frontend typecheck and production build.
 - Vercel checks on the new head are not yet confirmed. No migration, database write, merge, or deployment occurred.
+
+
+## Stage-graph concurrency hardening (2026-10-26)
+
+- Reviewed a potential race: concurrent stage configuration edits or an edit racing an application transition could validate against a stale organisation stage graph.
+- Added a transaction-scoped PostgreSQL advisory lock keyed by organisation. Stage-configuration edits acquire it before selecting/updating configuration; application transitions acquire the same lock before reading the graph and validating the requested transition.
+- Added a regression assertion that the transition lock is acquired before stage configuration is read.
+- Code commits: service `c9c52cd6b2eb6f05eb768c8501772a093f57bb32`; test `cacf02c8a75a52a9629cef6d75d2c277fee27894`.
+- GitHub Actions run #677 passed on the preceding head, not this new lock change. CI for current head remains pending verification. Vercel checks were green on the preceding head; current-head status must be rechecked.
+- No database writes, migrations, merges, or production deployments were performed.
+
+### Current score and next gates
+
+- **Idea 04:** remains **41.7% evidenced / 58.3% pending** against six provisional acceptance criteria. This concurrency hardening improves correctness but does not close a full acceptance criterion.
+- **AQERITH overall:** **not yet verified**; detailed acceptance criteria reviewed for **5/49 ideas (10.2% evidence coverage)**, which is not implementation completion.
+- Next: verify CI and Vercel on the current head; then pursue isolated PostgreSQL migration tests and authenticated tenant-isolation tests. Keep PR #69 in draft and do not apply migrations to staging or production while staging schema/migration-ledger drift remains unresolved.
