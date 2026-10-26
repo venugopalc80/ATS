@@ -362,3 +362,11 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - Test harness commit: `8287c48fc35674c710c370b9981c6c932e582cad`; transaction-local-setting correction: `13028d68c11eaa886adda70f9e35d5c83ae2b130`; workflow update commit: `765efd6eaa36badecb6a7ac2a2df4db491235b0b`.
 - CI run #692 passed before this harness was added. Runs #697/#698 for earlier commits in this change set are still in progress; current-head CI has not yet been verified.
 - No Supabase project was created, no database migrations were applied to staging/production, and no production data was modified.
+
+
+### Migration smoke-test first-run correction (2026-10-26)
+
+- Run #697 executed the real migrations twice in PostgreSQL 16 and reached the application-created history assertion. The only reported failure was a test expectation type mismatch (psycopg returns a UUID object; the assertion expected a string), not a migration SQL error. Run: https://github.com/venugopalc80/ATS/actions/runs/40320818797.
+- Corrected the expected actor type to `UUID` in commit `46dd9286fb3f698eadf1e31283b9d1ca5c79695c`.
+- Current run #721 is queued for that corrected head. Do not call the migration smoke test green until the rerun completes successfully.
+- Vercel checks still fail because of the team build-rate limit. No staging/production database changes occurred.
