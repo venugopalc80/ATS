@@ -107,6 +107,10 @@ class PublicCareersSubmissionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["application_id"], APPLICATION)
         self.assertTrue(result["success"])
+        self.assertEqual(set(result), {"success", "application_id", "message"})
+        self.assertNotIn("match_score", result)
+        self.assertNotIn("match_explanation", result)
+        self.assertNotIn("human_reviewed", result)
         self.assertTrue(any("insert into public.candidates" in sql for sql, _ in cursor.queries))
         app_insert = next((sql, params) for sql, params in cursor.queries if "insert into public.applications" in sql)
         self.assertIn("'new'", app_insert[0])
