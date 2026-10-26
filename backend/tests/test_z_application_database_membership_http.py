@@ -8,7 +8,7 @@ import unittest
 from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
-from fastapi import TestClient
+from fastapi.testclient import TestClient
 
 from app.auth import get_current_user_id
 from app.main import app
