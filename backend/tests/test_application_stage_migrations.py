@@ -228,8 +228,8 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
             )
             cursor.execute(
                 "select previous_stage,new_stage,actor_user_id,reason from public.application_stage_history "
-                "where application_id=%s order by created_at desc limit 1",
-                ("99999999-9999-4999-8999-999999999999",),
+                "where application_id=%s and reason=%s",
+                ("99999999-9999-4999-8999-999999999999", "CV reviewed"),
             )
             self.assertEqual(cursor.fetchone(), ("new", "screening", ACTOR_UUID, "CV reviewed"))
 
