@@ -103,6 +103,56 @@ class PlatformSupportQueuePrivacyTests(unittest.IsolatedAsyncioTestCase):
         select_clause = cursor.sql.split(" from public.support_cases", 1)[0].lower()
         self.assertNotIn("subject", select_clause)
 
+    async def test_platform_operator_cannot_read_case_without_active_approved_grant(self):
+        from contextlib import contextmanager
+        from unittest.mock import patch
+        from uuid import UUID
+        from fastapi import HTTPException
+        from app.routers import platform_ops
+
+        organization_id = UUID("11111111-1111-4111-8111-111111111111")
+        case_id = UUID("44444444-4444-4444-8444-444444444444")
+
+        class Cursor:
+            def __init__(self):
+                self.responses = [{"organization_id": organization_id}, None]
+                self.executed = []
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def execute(self, sql, params=None):
+                self.executed.append((" ".join(sql.split()), params))
+            def fetchone(self):
+                return self.responses.pop(0) if self.responses else None
+
+        cursor = Cursor()
+
+        class Connection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def cursor(self):
+                return cursor
+
+        @contextmanager
+        def fake_connection():
+            with Connection() as connection:
+                yield connection
+
+        with patch.object(platform_ops, "assert_platform_operator"), patch.object(
+            platform_ops, "get_connection", fake_connection
+        ):
+            with self.assertRaises(HTTPException) as raised:
+                await platform_ops.platform_get_support_case(
+                    case_id, user_id=UUID("99999999-9999-4999-8999-999999999999")
+                )
+
+        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(len(cursor.executed), 2)
+        self.assertFalse(any("description" in sql.lower() for sql, _ in cursor.executed))
+
 
 if __name__ == "__main__":
     unittest.main()
