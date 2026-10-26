@@ -12,9 +12,11 @@ class FakeCursor:
         self.one = one
         self.many = many or []
         self.query = ""
+        self.params = None
 
     def execute(self, query, params=None):
         self.query = query
+        self.params = params
 
     def fetchone(self):
         return self.one
@@ -75,6 +77,9 @@ class CollaborationPayloadTests(unittest.TestCase):
         membership = _member(cursor, uuid4(), uuid4())
         self.assertIs(membership["joined_at"], joined_at)
         self.assertIn("organization_members", cursor.query)
+        self.assertIn("cm.user_id=%s", cursor.query)
+        self.assertIn("cm.left_at is null", cursor.query)
+        self.assertIn("c.archived_at is null", cursor.query)
 
     def test_member_helper_hides_nonmember_conversation(self):
         with self.assertRaises(HTTPException) as error:
@@ -83,10 +88,23 @@ class CollaborationPayloadTests(unittest.TestCase):
 
     def test_organization_member_check_rejects_outsider(self):
         requested = [uuid4(), uuid4()]
+        organization_id = uuid4()
         cursor = FakeCursor(many=[{"user_id": requested[0]}])
         with self.assertRaises(HTTPException) as error:
-            _check_org_members(cursor, uuid4(), requested)
+            _check_org_members(cursor, organization_id, requested)
         self.assertEqual(error.exception.status_code, 422)
+        self.assertIn("organization_id=%s", cursor.query)
+        self.assertEqual(cursor.params, [organization_id, requested])
+
+    def test_organization_member_check_accepts_only_members_of_requested_org(self):
+        organization_id = uuid4()
+        requested = [uuid4(), uuid4()]
+        cursor = FakeCursor(many=[{"user_id": user_id} for user_id in requested])
+
+        _check_org_members(cursor, organization_id, requested)
+
+        self.assertEqual(cursor.params, [organization_id, requested])
+        self.assertIn("user_id = any(%s)", cursor.query)
 
     def test_message_enforces_maximum_length(self):
         with self.assertRaises(ValidationError):
