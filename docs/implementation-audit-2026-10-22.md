@@ -347,3 +347,18 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - GitHub Actions run #692 subsequently completed successfully: backend unit tests, frontend TypeScript typecheck, and frontend production build all passed. Run: https://github.com/venugopalc80/ATS/actions/runs/40312978591.
 - Current-head Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` are failing with the team's build-rate-limit status. This is not evidence of an application build failure, but it prevents preview acceptance.
 - No database writes, migrations, merges, or production deployments occurred.
+
+
+## Disposable PostgreSQL migration smoke-test harness (2026-10-26)
+
+- Added `backend/tests/test_application_stage_migrations.py`. It refuses to reset a database unless its name is exactly `aqerith_migration_test`, then bootstraps the minimum Supabase-like auth/tenant schema needed to execute the actual Idea 04 migration files.
+- The smoke test applies `20261026120000_application_stage_history.sql` and `20261026120100_application_stage_config.sql` twice, then checks:
+  - baseline history for an application predating the migration;
+  - ten default stages for existing and newly created organisations;
+  - actor attribution on application creation;
+  - actor and reason attribution on stage change;
+  - RLS enabled and no direct SELECT grants to `anon` or `authenticated` for history/config tables.
+- Updated `.github/workflows/dashboard-update-1-acceptance.yml` to provision a PostgreSQL 16 service and run this test alongside the backend suite; migration paths now trigger the workflow.
+- Test harness commit: `8287c48fc35674c710c370b9981c6c932e582cad`; transaction-local-setting correction: `13028d68c11eaa886adda70f9e35d5c83ae2b130`; workflow update commit: `765efd6eaa36badecb6a7ac2a2df4db491235b0b`.
+- CI run #692 passed before this harness was added. Runs #697/#698 for earlier commits in this change set are still in progress; current-head CI has not yet been verified.
+- No Supabase project was created, no database migrations were applied to staging/production, and no production data was modified.
