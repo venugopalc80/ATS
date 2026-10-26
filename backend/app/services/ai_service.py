@@ -57,6 +57,9 @@ def build_messages(task: str, evidence: list[dict[str, Any]], user_request: str 
 
 
 def generate_text(task: str, evidence: list[dict[str, Any]], user_request: str | None, model_name: str, provider_name: str) -> str:
+    # Defence in depth: this service can be called outside the FastAPI route in tests or future jobs.
+    if task not in ALLOWED_TASKS:
+        raise ValueError("Unsupported AI task.")
     if os.getenv("AI_PROVIDER_APPROVED", "").lower() != "true":
         raise RuntimeError("AI provider use is disabled pending provider/data-processing approval.")
     configured_provider = os.getenv("AI_PROVIDER_NAME", "openai-compatible")
