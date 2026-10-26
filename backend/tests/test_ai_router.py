@@ -326,5 +326,51 @@ class EvaluationCriteriaValidationTests(unittest.TestCase):
                 self.assertEqual(cursor.execute.call_count, 1)
 
 
+class RetentionCleanupTests(unittest.TestCase):
+    def test_cleanup_removes_only_expired_unreviewed_drafts_and_runs(self):
+        import asyncio
+        import json
+        from unittest.mock import MagicMock, patch
+        from app.routers.ai import cleanup_expired_ai_runs
+
+        organization_id = uuid4()
+        user_id = uuid4()
+        cursor = MagicMock()
+        cursor.fetchall.side_effect = [
+            [{"id": "expired-jd-draft"}],
+            [],
+            [{"id": "expired-ai-run"}],
+        ]
+        cursor_cm = MagicMock()
+        cursor_cm.__enter__.return_value = cursor
+        connection = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.cursor.return_value = cursor_cm
+
+        with patch("app.routers.ai.assert_org_admin") as admin_check:
+            with patch("app.routers.ai.get_connection", return_value=connection):
+                result = asyncio.run(cleanup_expired_ai_runs(organization_id, user_id=user_id))
+
+        admin_check.assert_called_once_with(user_id, organization_id)
+        self.assertEqual(result["deleted_ai_runs"], 1)
+        self.assertEqual(result["deleted_job_description_drafts"], 1)
+        self.assertEqual(result["deleted_interview_kits"], 0)
+        self.assertIn("cleanup_at", result)
+
+        queries = [call.args[0].lower() for call in cursor.execute.call_args_list]
+        self.assertEqual(len(queries), 4)
+        self.assertIn("delete from public.ai_job_description_versions", queries[0])
+        self.assertIn("status in ('draft','in_review')", queries[0])
+        self.assertIn("organization_id=%s", queries[0])
+        self.assertIn("delete from public.ai_interview_kits", queries[1])
+        self.assertIn("status in ('draft','in_review')", queries[1])
+        self.assertIn("delete from public.ai_runs", queries[2])
+        audit_params = cursor.execute.call_args_list[3].args[1]
+        audit_metadata = json.loads(audit_params[-1])
+        self.assertEqual(audit_metadata["deleted_ai_runs"], 1)
+        self.assertEqual(audit_metadata["deleted_job_description_drafts"], 1)
+        self.assertEqual(audit_metadata["deleted_interview_kits"], 0)
+
+
 if __name__ == "__main__":
     unittest.main()
