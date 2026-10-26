@@ -86,5 +86,32 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertEqual(cursor.params, [organization_id, user_id, "50%_off", "%50\\%\\_off%"])
 
 
+    def test_messages_route_rejects_non_member_before_reading_messages(self):
+        conversation_id = uuid4()
+        user_id = uuid4()
+
+        class NonMemberCursor(FakeCursor):
+            def fetchone(self):
+                return None
+
+        cursor = NonMemberCursor()
+        connection = FakeConnection(cursor)
+
+        with patch.object(collaboration, "get_connection", return_value=connection):
+            with self.assertRaises(Exception) as error:
+                asyncio.run(
+                    collaboration.list_messages(
+                        conversation_id=conversation_id,
+                        before=None,
+                        limit=50,
+                        user_id=user_id,
+                    )
+                )
+
+        self.assertEqual(getattr(error.exception, "status_code", None), 404)
+        self.assertIn("cm.user_id=%s", cursor.query)
+        self.assertEqual(cursor.params, [conversation_id, user_id])
+
+
 if __name__ == "__main__":
     unittest.main()
