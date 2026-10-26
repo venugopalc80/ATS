@@ -557,6 +557,9 @@ async def complete_evaluation(
                 raise HTTPException(status_code=404, detail="Evaluation run not found")
             if evaluation["status"] != "running":
                 raise HTTPException(status_code=409, detail="Evaluation run is already complete")
+            test_case_keys = [result.test_case_key for result in payload.results]
+            if len(test_case_keys) != len(set(test_case_keys)):
+                raise HTTPException(status_code=422, detail="Evaluation results must use unique test_case_key values")
             criteria = evaluation["pass_criteria"] or {}
             raw_minimum_cases = criteria.get("minimum_cases", 1)
             raw_max_failure_rate = criteria.get("max_failure_rate", 0)
