@@ -1,4 +1,5 @@
-from datetime import date
+from datetime import date, datetime, time, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -13,6 +14,21 @@ router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
 VACANCY_TARGET_DAYS = 30
 VACANCY_MIN_APPLICATIONS = 3
 OFFER_EXPIRY_WINDOW_DAYS = 3
+
+
+def organisation_day_bounds_utc(timezone_name: str, now: datetime | None = None) -> tuple[datetime, datetime]:
+    """Return UTC instants delimiting today in an organisation's IANA timezone."""
+    try:
+        zone = ZoneInfo(timezone_name)
+    except (ZoneInfoNotFoundError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=500, detail="Organisation timezone is misconfigured") from exc
+    current = now or datetime.now(timezone.utc)
+    if current.tzinfo is None:
+        current = current.replace(tzinfo=timezone.utc)
+    local_today = current.astimezone(zone).date()
+    local_start = datetime.combine(local_today, time.min, tzinfo=zone)
+    local_end = datetime.combine(local_today + timedelta(days=1), time.min, tzinfo=zone)
+    return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
 
 
 @router.get("")
@@ -30,6 +46,16 @@ async def dashboard(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
+                    "select timezone from public.organizations where id=%s",
+                    [organization_id],
+                )
+                organisation_row = cursor.fetchone()
+                if not organisation_row:
+                    raise HTTPException(status_code=404, detail="Organisation not found")
+                organisation_timezone = organisation_row.get("timezone") or "UTC"
+                today_start_utc, tomorrow_start_utc = organisation_day_bounds_utc(organisation_timezone)
+
+                cursor.execute(
                     "select count(*)::int as total from public.jobs where organization_id=%s and status='open'",
                     [organization_id],
                 )
@@ -42,8 +68,8 @@ async def dashboard(
                 active_candidates = cursor.fetchone()["total"]
 
                 cursor.execute(
-                    "select count(*)::int as total from public.interviews where organization_id=%s and status in ('scheduled','rescheduled') and scheduled_at >= date_trunc('day', now()) and scheduled_at < date_trunc('day', now()) + interval '1 day'",
-                    [organization_id],
+                    "select count(*)::int as total from public.interviews where organization_id=%s and status in ('scheduled','rescheduled') and scheduled_at >= %s and scheduled_at < %s",
+                    [organization_id, today_start_utc, tomorrow_start_utc],
                 )
                 interviews_today = cursor.fetchone()["total"]
 
@@ -114,10 +140,10 @@ async def dashboard(
                        from public.interviews i
                        where i.organization_id=%s
                          and i.status in ('scheduled','rescheduled')
-                         and i.scheduled_at >= date_trunc('day', now())
-                         and i.scheduled_at < date_trunc('day', now()) + interval '1 day'
+                         and i.scheduled_at >= %s
+                         and i.scheduled_at < %s
                        order by i.scheduled_at asc limit 10""",
-                    [organization_id],
+                    [organization_id, today_start_utc, tomorrow_start_utc],
                 )
                 todays_interviews = list(cursor.fetchall())
 
@@ -218,6 +244,7 @@ async def dashboard(
             })
 
         return {
+            "timezone": organisation_timezone,
             "metrics": {
                 "open_jobs": open_jobs,
                 "active_candidates": active_candidates,
