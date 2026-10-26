@@ -27,6 +27,14 @@ def _load_stage_config(cursor, organization_id: UUID) -> dict[str, dict[str, Any
     }
 
 
+def _lock_stage_graph(cursor, organization_id: UUID) -> None:
+    """Serialize stage-graph edits and transitions within one organisation."""
+    cursor.execute(
+        "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+        [f"aqerith:application-stage-graph:{organization_id}"],
+    )
+
+
 def _validate_configured_transition(
     stage_config: dict[str, dict[str, Any]], current_status: str, target_status: str
 ) -> None:
@@ -92,6 +100,7 @@ class ApplicationService:
         data = payload.model_dump(mode="python", exclude_unset=True)
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                _lock_stage_graph(cursor, organization_id)
                 cursor.execute(
                     "select " + STAGE_CONFIG_COLUMNS + " from public.application_stage_config "
                     "where organization_id=%s and stage_key=%s for update",
@@ -219,6 +228,7 @@ class ApplicationService:
                 existing = cursor.fetchone()
                 if existing is None:
                     return None
+                _lock_stage_graph(cursor, existing["organization_id"])
                 current_status = existing["status"]
                 if status == current_status:
                     cursor.execute(
