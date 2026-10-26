@@ -315,3 +315,11 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - The PR description was updated with the passing run and the application-creation actor attribution fix.
 - Vercel status checks for `ats`, `ats-staging-api`, and `aqerith` are still pending on the current head; no preview acceptance is claimed.
 - No database migration/write, merge, or deployment occurred.
+
+
+### Creation-route actor propagation regression (2026-10-26)
+
+- Added a route-level test asserting the authenticated `user_id` is passed into `ApplicationService.create_application(payload, user_id)`; this complements the service-level test that checks `app.actor_user_id` is set before the SQL insert.
+- Current PR #69 head: `8b98ca03b628ef5a12ef46312851bd4c278c86da`.
+- CI run #677 is queued for the current head: https://github.com/venugopalc80/ATS/actions/runs/40308229057. Run #675 passed on the previous head, including backend tests, frontend typecheck and production build.
+- Vercel checks on the new head are not yet confirmed. No migration, database write, merge, or deployment occurred.
