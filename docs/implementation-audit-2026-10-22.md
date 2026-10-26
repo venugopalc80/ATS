@@ -427,3 +427,19 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - **Idea 04 remains 41.7% evidenced / 58.3% pending** against the six provisional acceptance criteria. Additional green regression tests increase confidence but do not close the remaining acceptance criteria.
 - **AQERITH overall completion remains unverified.** Detailed acceptance criteria have been reviewed for 5/49 ideas (10.2% audit coverage), which is not implementation completion.
 - Remaining release gates: live authenticated DB/API tenant-isolation tests; staging migration-ledger drift reconciliation; confirmation of backend-vs-browser database privileges; broader candidate-facing confidentiality review; bulk assignment/stage actions and SLA monitoring; reconcile overlapping draft PR #70; Vercel preview acceptance.
+
+
+### Disposable-PostgreSQL tenant membership exercised through FastAPI (2026-10-26)
+
+- Added `backend/tests/test_z_application_database_membership_http.py`. It runs after the disposable migration smoke test in CI and uses the same PostgreSQL 16 test database; it does not connect to staging or production.
+- The test suite uses real `organization_members` rows and the real `get_org_role` database query while sending requests through FastAPI's TestClient. Application lookup is mocked so this isolates the authorization boundary rather than claiming a full database-backed application CRUD test.
+- Verified that a user without membership in the application's organisation receives 403 on application read and transition; the transition service is not called. Verified that a recruiter role receives 403 for stage-configuration writes before the write service is called.
+- First run #761 failed because the test imported `TestClient` from the wrong module. Corrected the import to `fastapi.testclient`; no application code or database migration was changed to address that test-only failure.
+- Current PR #69 head: `7c0d70cb6669a75f8a57bb9c90a6e05a2fada1ae`. Run #762 passed: 54 backend tests (4 skipped because they require optional environment/setup), PostgreSQL migration smoke tests, frontend typecheck, and frontend production build: https://github.com/venugopalc80/ATS/actions/runs/40350562461.
+- This closes the narrow CI-tested membership-role gate for Idea 04, but it does **not** prove live Supabase JWT validation, real Supabase RLS behaviour, or all tenant-isolation paths. Those remain release gates.
+- Vercel checks remain blocked by the daily build-rate limit; preview/runtime acceptance is still pending. No staging/production database writes, migrations, merge, or deployment occurred.
+
+### Updated Idea 04 score (2026-10-26)
+
+- **Idea 04 remains 41.7% evidenced / 58.3% pending** against the six provisional acceptance criteria. The new disposable-database membership tests add useful evidence but do not close a whole acceptance criterion.
+- **AQERITH overall completion remains unverified**; 5/49 ideas have detailed acceptance-criteria evidence (10.2% audit coverage), not product completion.
