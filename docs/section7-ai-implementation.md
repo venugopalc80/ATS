@@ -13,6 +13,7 @@ Status: implementation in review; not merged or deployed.
 - Job-description drafts remain in a versioned draft table until a permitted user reviews and publishes them. Interview kits are versioned and require human review.
 - Recruiter-facing `/ai` workspace with evidence references, feedback/report controls and admin governance forms.
 - Unit tests for prompt injection guardrails, stable fingerprints, provider approval/credentials, API route import and request validation.
+- Evaluation result submission rejects duplicate test-case keys before writing results, preventing ambiguous case counts and repeated-key persistence.
 - GitHub Actions checks for Python compile, backend tests and frontend TypeScript checks.
 
 ## Provider enablement gates
@@ -110,3 +111,10 @@ Do not send real candidate data to an external provider before these gates have 
 - Applied the index migration to ATS-Staging. The latest Supabase performance-advisor query reported **zero remaining unindexed foreign-key findings for the ten Section 7 AI tables**.
 - The advisor reports the newly added indexes as unused because the staging AI tables currently contain zero rows; this is expected on an empty staging dataset and is not a reason to remove foreign-key indexes before production data exists.
 - The wider project still has unrelated unindexed foreign-key findings; this work intentionally does not alter unrelated tables.
+
+
+## Latest branch verification
+
+- Backend and frontend preview deployments for commit `cdd34fd59b51a3744c76db9553b8c4cda8991020` reached `READY`; these are preview deployments only, not production.
+- Subsequent commits add duplicate evaluation-case validation and a regression test. Vercel reports the newer preview checks as blocked by the team's build-rate limit (`upgradeToPro=build-rate-limit`), so the newest code has not yet been verified by a fresh Vercel build.
+- GitHub Actions has not yet returned a workflow run for the latest test commit. Do not treat the new regression test as passed until CI runs.
