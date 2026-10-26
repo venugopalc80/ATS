@@ -370,6 +370,24 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIn("expected_approved_headcount", body)
 
 
+    async def test_funnel_csv_includes_latest_stage_presence_and_status_outcomes(self):
+        response = await analytics_router.analytics_export(
+            organization_id=ORG,
+            report_type="funnel",
+            date_from=date(2026, 10, 1),
+            date_to=date(2026, 10, 22),
+            job_id=None,
+            recruiter_id=None,
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        chunks = [chunk async for chunk in response.body_iterator]
+        body = b"".join(chunk.encode() if isinstance(chunk, str) else chunk for chunk in chunks).decode()
+        self.assertIn("still_in_stage", body)
+        self.assertIn("latest_applications", body)
+        self.assertIn("record_type", body)
+        self.assertIn("outcome", body)
+        self.assertIn("interview", body)
+
     async def test_export_endpoint_sanitizes_untrusted_source_labels(self):
         payload = {
             "sources": [{
