@@ -46,8 +46,10 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
             with connection.cursor() as cursor:
                 cursor.execute("""
                     create table if not exists public.jobs (
-                        id uuid primary key,
+                        id uuid primary key default gen_random_uuid(),
                         organization_id uuid not null,
+                        client_id uuid,
+                        job_code text,
                         title text not null,
                         description text,
                         location text,
@@ -57,10 +59,69 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
                         salary_min numeric,
                         salary_max numeric,
                         salary_currency char(3),
+                        experience_min integer,
+                        experience_max integer,
+                        work_authorization text,
                         required_skills text[] not null default '{}',
+                        preferred_skills text[] not null default '{}',
                         status text not null default 'draft',
+                        recruiter_id uuid,
+                        hiring_manager_id uuid,
+                        created_by uuid,
+                        closed_at timestamptz,
                         created_at timestamptz not null default now(),
                         updated_at timestamptz not null default now()
+                    )
+                """)
+                cursor.execute("""
+                    create table if not exists public.job_requisitions (
+                        id uuid primary key default gen_random_uuid(),
+                        organization_id uuid not null,
+                        requisition_code text not null,
+                        title text not null,
+                        department text,
+                        client_id uuid,
+                        requested_by uuid not null,
+                        hiring_manager_id uuid,
+                        recruiter_id uuid,
+                        headcount integer not null default 1,
+                        justification text not null,
+                        budget_min numeric,
+                        budget_max numeric,
+                        location text,
+                        country_code text,
+                        employment_type text,
+                        work_mode text,
+                        salary_min numeric,
+                        salary_max numeric,
+                        salary_currency char(3),
+                        required_skills text[] not null default '{}',
+                        target_start_date date,
+                        target_close_date date,
+                        status text not null default 'draft',
+                        submitted_at timestamptz,
+                        approved_by uuid,
+                        approved_at timestamptz,
+                        rejected_by uuid,
+                        rejected_at timestamptz,
+                        rejection_reason text,
+                        approval_comment text,
+                        job_id uuid unique,
+                        created_at timestamptz not null default now(),
+                        updated_at timestamptz not null default now(),
+                        unique(organization_id, requisition_code)
+                    )
+                """)
+                cursor.execute("""
+                    create table if not exists public.audit_events (
+                        id uuid primary key default gen_random_uuid(),
+                        organization_id uuid not null,
+                        actor_user_id uuid,
+                        action text not null,
+                        entity_type text not null,
+                        entity_id uuid not null,
+                        metadata jsonb not null default '{}'::jsonb,
+                        created_at timestamptz not null default now()
                     )
                 """)
                 cursor.execute("""
@@ -221,6 +282,124 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
                 self.assertEqual(cursor.fetchone()["total"], 1)
         self.assertTrue(first["success"])
 
+
+class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTestCase):
+    """Exercise the requisition lifecycle against the disposable PostgreSQL service."""
+
+    def setUp(self):
+        self.organization_id = uuid4()
+        self.user_id = uuid4()
+
+    async def _create_requisition(self):
+        from app.schemas.requisitions import RequisitionCreate
+        from app.services.requisition_service import RequisitionService
+
+        payload = RequisitionCreate(
+            organization_id=self.organization_id,
+            title="Integration Platform Engineer",
+            department="Engineering",
+            justification="Database-backed lifecycle regression test",
+            country_code="GB",
+            employment_type="Permanent",
+            work_mode="Hybrid",
+            salary_min=Decimal("65000"),
+            salary_max=Decimal("80000"),
+            salary_currency="GBP",
+            required_skills=["Python", "PostgreSQL"],
+        )
+        return await RequisitionService().create_requisition(payload, self.user_id)
+
+    async def test_requisition_approval_conversion_and_retry_persist_in_postgres(self):
+        from app.services.requisition_service import RequisitionService
+
+        service = RequisitionService()
+        created = await self._create_requisition()
+        requisition_id = created["id"]
+        self.assertEqual(created["status"], "draft")
+
+        submitted = await service.submit(requisition_id, self.user_id)
+        self.assertEqual(submitted["status"], "pending_approval")
+        self.assertIsNotNone(submitted["submitted_at"])
+
+        approved = await service.decide(requisition_id, self.user_id, True, "Budget approved")
+        self.assertEqual(approved["status"], "approved")
+        self.assertEqual(approved["approval_comment"], "Budget approved")
+        self.assertIsNotNone(approved["approved_at"])
+
+        converted = await service.convert_to_job(requisition_id, self.user_id)
+        self.assertFalse(converted["already_converted"])
+        self.assertEqual(converted["requisition"]["status"], "converted")
+        self.assertEqual(converted["job"]["title"], "Integration Platform Engineer")
+        self.assertEqual(converted["job"]["status"], "draft")
+        self.assertEqual(converted["job"]["job_code"], created["requisition_code"])
+
+        retry = await service.convert_to_job(requisition_id, self.user_id)
+        self.assertTrue(retry["already_converted"])
+        self.assertEqual(retry["job"]["id"], converted["job"]["id"])
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select status, job_id from public.job_requisitions where id=%s",
+                    [requisition_id],
+                )
+                persisted_req = cursor.fetchone()
+                self.assertEqual(persisted_req["status"], "converted")
+                self.assertEqual(persisted_req["job_id"], converted["job"]["id"])
+                cursor.execute(
+                    "select count(*) as total from public.jobs where organization_id=%s and job_code=%s",
+                    [self.organization_id, created["requisition_code"]],
+                )
+                self.assertEqual(cursor.fetchone()["total"], 1)
+                cursor.execute(
+                    "select action from public.audit_events where entity_id=%s order by created_at",
+                    [requisition_id],
+                )
+                actions = [row["action"] for row in cursor.fetchall()]
+                self.assertEqual(
+                    actions,
+                    ["requisition.created", "requisition.submitted", "requisition.approved", "requisition.converted"],
+                )
+                cursor.execute(
+                    "select count(*) as total from public.audit_events where action='job.created_from_requisition' and entity_id=%s",
+                    [converted["job"]["id"]],
+                )
+                self.assertEqual(cursor.fetchone()["total"], 1)
+
+    async def test_rejected_requisition_can_be_resubmitted_and_approved(self):
+        from app.services.requisition_service import RequisitionService
+
+        service = RequisitionService()
+        created = await self._create_requisition()
+        first_submission = await service.submit(created["id"], self.user_id)
+        self.assertEqual(first_submission["status"], "pending_approval")
+
+        rejected = await service.decide(created["id"], self.user_id, False, "Please clarify the headcount")
+        self.assertEqual(rejected["status"], "rejected")
+        self.assertEqual(rejected["rejection_reason"], "Please clarify the headcount")
+        self.assertIsNotNone(rejected["rejected_at"])
+
+        resubmitted = await service.submit(created["id"], self.user_id)
+        self.assertEqual(resubmitted["status"], "pending_approval")
+        self.assertIsNone(resubmitted["rejection_reason"])
+        self.assertIsNone(resubmitted["rejected_at"])
+
+        approved = await service.decide(created["id"], self.user_id, True, "Clarification accepted")
+        self.assertEqual(approved["status"], "approved")
+        self.assertEqual(approved["approval_comment"], "Clarification accepted")
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select action from public.audit_events where entity_id=%s order by created_at",
+                    [created["id"]],
+                )
+                actions = [row["action"] for row in cursor.fetchall()]
+        self.assertEqual(
+            actions,
+            ["requisition.created", "requisition.submitted", "requisition.rejected",
+             "requisition.submitted", "requisition.approved"],
+        )
 
 
 if __name__ == "__main__":
