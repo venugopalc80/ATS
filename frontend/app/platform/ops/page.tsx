@@ -73,7 +73,7 @@ export default function PlatformOperationsPage() {
           organization_id: item.organization_id,
           support_case_id: item.id,
           purpose: "Investigate a customer support case in category: " + item.category,
-          scope: ["case_metadata", "case_messages"],
+          scope: ["case_content", "case_messages"],
           duration_minutes: 30,
         }),
       });
