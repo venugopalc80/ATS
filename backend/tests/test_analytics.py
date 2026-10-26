@@ -341,7 +341,7 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(forecast["expected_approved_headcount"])
         self.assertEqual(forecast["confidence"], "unavailable")
         self.assertEqual(forecast["status"], "no_historical_approved_requisitions")
-        self.assertEqual(forecast["trend"], "stable")
+        self.assertEqual(forecast["trend"], "insufficient_history")
 
     async def test_export_endpoint_returns_csv_for_allowlisted_forecast_report(self):
         response = await analytics_router.analytics_export(
