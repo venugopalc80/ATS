@@ -494,9 +494,9 @@ async def get_evidence(assignment_id: UUID, organization_id: UUID,
 async def provider_webhook(provider_key: str, request: Request,
                            x_assessment_signature: str | None = Header(default=None),
                            x_assessment_event_id: str | None = Header(default=None)):
-    safe_provider = "".join(ch for ch in provider_key.upper() if ch.isalnum() or ch == "_")
-    if not safe_provider or len(provider_key) > 100:
+    if not provider_key or len(provider_key) > 100 or any(not (ch.isalnum() or ch == "_") for ch in provider_key):
         raise HTTPException(status_code=400, detail="Invalid provider key")
+    safe_provider = provider_key.upper()
     secret = os.getenv(f"ASSESSMENT_PROVIDER_{safe_provider}_WEBHOOK_SECRET")
     if not secret:
         raise HTTPException(status_code=503, detail="Assessment provider webhook is not configured")
