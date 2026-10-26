@@ -391,3 +391,11 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 - The PostgreSQL smoke test successfully exercised migration rerun/partial-state repair and reached the transition-history assertion, but that assertion assumed `created_at desc` always yields the just-inserted event. PostgreSQL `now()` is transaction-stable, so creation and transition events in the same transaction can share a timestamp.
 - Fixed the test to select the expected transition by its unique reason (`CV reviewed`) instead of relying on timestamp ordering.
 - Run #723 failed only at that assertion after the preceding migration and trigger checks had progressed; current fix commit: `61831d18713c6998a5e9e6d29b69c7937f7babd3`. New CI is pending.
+
+
+### PostgreSQL migration smoke test passed (2026-10-26)
+
+- Run #724 backend job passed, including all backend unit tests and the disposable PostgreSQL 16 migration smoke test.
+- The smoke test now verifies both timestamped migrations can be applied, that rerunning after deliberately dropping the stage-history update trigger and deleting the `screening` stage restores both, that existing applications receive a baseline history row, that authenticated backend actor/reason context is captured, that existing/new organisations receive ten stages, and that browser roles have no direct SELECT grants while RLS is enabled.
+- Run #724 frontend typecheck also passed; production build was still in progress at the latest poll. Run: https://github.com/venugopalc80/ATS/actions/runs/40321305007.
+- Vercel preview checks remain blocked by the team's build-rate limit. No staging/production migrations or writes occurred.
