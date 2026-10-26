@@ -14,6 +14,8 @@ type Funnel = {
   stage_conversions: Array<{ stage: string; next_stage: string; entered_applications: number; reached_next_applications: number; conversion_rate: number | null }>;
   stage_waiting_time: Array<{ stage: string; completed_intervals: number; median_days: number | null; p75_days: number | null; p90_days: number | null }>;
   outcomes: Record<string, number>;
+  current_stage_presence: Array<{ stage: string; latest_applications: number; still_in_stage: number }>;
+  outcome_summary: { withdrawn: number; rejected: number; hired: number; active: number; definition: string };
   limitations: string[];
 };
 type Workload = { recruiters: Array<{ user_id: string; name: string; role: string; open_vacancies: number; on_hold_vacancies: number; active_applications: number; upcoming_interviews: number; open_tasks: number; overdue_tasks: number }>; unassigned: { unassigned_open_vacancies: number; unassigned_open_tasks: number }; definitions: { note: string } };
@@ -249,6 +251,7 @@ export default function AnalyticsPage() {
               {!funnel?.stage_waiting_time.length && <div className="analytics-empty">No completed stage intervals are available yet.</div>}
               {funnel?.stage_waiting_time.map((stage) => <div className="analytics-wait-row" key={stage.stage}><div><strong>{nice(stage.stage)}</strong><div className="muted-small">{number(stage.completed_intervals)} completed intervals</div></div><div className="analytics-wait-stats"><span><strong>{number(stage.median_days, 1)}</strong><small>Median days</small></span><span><strong>{number(stage.p75_days, 1)}</strong><small>P75</small></span><span><strong>{number(stage.p90_days, 1)}</strong><small>P90</small></span></div></div>)}
               <div className="analytics-subsection"><strong>Current recorded outcomes</strong>{Object.entries(funnel?.outcomes ?? {}).map(([status, count]) => <div className="analytics-simple-row" key={status}><span>{nice(status)}</span><strong>{number(count)}</strong></div>)}</div>
+              <div className="analytics-subsection"><strong>Latest recorded stage</strong><div className="muted-small">Current-stage presence is based on each cohort application's latest history event; active counts exclude hired, rejected and withdrawn applications.</div>{funnel?.current_stage_presence.map((stage) => <div className="analytics-simple-row" key={stage.stage}><span>{nice(stage.stage)}</span><strong>{number(stage.still_in_stage)} still in stage <small>· {number(stage.latest_applications)} latest records</small></strong></div>)}</div>
               {funnel?.limitations.length ? <details className="analytics-details"><summary>Metric notes and limitations</summary><ul>{funnel.limitations.map((item) => <li key={item}>{item}</li>)}</ul></details> : null}
             </section>
           </div>
