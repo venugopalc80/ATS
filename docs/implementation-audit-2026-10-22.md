@@ -443,3 +443,27 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 
 - **Idea 04 remains 41.7% evidenced / 58.3% pending** against the six provisional acceptance criteria. The new disposable-database membership tests add useful evidence but do not close a whole acceptance criterion.
 - **AQERITH overall completion remains unverified**; 5/49 ideas have detailed acceptance-criteria evidence (10.2% audit coverage), not product completion.
+
+
+### Staging/production migration drift recheck (read-only, 2026-10-26)
+
+- Rechecked the **current renamed migration versions** against both Supabase projects after the PR branch moved the migration timestamps.
+- ATS-Staging (`riauyrhfnlsxmtgipuxi`):
+  - `public.application_stage_history` exists; `public.application_stage_config` does not.
+  - The latest migration ledger entry at/after the inspected cutoff is `20261026143744:section9_support_content_scope`; neither Idea 04 migration is recorded.
+  - The current `applications_status_check` still allows only `new`, `screening`, `submitted`, `interview`, `offer`, `hired`, `rejected`, and `withdrawn`. It does not yet allow `shortlisted` or `assessment`.
+  - Read-only privilege checks report `service_role` can SELECT stage history and `authenticated` cannot. The config-table grant check is not applicable while that table is absent.
+- Production (`olsziyaepfesjtkceuzo`):
+  - Neither `application_stage_history` nor `application_stage_config` exists.
+  - The same legacy application status constraint remains; no migration-ledger entries at/after the inspected cutoff were returned.
+- **No SQL writes were executed.** These queries were read-only.
+
+#### Safe reconciliation proposal (not executed)
+
+1. Export and preserve the current staging definitions for the history table, its constraints/indexes, policies, trigger function/triggers, grants, and migration ledger; keep this snapshot with the release record.
+2. Compare the captured definitions to `20261026150000_application_stage_history.sql`. Existing staging objects appear to match the intended objects, but the ledger does not attest that the migration ran. Do not manually insert a ledger row.
+3. In a controlled staging release window, run the tracked history migration through the normal Supabase migration workflow only after a reviewer confirms its idempotent `IF NOT EXISTS`/drop-and-recreate operations are compatible with the captured schema. Verify the migration ledger entry, object definitions, baseline history, RLS, and grants immediately afterwards.
+4. Apply `20261026150100_application_stage_config.sql` to staging only after step 3 passes. Verify the status constraint includes all ten supported statuses, ten stage rows per existing organisation, trigger-based seeding for a newly created test organisation, and expected service-role/browser-role privileges.
+5. Run staging API regression tests, including a transition into `shortlisted` and `assessment`, before considering production. For production, use the same ordered migrations in an approved release window with backup/rollback planning; no migration has been authorised or run here.
+
+This remains a proposal only. Production/staging schema changes require explicit release approval.
