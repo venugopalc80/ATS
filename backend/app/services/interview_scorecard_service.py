@@ -161,7 +161,7 @@ def get_template_for_interview(organization_id: UUID, interview_id: UUID) -> dic
             cursor.execute(
                 """select i.id as interview_id, i.application_id, i.interviewer_ids, a.job_id
                    from public.interviews i
-                   join public.applications a on a.id=i.application_id
+                   join public.applications a on a.id=i.application_id and a.organization_id=i.organization_id
                    where i.organization_id=%s and i.id=%s""",
                 [organization_id, interview_id],
             )
@@ -211,7 +211,7 @@ def save_feedback(organization_id: UUID, interview_id: UUID, user_id: UUID,
             cursor.execute(
                 """select i.id, i.application_id, i.interviewer_ids, i.status as interview_status, a.job_id
                    from public.interviews i
-                   join public.applications a on a.id=i.application_id
+                   join public.applications a on a.id=i.application_id and a.organization_id=i.organization_id
                    where i.organization_id=%s and i.id=%s for update of i""",
                 [organization_id, interview_id],
             )
