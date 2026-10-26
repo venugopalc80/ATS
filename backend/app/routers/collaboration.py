@@ -68,7 +68,7 @@ def _add_or_reactivate_group_member(cursor, conversation_id: UUID, target_id: UU
       insert into public.conversation_members (conversation_id,user_id,member_role,last_read_at)
       values (%s,%s,'member',now())
       on conflict (conversation_id,user_id) do update
-        set left_at=null, joined_at=now(), last_read_at=now()
+        set left_at=null, joined_at=now(), last_read_at=now(), member_role='member'
         where public.conversation_members.left_at is not null
     """, [conversation_id, target_id])
     return cursor.rowcount > 0
