@@ -263,7 +263,7 @@ async def platform_list_support_cases(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select id, organization_id, category, priority, status, subject,
+                    """select id, organization_id, category, priority, status,
                               assigned_operator_id, created_at, updated_at
                        from public.support_cases
                        where (%s::text is null or status=%s)
