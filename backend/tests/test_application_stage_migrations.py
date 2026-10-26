@@ -15,8 +15,8 @@ import psycopg
 
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = [
-    ROOT / "supabase" / "migrations" / "20261026120000_application_stage_history.sql",
-    ROOT / "supabase" / "migrations" / "20261026120100_application_stage_config.sql",
+    ROOT / "supabase" / "migrations" / "20261026150000_application_stage_history.sql",
+    ROOT / "supabase" / "migrations" / "20261026150100_application_stage_config.sql",
 ]
 ACTOR = "22222222-2222-4222-8222-222222222222"
 ACTOR_UUID = UUID(ACTOR)
