@@ -1,0 +1,92 @@
+# AQERITH Idea 02 — Jobs & Requisitions Handover
+
+## Current state
+- Feature branch: `feat/idea-02-jobs-requisitions`
+- Draft PR: https://github.com/venugopalc80/ATS/pull/59
+- PR base: `feat/recruiter-tasks-followups` (Idea 01 work is not merged to main)
+- Production database and production deployment: untouched
+- Migrations `024_job_requisitions.sql` and `025_job_requisition_fk_indexes.sql`: applied to ATS-Staging only; production untouched
+- Current approval model: organisation owner/admin approval; configurable multi-step approvals are out of scope for this slice
+- Job conversion creates a draft operational job; recruiters must open/publish it separately
+
+## Implemented in this slice
+- Separate organisation-scoped `job_requisitions` table with controlled status, salary/budget/headcount validation, approver metadata, and a unique optional job link
+- Authenticated API endpoints for list, create draft, update draft/rejected request, submit, approve, reject, and convert to job
+- Idempotent conversion: repeated conversion requests return the existing linked job
+- Requisition and job activity entries written to `audit_events`; edit events capture old/new values for changed fields, including recruiter/hiring-manager reassignment
+- Jobs & Requisitions page with draft creation/edit-resume, tenant-scoped recruiter and hiring-manager assignment controls, search/status filtering, sortable columns, visible pagination, submit/approve/reject/convert actions
+- Vacancy close action uses a soft close instead of deleting the job row, preserving application links
+- Server-side status-transition and role checks for job updates; organisation membership and eligible-role checks for job/requisition assignment links
+- Static requisition assignee route registered before the dynamic requisition-ID route so `/assignees` is not captured by UUID path matching
+
+## Acceptance tracker
+- [x] Requisition database migration authored with tenant scope, RLS policies, and indexes
+- [x] Draft creation API and input validation
+- [x] Submit/approve/reject lifecycle endpoints with server-side role checks
+- [x] Approved requisition conversion to a linked draft job, idempotent on retry
+- [x] Requisition/job audit events added for key actions
+- [x] Vacancy closure preserves existing job/application rows
+- [x] Apply migrations to ATS-Staging and verify table columns, RLS, policies, and foreign-key indexes against the live staging schema
+- [x] Add draft edit/resume in the UI for draft/rejected requisitions
+- [x] Add table sorting and visible pagination controls to the workspace; fetch additional 100-row API chunks as users advance, so records beyond the first 100 can be reached without loading the entire register up front
+- [x] Add organisation-scoped recruiter/hiring-manager selectors backed by eligible member roles; validate role and organisation on the API; record old/new assignment values in audit metadata
+- [x] Expand tests for draft edit validation, role restrictions, invalid approval transition, cross-organisation client and assignee checks, eligible assignment roles, idempotent conversion retry, old/new requisition and job assignment audit metadata, invalid job status transitions, and route ordering
+- [x] Add PostgreSQL-backed job status-transition persistence test covering draft → open persistence, invalid open → draft rejection, and persisted old/new status audit metadata; verified with requisition lifecycle coverage in [GitHub Actions run 40307114569](https://github.com/venugopalc80/ATS/actions/runs/40307114569) (56 backend tests, frontend typecheck and production build passed)
+- [x] Verify latest requisition-list query regression tests in GitHub Actions run 39807839661: 51 backend tests run, 4 skipped; backend suite passed, frontend typecheck passed, and production build passed
+- [x] Latest feature-branch Vercel preview reached READY for code commit `19ee251151c01f30104349a1f8a02dbb9a12eb06`: [open preview](https://ats-git-feat-idea-02-jobs-requisitions-the-pixel-muses.vercel.app); prior build-rate limiting no longer blocks this feature preview
+- [x] Latest backend unit-test run 39805425180 passed: 48 tests run, 4 skipped, including route ordering, job status-transition and assignment-role regression tests
+- [x] Latest backend suite in GitHub Actions run 39805687840 passed on code commit `80303c5d81de39bf4419d19e5de2a210d5db0b15`: 49 tests run, 4 skipped, including old/new job reassignment audit metadata
+- [x] Full automated checks in GitHub Actions run 39805687840 passed: 49 backend tests (4 skipped), frontend typecheck, and production build
+- [x] Latest automated checks in [GitHub Actions run 39807839661](https://github.com/venugopalc80/ATS/actions/runs/39807839661) passed on commit `8b0363251bf2697df8f3468096c05b22b7982fd3`: 51 backend tests (4 skipped), frontend typecheck, and production build
+- [x] GitHub Actions run [39843992295](https://github.com/venugopalc80/ATS/actions/runs/39843992295) passed on commit `edbecae3b60919c4bd3a9b8f6dfb4ff6f02db1e7`: all 51 backend tests passed with disposable PostgreSQL enabled (including four PostgreSQL recruitment integration tests; no tests skipped), plus frontend typecheck and production build
+- [x] Add PostgreSQL-backed requisition lifecycle integration tests for create → submit → approve → convert, idempotent conversion retry, persisted audit events, and reject → resubmit → approve; verified by [GitHub Actions run 40306886614](https://github.com/venugopalc80/ATS/actions/runs/40306886614) with 55 backend tests passing against disposable PostgreSQL
+- [x] Verify job status-transition persistence against disposable PostgreSQL: allowed transition persists, invalid transition is rejected without changing stored status, and `job.updated` audit metadata records old/new status
+- [x] Latest feature-branch preview deployment is READY; authenticated browser acceptance is still outstanding
+- [ ] Authenticated staging/browser acceptance: verify assignment selectors, role restrictions, cross-organisation denial, mobile layout, empty/loading/error states, application preservation
+- [ ] Verify preview deployment; do not deploy production or merge before acceptance passes
+
+## Main implementation files
+- `supabase/migrations/024_job_requisitions.sql`
+- `backend/app/schemas/requisitions.py`
+- `backend/app/services/requisition_service.py`
+- `backend/app/routers/requisitions.py`
+- `backend/app/routers/jobs.py`
+- `backend/app/main.py`
+- `backend/tests/test_requisitions.py`
+- `frontend/app/requisitions/page.tsx`
+- `frontend/app/jobs/page.tsx`
+
+## Staging verification
+- `job_requisitions` exists in ATS-Staging with RLS enabled.
+- Three tenant-scoped SELECT/INSERT/UPDATE policies are present; insert checks `requested_by = auth.uid()` and tenant-scoped client/recruiter/hiring-manager links.
+- Migration 025 adds covering indexes for requisition foreign keys; the performance advisor no longer reports requisition foreign keys as unindexed.
+- The security advisor returned no findings specific to `job_requisitions`. It still reports pre-existing findings for `candidate_documents`, the shared `is_org_member` SECURITY DEFINER helper, and leaked-password protection.
+- No requisition rows were created as part of schema verification.
+
+## Safety notes
+- Keep the PR as draft until all unchecked acceptance items are addressed.
+- Do not apply this migration to production.
+- Existing API job deletion is retained as a compatibility route but now closes rather than physically deleting a vacancy.
+- Review direct database grants and RLS with the staging advisor after migration; backend database access is privileged and therefore must enforce organisation membership and cross-tenant link validation itself.
+
+
+## Additional security hardening — migration 026
+- Migration `026_job_requisition_role_rls.sql` tightens direct authenticated Supabase access: requisition creators must have an eligible organisation role; hiring-manager and recruiter assignments must use eligible roles; requester updates are limited to their own draft/rejected requisitions while owners/admins retain administrative update access.
+- This mirrors the API's existing role and assignment checks at the database RLS boundary, preventing direct Supabase clients from bypassing those restrictions.
+- Migration 026 has been committed to the Idea 02 feature branch but has **not** been applied to ATS-Staging or production. Apply to staging only after the migration review and CI checks pass, then verify with authenticated RLS tests.
+- The acceptance workflow now runs when `supabase/**` changes, so database migration changes trigger the same backend integration and frontend build checks.
+- New database-outage regression tests cover 503 responses during requisition create/update link validation. GitHub Actions run #755 passed both backend PostgreSQL integration and frontend typecheck/build jobs. Run #795, which includes migration 026 and workflow path changes, is currently in progress at handover update time.
+
+
+## Disposable migration/RLS validation harness
+- Added `supabase/tests/026_job_requisition_role_rls.sql`, which creates an isolated minimal Supabase-compatible PostgreSQL fixture, applies migrations 024, 025 and 026 in order, and exercises authenticated RLS behaviour.
+- Added a dedicated `migration-rls-tests` GitHub Actions job using its own ephemeral PostgreSQL 16 service. It does not connect to ATS-Staging or production.
+- Coverage includes recruiter and hiring-manager creation, viewer denial, invalid role assignments, cross-organisation client/assignee denial, requester ownership/status update restrictions, admin update access, and protected lifecycle-column grants.
+- The harness is committed but **not yet verified by a completed GitHub Actions run**. Treat the test result as pending until the job executes successfully; no claim is made that migration 026 has been applied.
+
+
+### First RLS harness execution and correction
+- GitHub Actions run [41199295316](https://github.com/venugopalc80/ATS/actions/runs/41199295316) executed the isolated PostgreSQL job and confirmed migrations 024, 025 and 026 applied successfully; initial role checks progressed through recruiter creation, hiring-manager creation, viewer denial, invalid assignee denial, and own-draft update.
+- The run then failed on a malformed PL/pgSQL anonymous-block delimiter in the remaining requester update assertions (`DO $` rather than `DO $$`). This was a test-harness syntax defect, not a migration failure.
+- An attempted correction in commit `78097c5e5bed08276e7abf694d279f59bd7b9a3d` did not change the stored SQL file; the next run exposed the same delimiter error. The actual file correction is now committed as `bd7313a19aeb88ab8fbd6bba4b77d9a195598d01`. A fresh CI execution is in progress.
+- Staging and production remain unchanged; migration 026 is still unapplied.
