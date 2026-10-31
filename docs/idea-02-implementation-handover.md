@@ -76,3 +76,10 @@
 - Migration 026 has been committed to the Idea 02 feature branch but has **not** been applied to ATS-Staging or production. Apply to staging only after the migration review and CI checks pass, then verify with authenticated RLS tests.
 - The acceptance workflow now runs when `supabase/**` changes, so database migration changes trigger the same backend integration and frontend build checks.
 - New database-outage regression tests cover 503 responses during requisition create/update link validation. GitHub Actions run #755 passed both backend PostgreSQL integration and frontend typecheck/build jobs. Run #795, which includes migration 026 and workflow path changes, is currently in progress at handover update time.
+
+
+## Disposable migration/RLS validation harness
+- Added `supabase/tests/026_job_requisition_role_rls.sql`, which creates an isolated minimal Supabase-compatible PostgreSQL fixture, applies migrations 024, 025 and 026 in order, and exercises authenticated RLS behaviour.
+- Added a dedicated `migration-rls-tests` GitHub Actions job using its own ephemeral PostgreSQL 16 service. It does not connect to ATS-Staging or production.
+- Coverage includes recruiter and hiring-manager creation, viewer denial, invalid role assignments, cross-organisation client/assignee denial, requester ownership/status update restrictions, admin update access, and protected lifecycle-column grants.
+- The harness is committed but **not yet verified by a completed GitHub Actions run**. Treat the test result as pending until the job executes successfully; no claim is made that migration 026 has been applied.
