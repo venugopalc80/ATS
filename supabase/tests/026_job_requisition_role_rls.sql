@@ -72,7 +72,8 @@ insert into public.job_requisitions
  (id,organization_id,requisition_code,title,requested_by,justification,status)
 values
  ('40000000-0000-0000-0000-000000000001','10000000-0000-0000-0000-000000000001','REQ-SEED-1','Other recruiter draft','20000000-0000-0000-0000-000000000005','Seed row','draft'),
- ('40000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','REQ-SEED-2','Submitted recruiter request','20000000-0000-0000-0000-000000000001','Seed row','pending_approval'),\n ('40000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','REQ-SEED-3','Own recruiter draft','20000000-0000-0000-0000-000000000001','Seed row','draft');
+ ('40000000-0000-0000-0000-000000000002','10000000-0000-0000-0000-000000000001','REQ-SEED-2','Submitted recruiter request','20000000-0000-0000-0000-000000000001','Seed row','pending_approval'),
+ ('40000000-0000-0000-0000-000000000003','10000000-0000-0000-0000-000000000001','REQ-SEED-3','Own recruiter draft','20000000-0000-0000-0000-000000000001','Seed row','draft');
 
 set role authenticated;
 
@@ -132,8 +133,8 @@ end $$;
 -- A requester can edit their own draft, but not another requester's draft
 -- or their own submitted request.
 update public.job_requisitions set title='Own draft edited'
-where id='40000000-0000-0000-0000-000000000002';
-do $$ declare affected integer; begin
+where id='40000000-0000-0000-0000-000000000003';
+do $ declare affected integer; begin
  update public.job_requisitions set title='Hijacked draft'
  where id='40000000-0000-0000-0000-000000000001';
  get diagnostics affected = row_count;
