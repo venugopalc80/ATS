@@ -73,16 +73,25 @@ class CandidateService:
                     raise RuntimeError("Candidate was not created")
                 return row
 
-    async def get_candidate(self, candidate_id: UUID) -> dict[str, Any] | None:
+    async def get_candidate_for_member(
+        self, candidate_id: UUID, user_id: UUID
+    ) -> dict[str, Any] | None:
+        """Only return candidate data to a member of the candidate's organisation."""
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     f"""
                     select {CANDIDATE_COLUMNS}
-                    from public.candidates
-                    where id = %s
+                    from public.candidates c
+                    where c.id = %s
+                      and exists (
+                          select 1
+                          from public.organization_members om
+                          where om.organization_id = c.organization_id
+                            and om.user_id = %s
+                      )
                     """,
-                    [candidate_id],
+                    [candidate_id, user_id],
                 )
                 return cursor.fetchone()
 
