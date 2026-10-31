@@ -55,6 +55,31 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                     "insert into public.jobs(id,organization_id) values (%s,%s) on conflict (id) do nothing",
                     (OTHER_JOB, OTHER_ORG),
                 )
+                # The disposable database may have been initialised by another
+                # integration fixture with a reduced candidates table. Bring only
+                # this test database's candidate columns up to the service contract.
+                for statement in (
+                    "alter table public.candidates add column if not exists first_name text",
+                    "alter table public.candidates add column if not exists last_name text",
+                    "alter table public.candidates add column if not exists email text",
+                    "alter table public.candidates add column if not exists phone text",
+                    "alter table public.candidates add column if not exists city text",
+                    "alter table public.candidates add column if not exists region text",
+                    "alter table public.candidates add column if not exists country_code text",
+                    "alter table public.candidates add column if not exists status text",
+                    "alter table public.candidates add column if not exists current_title text",
+                    "alter table public.candidates add column if not exists years_experience numeric",
+                    "alter table public.candidates add column if not exists skills text[]",
+                    "alter table public.candidates add column if not exists resume_path text",
+                    "alter table public.candidates add column if not exists resume_text text",
+                    "alter table public.candidates add column if not exists ai_summary text",
+                    "alter table public.candidates add column if not exists consent_recorded_at timestamptz",
+                    "alter table public.candidates add column if not exists consent_purpose text",
+                    "alter table public.candidates add column if not exists retention_until timestamptz",
+                    "alter table public.candidates add column if not exists created_at timestamptz default now()",
+                    "alter table public.candidates add column if not exists updated_at timestamptz default now()",
+                ):
+                    cursor.execute(statement)
                 cursor.execute(
                     "insert into public.candidates(id,organization_id,first_name) values (%s,%s,'Private Candidate') "
                     "on conflict (id) do update set first_name=excluded.first_name",
