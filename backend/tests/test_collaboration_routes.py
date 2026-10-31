@@ -166,5 +166,104 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertEqual(result, {"added": [str(reactivated_id)]})
 
 
+    def test_owner_leaving_transfers_ownership_to_oldest_active_member(self):
+        conversation_id, owner_id, successor_id = uuid4(), uuid4(), uuid4()
+
+        class LeaveCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.rows_to_fetch = [
+                    {"joined_at": "joined"},
+                    {"kind": "group", "member_role": "owner"},
+                    {"user_id": successor_id},
+                ]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append((query, params))
+
+            def fetchone(self):
+                return self.rows_to_fetch.pop(0)
+
+        cursor = LeaveCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(
+                collaboration.leave_group(
+                    conversation_id=conversation_id,
+                    user_id=owner_id,
+                )
+            )
+
+        self.assertEqual(result, {"left": True, "ownership_transferred": True})
+        self.assertTrue(any("set member_role='owner'" in query for query, _ in cursor.queries))
+        self.assertTrue(any("order by cm.joined_at asc limit 1" in query for query, _ in cursor.queries))
+        self.assertTrue(any("'member_left'" in query for query, _ in cursor.queries))
+
+    def test_last_owner_leaving_archives_group(self):
+        conversation_id, owner_id = uuid4(), uuid4()
+
+        class LeaveCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.rows_to_fetch = [
+                    {"joined_at": "joined"},
+                    {"kind": "group", "member_role": "owner"},
+                    None,
+                ]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.rows_to_fetch.pop(0)
+
+        cursor = LeaveCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(
+                collaboration.leave_group(
+                    conversation_id=conversation_id,
+                    user_id=owner_id,
+                )
+            )
+
+        self.assertEqual(result, {"left": True, "ownership_transferred": True})
+        self.assertTrue(any("set archived_at=now()" in query for query in cursor.queries))
+
+    def test_direct_conversation_cannot_be_left_through_group_endpoint(self):
+        conversation_id, user_id = uuid4(), uuid4()
+
+        class DirectCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.rows_to_fetch = [
+                    {"joined_at": "joined"},
+                    {"kind": "direct", "member_role": "member"},
+                ]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.rows_to_fetch.pop(0)
+
+        cursor = DirectCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(
+                    collaboration.leave_group(
+                        conversation_id=conversation_id,
+                        user_id=user_id,
+                    )
+                )
+
+        self.assertEqual(error.exception.status_code, 422)
+        self.assertFalse(any("set left_at=now()" in query for query in cursor.queries))
+
+
 if __name__ == "__main__":
     unittest.main()
