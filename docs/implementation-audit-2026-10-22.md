@@ -478,3 +478,14 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Current PR #69 head: `87d89f68cd9e57152af83857a8b8f6a92111f784`. GitHub Actions run #790 passed: 57 backend tests (4 skipped for optional environment/setup), PostgreSQL 16 migration smoke test, frontend typecheck, and frontend production build: https://github.com/venugopalc80/ATS/actions/runs/41190613772.
 - This is an input-integrity safeguard, not a complete consent-management system. A controlled import pathway for historic consent evidence and a dedicated consent withdrawal/update workflow remain to be designed and tested.
 - No staging/production migrations or data writes, merge, or deployment were performed.
+
+
+### Candidate tenant-scoped mutation hardening (2026-10-31)
+
+- Review of `backend/app/services/candidate_service.py` found candidate update and delete SQL used only `candidate_id` in their predicates. The API checked organisation membership before calling those methods, but the database mutation itself did not independently enforce the organisation boundary.
+- Updated candidate update and delete service methods to require the organisation ID and include both `id` and `organization_id` in the SQL predicate. The no-op update/read path is also tenant-scoped. The API passes the organisation ID from the candidate record it has already authorised and returns 404 if the scoped update no longer finds a row.
+- Added `backend/tests/test_candidate_tenant_mutations.py` to assert that update/delete SQL includes both identifiers and that a candidate not found under the supplied organisation is not updated or deleted.
+- These are unit-level SQL-contract tests using mocked connections; they do not replace an integration test against the real Supabase RLS/database roles.
+- Current PR #69 head after these changes: `f9ea9291e1818aa4167db71fb7da43f85db8e016`. CI is running for the new commits; results are not yet verified.
+- The candidate detail read still resolves the candidate by ID before checking membership, so it can distinguish a nonexistent ID (404) from an existing cross-tenant ID (403). This is an existence-oracle concern to review separately; no claim is made that all candidate endpoints now conceal record existence.
+- No staging/production database writes, migrations, merge, or production deployment were performed.
