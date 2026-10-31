@@ -205,10 +205,17 @@ async def send_message(conversation_id: UUID, payload: MessageCreate, user_id: U
         raise HTTPException(status_code=422, detail="Message cannot be empty")
     with get_connection() as connection:
         with connection.cursor() as cursor:
+            cursor.execute("""
+              select id from public.conversations
+              where id=%s and archived_at is null
+              for update
+            """, [conversation_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Conversation not found")
             _member(cursor, conversation_id, user_id)
             cursor.execute("""
-              insert into public.messages (conversation_id,sender_user_id,body,client_message_id)
-              values (%s,%s,%s,%s)
+              insert into public.messages (conversation_id,sender_user_id,body,client_message_id,created_at)
+              values (%s,%s,%s,%s,clock_timestamp())
               on conflict (conversation_id,sender_user_id,client_message_id)
               do update set client_message_id=excluded.client_message_id
               returning id,sender_user_id,body,created_at
@@ -222,6 +229,13 @@ async def send_message(conversation_id: UUID, payload: MessageCreate, user_id: U
 async def mark_read(conversation_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     with get_connection() as connection:
         with connection.cursor() as cursor:
+            cursor.execute("""
+              select id from public.conversations
+              where id=%s and archived_at is null
+              for update
+            """, [conversation_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Conversation not found")
             _member(cursor, conversation_id, user_id)
             cursor.execute("update public.conversation_members set last_read_at=greatest(coalesce(last_read_at,'-infinity'::timestamptz),clock_timestamp()) where conversation_id=%s and user_id=%s",
                            [conversation_id,user_id])
