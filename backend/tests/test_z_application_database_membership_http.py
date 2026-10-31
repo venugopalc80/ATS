@@ -20,6 +20,8 @@ RECRUITER = UUID("dddddddd-dddd-4ddd-8ddd-dddddddddddd")
 APPLICATION = UUID("cccccccc-cccc-4ccc-8ccc-cccccccccccc")
 JOB = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 CANDIDATE = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
+OTHER_JOB = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
+OTHER_CANDIDATE = UUID("ffffffff-ffff-4fff-8fff-ffffffffffff")
 NOW = "2026-10-14T12:00:00+00:00"
 
 
@@ -51,18 +53,18 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                 )
                 cursor.execute(
                     "insert into public.jobs(id,organization_id) values (%s,%s) on conflict (id) do nothing",
-                    (JOB, OTHER_ORG),
+                    (OTHER_JOB, OTHER_ORG),
                 )
                 cursor.execute(
                     "insert into public.candidates(id,organization_id) values (%s,%s) on conflict (id) do nothing",
-                    (CANDIDATE, OTHER_ORG),
+                    (OTHER_CANDIDATE, OTHER_ORG),
                 )
                 cursor.execute(
                     "insert into public.applications "
                     "(id,organization_id,job_id,candidate_id,source,status,match_explanation) "
                     "values (%s,%s,%s,%s,'careers_page','new','confidential recruiter assessment') "
                     "on conflict (id) do nothing",
-                    (APPLICATION, OTHER_ORG, JOB, CANDIDATE),
+                    (APPLICATION, OTHER_ORG, OTHER_JOB, OTHER_CANDIDATE),
                 )
             connection.commit()
 
