@@ -1,5 +1,4 @@
 import unittest
-from contextlib import contextmanager
 from unittest.mock import MagicMock, patch
 from uuid import UUID
 
@@ -46,6 +45,18 @@ class CandidateTenantMutationTests(unittest.IsolatedAsyncioTestCase):
         sql, params = self.cursor.execute.call_args.args
         self.assertIn("where id = %s and organization_id = %s", sql.lower())
         self.assertEqual(params, ["Tampered", CANDIDATE, OTHER_ORG])
+        self.assertIsNone(result)
+
+    async def test_no_op_update_read_is_also_tenant_scoped(self):
+        self.cursor.fetchone.return_value = None
+        with patch("app.services.candidate_service.get_connection", return_value=self.connection_context):
+            result = await CandidateService().update_candidate(
+                CANDIDATE, OTHER_ORG, CandidateUpdate()
+            )
+
+        sql, params = self.cursor.execute.call_args.args
+        self.assertIn("where id = %s and organization_id = %s", sql.lower())
+        self.assertEqual(params, [CANDIDATE, OTHER_ORG])
         self.assertIsNone(result)
 
     async def test_delete_query_scopes_candidate_id_and_organization_id(self):
