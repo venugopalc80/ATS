@@ -68,3 +68,19 @@ Production is read-only for this work.
 - Treat webhook payloads as untrusted until signature verification succeeds.
 - Do not rewrite past application-stage events when labels/configuration change.
 - No production schema changes, production data changes, merges, or deployments as part of exploratory implementation.
+
+
+## Current implementation status — 2026-10-31
+
+Section 9 implementation is now present on `feat/section9-commercial-operations`:
+
+- **Idea 46:** subscription plan and entitlement schema, billing APIs, Stripe Checkout, webhook signature verification, idempotent receipt handling, subscription history and billing UI are implemented. Backend entitlement policy helpers exist, but they are not yet wired into all protected recruitment operations. Stripe payment-failure/recovery lifecycle handling, equal-second event reconciliation and end-to-end provider tests remain open.
+- **Idea 47:** organisation settings schema, owner/admin API, versioning, audit and settings UI are implemented. Concurrency and role acceptance tests remain open.
+- **Idea 48:** resumable onboarding progress, searchable help content, API and initial UI are implemented. Broader content, UX and privacy acceptance remain open.
+- **Idea 49:** scoped support cases, customer-approved time-limited access grants, support APIs and operations/support UIs are implemented. Deeper expiry/revocation integration tests and privileged platform-operator provisioning remain open.
+- Staging-only migrations and seed content have been applied and checked. Production has not been changed.
+- GitHub Actions runs 41198692173 (billing) and 41198692190 (acceptance) passed on the code commit before the progress-document update. The documentation-only update triggered fresh validation runs 41200410637 and 41200410650; those are pending at the time of this update.
+
+The feature branch is 84 commits ahead of `main` and 1 commit behind. The one base-branch commit is an additive Section 8 retention-exception integrity migration. Incorporate it and rerun validation before release review.
+
+Current estimated feature completion remains 47% overall. These are engineering scope estimates, not test coverage or release readiness. Keep PR #81 in draft; do not merge or deploy without explicit approval.
