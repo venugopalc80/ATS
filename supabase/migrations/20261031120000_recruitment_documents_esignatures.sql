@@ -227,6 +227,17 @@ create policy recruitment_signature_events_member_read on public.recruitment_sig
 create policy recruitment_access_events_member_read on public.recruitment_document_access_events
   for select using (public.is_org_member(organization_id));
 
+-- Recruitment document data is accessed through the authenticated backend API.
+-- Do not expose table privileges directly to browser roles; the backend performs
+-- organisation membership and hiring-role checks before every operation.
+revoke all on public.recruitment_document_templates,
+  public.recruitment_document_template_versions,
+  public.recruitment_documents,
+  public.recruitment_document_signers,
+  public.recruitment_signature_events,
+  public.recruitment_document_access_events
+  from anon, authenticated;
+
 insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
 values ('recruitment-documents','recruitment-documents',false,20971520,
   array['application/pdf','application/vnd.openxmlformats-officedocument.wordprocessingml.document'])
