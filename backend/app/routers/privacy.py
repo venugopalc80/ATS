@@ -80,6 +80,15 @@ class PrivacyRequestCreate(BaseModel):
     request_type: RequestType
     requester_email: str | None = Field(default=None, max_length=320)
     requested_scope: dict = Field(default_factory=dict)
+    # The organisation must set this using the applicable jurisdiction and request facts.
+    # We deliberately do not guess a statutory deadline from the request type alone.
+    due_at: datetime | None = None
+
+    @model_validator(mode="after")
+    def validate_due_at_timezone(self):
+        if self.due_at is not None and (self.due_at.tzinfo is None or self.due_at.utcoffset() is None):
+            raise ValueError("Privacy request due_at must include a timezone")
+        return self
 
 
 class PrivacyRequestUpdate(BaseModel):
@@ -634,12 +643,12 @@ async def create_rights_request(payload: PrivacyRequestCreate, user_id: UUID = D
                 cursor.execute(
                     """insert into public.privacy_rights_requests
                        (organization_id, candidate_id, request_type, requester_email,
-                        requested_scope, created_by)
-                       values (%s, %s, %s, %s, %s::jsonb, %s)
+                        requested_scope, due_at, created_by)
+                       values (%s, %s, %s, %s, %s::jsonb, %s, %s)
                        returning id, organization_id, candidate_id, request_type, status,
                                  requested_scope, received_at, due_at, created_at""",
                     [payload.organization_id, payload.candidate_id, payload.request_type,
-                     payload.requester_email, json.dumps(payload.requested_scope), user_id],
+                     payload.requester_email, json.dumps(payload.requested_scope), payload.due_at, user_id],
                 )
                 row = cursor.fetchone()
                 cursor.execute(
