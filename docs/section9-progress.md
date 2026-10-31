@@ -17,8 +17,9 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Billing APIs for plan listing, owner/admin subscription read and server-configured Stripe Checkout creation.
 - Checkout retry idempotency: the billing page reuses a per-organisation/plan attempt UUID across reloads and transient failures, and the backend passes a stable derived key to Stripe; cancelled checkout attempts clear stored keys so a new attempt can be created.
 - Stripe webhook signature verification, idempotent event receipts, subscription state writes and append-only lifecycle history.
-- Subscription provider IDs are checked against the original organisation before stale-event handling; regression coverage verifies a stale event with mismatched tenant metadata is rejected.
+- Subscription provider IDs are checked against the original organisation before event-order handling; regression coverage verifies a stale event with mismatched tenant metadata is rejected.
 - Duplicate Stripe delivery regression coverage verifies a repeated event is acknowledged without repeating subscription processing.
+- Events with equal second-level provider timestamps are quarantined as `ignored` with `failure_code='ambiguous_provider_event_timestamp'`; regression coverage verifies the subscription row is not changed. Older events are also ignored with a distinct stale-event reason. A provider-state reconciliation process is still required to resolve quarantined events.
 - Billing page and unit tests authored for entitlement logic, subscription API states and webhook safeguards.
 - Stripe SDK added to backend requirements.
 
@@ -53,7 +54,8 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - Seeded four initial help articles in staging; fixed their line breaks in staging and in the migration source.
 - GitHub Actions billing workflow run **41198692173** passed, including entitlement policy, billing API, settings/onboarding/support validation, Stripe webhook safeguards, frontend typecheck and frontend production build.
 - GitHub Actions acceptance workflow run **41198692190** passed both backend tests and frontend checks, including frontend typecheck and production build.
-- The duplicate Stripe webhook delivery regression test is included in the successful billing workflow.
+- Documentation refresh validation runs **41200410637** (billing) and **41200410650** (acceptance) also passed.
+- The duplicate Stripe webhook delivery regression test and equal-timestamp quarantine tests are in the current branch head. New validation runs **41202107706** (billing) and **41202107713** (acceptance) were started for the merge commit and were queued/in progress when last checked.
 - Vercel preview deployment checks remain blocked by the account's deployment rate limit; the reported message requests retry after 24 hours. This is separate from the successful GitHub Actions checks.
 - No production database changes, merges or production deployments were performed.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
@@ -61,7 +63,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 ## Main remaining work
 
 - Seed and approve commercial plan/pricing decisions; configure Stripe test secrets and plan price IDs.
-- Harden Stripe event ordering for events sharing the same provider timestamp second. Provider-state reconciliation is preferable to relying on event IDs or assuming arrival order.
+- Build provider-state reconciliation for quarantined equal-second Stripe events; the current guard prevents an ambiguous event from overwriting the subscription but does not automatically resolve it.
 - Add payment-failure, cancellation, renewal and subscription-recovery lifecycle integration tests.
 - Wire entitlement enforcement into real job, candidate, seat and AI operations; add race-safe quota enforcement. The current policy helpers are not proof that every protected operation enforces limits.
 - Finish subscription and usage UI, settings/help/support UX and role-based access acceptance checks.
@@ -72,6 +74,6 @@ Progress percentages are engineering estimates of completed feature scope, not a
 
 ## Branch and release status
 
-- Feature branch is 83 commits ahead of `main` and 1 commit behind. The only currently identified base-branch commit adds a Section 8 retention-exception integrity migration; it must be incorporated and revalidated before the PR is considered release-ready.
+- Feature branch includes the Section 8 retention-exception integrity migration from `main`; branch comparison is now 91 commits ahead and 0 behind. Revalidation is running against the integrated branch.
 - PR #81 remains draft and unmerged.
 - Production remains untouched. Do not merge or deploy until the acceptance checklist is green and explicitly reviewed.
