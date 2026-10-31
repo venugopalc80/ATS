@@ -1,6 +1,14 @@
 name: Dashboard Update 1 Acceptance
 
 on:
+  push:
+    branches:
+      - "feat/idea-02-jobs-requisitions"
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "supabase/**"
+      - ".github/workflows/dashboard-update-1-acceptance.yml"
   pull_request:
     paths:
       - "backend/**"
