@@ -118,6 +118,11 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                   source text,
                   status text not null default 'new'
                     check (status in ('new','screening','submitted','interview','offer','hired','rejected','withdrawn')),
+                  match_score numeric,
+                  match_explanation text,
+                  human_reviewed boolean not null default false,
+                  human_reviewed_by uuid,
+                  human_reviewed_at timestamptz,
                   created_at timestamptz not null default now(),
                   updated_at timestamptz not null default now(),
                   unique(job_id, candidate_id)
