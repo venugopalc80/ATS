@@ -214,5 +214,58 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any("failure_code='stale_provider_event'" in sql for sql, _ in cursor.executed))
 
 
+    async def test_duplicate_webhook_delivery_is_acknowledged_without_reprocessing(self):
+        class Cursor:
+            def __init__(self):
+                self.executed = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, sql, params=None):
+                self.executed.append((" ".join(sql.split()), params))
+
+            def fetchone(self):
+                # ON CONFLICT DO NOTHING RETURNING id yields no row for a duplicate.
+                return None
+
+        cursor = Cursor()
+
+        class Connection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def cursor(self):
+                return cursor
+
+        @contextmanager
+        def fake_connection():
+            with Connection() as connection:
+                yield connection
+
+        event = {
+            "id": "evt_duplicate_delivery_123",
+            "type": "invoice.payment_succeeded",
+            "created": 200,
+            "data": {"object": {"id": "in_test_123"}},
+        }
+
+        with patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}), patch.object(
+            billing_webhooks.stripe.Webhook, "construct_event", return_value=event
+        ), patch.object(billing_webhooks, "get_connection", fake_connection):
+            result = await billing_webhooks.stripe_webhook(FakeRequest(b'{"duplicate":true}'), "sig_test")
+
+        self.assertEqual(result, {"received": True, "duplicate": True})
+        self.assertEqual(len(cursor.executed), 1)
+        self.assertIn("on conflict (billing_provider, provider_event_id) do nothing", cursor.executed[0][0])
+        self.assertFalse(any("organization_subscriptions" in sql for sql, _ in cursor.executed))
+
+
 if __name__ == "__main__":
     unittest.main()
