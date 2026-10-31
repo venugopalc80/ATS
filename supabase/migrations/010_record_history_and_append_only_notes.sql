@@ -74,6 +74,8 @@ begin
 end;
 $$;
 
+revoke all on function public.capture_record_change() from public, anon, authenticated;
+
 drop trigger if exists candidates_record_history on public.candidates;
 create trigger candidates_record_history
 after insert or update or delete on public.candidates
