@@ -39,6 +39,7 @@ export default function CollaborationPage() {
   const [addMemberIds, setAddMemberIds] = useState<string[]>([]);
   const [editedGroupTitle, setEditedGroupTitle] = useState("");
   const knownMessageIds = useRef<Set<string>>(new Set());
+  const activeConversationRef = useRef("");
 
   const request = useCallback(async (path: string, init?: RequestInit) => {
     if (!API_BASE) throw new Error("AQERITH API is not configured.");
@@ -72,6 +73,7 @@ export default function CollaborationPage() {
   const loadMessages = useCallback(async (id: string, replace = false) => {
     try {
       const data: Message[] = await request("/api/collaboration/conversations/" + id + "/messages?limit=50");
+      if (activeConversationRef.current !== id) return;
       setMessages((current) => {
         if (replace) return data;
         const byId = new Map(current.map((message) => [message.id, message]));
@@ -89,9 +91,11 @@ export default function CollaborationPage() {
       } else {
         data.forEach((message) => knownMessageIds.current.add(message.id));
       }
-      if (replace || hasNewInboundMessage) {
+      if ((replace || hasNewInboundMessage) && activeConversationRef.current === id) {
         await request("/api/collaboration/conversations/" + id + "/read", { method: "POST" });
-        setConversations((items) => items.map((c) => c.id === id ? { ...c, unread_count: 0 } : c));
+        if (activeConversationRef.current === id) {
+          setConversations((items) => items.map((c) => c.id === id ? { ...c, unread_count: 0 } : c));
+        }
       }
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load messages."); }
   }, [currentUserId, request]);
@@ -117,6 +121,7 @@ export default function CollaborationPage() {
   }, [activeId, hasMoreMessages, loadingOlderMessages, messages, request]);
 
   useEffect(() => {
+    activeConversationRef.current = activeId;
     setMessages([]);
     setHasMoreMessages(false);
     knownMessageIds.current = new Set();
