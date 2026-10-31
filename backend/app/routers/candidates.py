@@ -69,7 +69,9 @@ async def update_candidate(
         if existing is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
         assert_org_member(user_id, existing["organization_id"])
-        row = await service.update_candidate(candidate_id, payload)
+        row = await service.update_candidate(candidate_id, existing["organization_id"], payload)
+        if row is None:
+            raise HTTPException(status_code=404, detail="Candidate not found")
         return CandidateOut.model_validate(row)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
@@ -85,7 +87,7 @@ async def delete_candidate(
         if existing is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
         assert_org_admin(user_id, existing["organization_id"])
-        deleted = await service.delete_candidate(candidate_id)
+        deleted = await service.delete_candidate(candidate_id, existing["organization_id"])
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
     if not deleted:
