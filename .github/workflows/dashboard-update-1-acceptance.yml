@@ -44,6 +44,30 @@ jobs:
           ATS_INTEGRATION_TESTS: "1"
         run: python -m unittest discover -s tests -v
 
+  migration-rls-tests:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: migration_test
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d migration_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Apply requisition migrations and verify RLS roles
+        env:
+          PGPASSWORD: postgres
+        run: psql -h localhost -U postgres -d migration_test -v ON_ERROR_STOP=1 -f supabase/tests/026_job_requisition_role_rls.sql
+
   frontend-checks:
     runs-on: ubuntu-latest
     steps:
