@@ -428,5 +428,26 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertEqual(cursor.params, [conversation_id, user_id])
 
 
+    def test_archived_group_owner_cannot_rename_group(self):
+        conversation_id, owner_id = uuid4(), uuid4()
+
+        class ArchivedGroupCursor(FakeCursor):
+            def fetchone(self):
+                return None
+
+        cursor = ArchivedGroupCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.update_group_title(
+                    conversation_id=conversation_id,
+                    payload=collaboration.GroupTitleUpdate(title="Should not update"),
+                    user_id=owner_id,
+                ))
+
+        self.assertEqual(error.exception.status_code, 404)
+        self.assertIn("c.archived_at is null", cursor.query)
+        self.assertNotIn("update public.conversations", cursor.query)
+
+
 if __name__ == "__main__":
     unittest.main()
