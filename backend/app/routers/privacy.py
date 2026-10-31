@@ -202,6 +202,12 @@ class ProcessingRecordCreate(BaseModel):
     def validate_consent_fields(self):
         if not self.purpose.strip():
             raise ValueError("purpose must not be blank")
+        try:
+            preferences_size = len(json.dumps(self.processing_preferences, allow_nan=False).encode("utf-8"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("processing_preferences must contain JSON-compatible values") from exc
+        if preferences_size > 16_384:
+            raise ValueError("processing_preferences must not exceed 16 KB")
         for field_name in ("consent_captured_at", "consent_withdrawn_at"):
             value = getattr(self, field_name)
             if value is not None and (value.tzinfo is None or value.utcoffset() is None):
