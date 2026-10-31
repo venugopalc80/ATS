@@ -467,3 +467,14 @@ This checkpoint supersedes the older pending-CI notes above where they describe 
 5. Run staging API regression tests, including a transition into `shortlisted` and `assessment`, before considering production. For production, use the same ordered migrations in an approved release window with backup/rollback planning; no migration has been authorised or run here.
 
 This remains a proposal only. Production/staging schema changes require explicit release approval.
+
+
+### Candidate consent metadata integrity hardening (2026-10-31)
+
+- Code review of `backend/app/schemas/candidates.py` found that authenticated candidate create/update payloads accepted client-supplied `consent_recorded_at`, `consent_purpose`, and `retention_until`. That allowed an organisation member to submit or overwrite compliance metadata through ordinary candidate CRUD.
+- Refactored the schemas so these fields remain visible in `CandidateOut` but are excluded from `CandidateCreate` and `CandidateUpdate`. Both input models now use `extra="forbid"` so attempts to supply unsupported fields are rejected rather than silently ignored.
+- Added `backend/tests/test_candidate_consent_metadata.py`: verifies create cannot forge consent/retention values, update cannot overwrite them, and response serialization still returns server-recorded fields.
+- The frontend candidate form inspected on the PR branch does not send these three fields, so the current form payload is compatible.
+- Current PR #69 head: `87d89f68cd9e57152af83857a8b8f6a92111f784`. GitHub Actions run #790 passed: 57 backend tests (4 skipped for optional environment/setup), PostgreSQL 16 migration smoke test, frontend typecheck, and frontend production build: https://github.com/venugopalc80/ATS/actions/runs/41190613772.
+- This is an input-integrity safeguard, not a complete consent-management system. A controlled import pathway for historic consent evidence and a dedicated consent withdrawal/update workflow remain to be designed and tested.
+- No staging/production migrations or data writes, merge, or deployment were performed.
