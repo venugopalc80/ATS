@@ -60,6 +60,11 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                     (OTHER_CANDIDATE, OTHER_ORG),
                 )
                 cursor.execute(
+                    "insert into public.candidates(id,organization_id,first_name) values (%s,%s,'Private Candidate') "
+                    "on conflict (id) do nothing",
+                    (OTHER_CANDIDATE, OTHER_ORG),
+                )
+                cursor.execute(
                     "insert into public.applications "
                     "(id,organization_id,job_id,candidate_id,source,status,match_explanation) "
                     "values (%s,%s,%s,%s,'careers_page','new','confidential recruiter assessment') "
@@ -113,6 +118,33 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
             with connection.cursor() as cursor:
                 cursor.execute("select status from public.applications where id=%s", (APPLICATION,))
                 self.assertEqual(cursor.fetchone()[0], "new")
+
+    def test_real_candidate_membership_query_hides_cross_tenant_candidate(self):
+        # The candidate exists in PostgreSQL, but the caller is not a member
+        # of its organisation. All candidate operations must conceal existence.
+        self.current_user["id"] = str(ACTOR)
+
+        response = self.client.get(f"/api/candidates/{OTHER_CANDIDATE}")
+        self.assertEqual(response.status_code, 404)
+
+        response = self.client.patch(
+            f"/api/candidates/{OTHER_CANDIDATE}",
+            json={"first_name": "Tampered"},
+        )
+        self.assertEqual(response.status_code, 404)
+
+        response = self.client.delete(f"/api/candidates/{OTHER_CANDIDATE}")
+        self.assertEqual(response.status_code, 404)
+
+        import psycopg
+
+        with psycopg.connect(os.environ["TEST_DATABASE_URL"]) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select first_name from public.candidates where id=%s",
+                    (OTHER_CANDIDATE,),
+                )
+                self.assertEqual(cursor.fetchone()[0], "Private Candidate")
 
     def test_real_membership_role_blocks_recruiter_stage_config_write(self):
         # This uses the real membership row and real stage-config endpoint.
