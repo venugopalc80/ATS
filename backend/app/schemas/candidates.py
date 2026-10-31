@@ -3,7 +3,7 @@ from decimal import Decimal
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, Field, StringConstraints
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints
 from typing import Annotated
 
 CandidateStatus = Literal["active", "inactive", "placed", "do_not_contact"]
@@ -25,13 +25,12 @@ class CandidateBase(BaseModel):
     resume_path: str | None = None
     resume_text: str | None = None
     ai_summary: str | None = None
-    consent_recorded_at: datetime | None = None
-    consent_purpose: str | None = None
-    retention_until: datetime | None = None
 
 
 class CandidateCreate(CandidateBase):
     organization_id: UUID
+    # Consent and retention metadata are system-managed, never client-authored.
+    model_config = ConfigDict(extra="forbid")
 
 
 class CandidateUpdate(BaseModel):
@@ -49,12 +48,14 @@ class CandidateUpdate(BaseModel):
     resume_path: str | None = None
     resume_text: str | None = None
     ai_summary: str | None = None
-    consent_recorded_at: datetime | None = None
-    consent_purpose: str | None = None
-    retention_until: datetime | None = None
+    # Prevent silently accepting fields outside the candidate update contract.
+    model_config = ConfigDict(extra="forbid")
 
 
 class CandidateOut(CandidateBase):
+    consent_recorded_at: datetime | None = None
+    consent_purpose: str | None = None
+    retention_until: datetime | None = None
     id: UUID
     organization_id: UUID
     created_at: datetime
