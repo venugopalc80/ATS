@@ -249,6 +249,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.rows_to_fetch = [
+                    {"id": conversation_id},
                     {"joined_at": "joined"},
                     {"kind": "group", "member_role": "owner"},
                     {"user_id": successor_id},
@@ -316,6 +317,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.rows_to_fetch = [
+                    {"id": conversation_id},
                     {"joined_at": "joined"},
                     {"kind": "direct", "member_role": "member"},
                 ]
