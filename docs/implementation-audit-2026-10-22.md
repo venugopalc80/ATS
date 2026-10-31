@@ -501,3 +501,15 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Document preview/download endpoints were reviewed: they require organisation membership and filter document rows by both document ID and organisation ID before creating a 60-second signed URL or returning extracted DOCX text. Fine-grained candidate/document role permissions have not been specified or verified, so no role-policy change was assumed.
 - Bulk CV import creates candidate/document records and an audit event, but it does not itself capture historic consent evidence. It must not be interpreted as proving consent. A future historic-consent import needs source, original timestamp, purpose/notice version where known, evidence reference, and explicit distinction between verified, unknown, and missing evidence; the import must not invent a consent timestamp.
 - No staging/production database writes, migrations, merge, or production deployment were performed.
+
+
+### Real PostgreSQL candidate tenant-boundary test passed (2026-10-31)
+
+- The first run of the new candidate HTTP integration test failed during fixture setup because the disposable database's existing `public.candidates` table did not contain `first_name`. The candidate access assertions had not yet run; this was a test-schema mismatch, not evidence of an application authorization failure.
+- Updated the test fixture to add any missing candidate columns required by `CandidateService` before inserting the private cross-tenant candidate. These changes run only against the disposable CI database.
+- Current PR #69 head: `21b987cf141e9b52fd0c952398956517c6596008`.
+- GitHub Actions run [#851](https://github.com/venugopalc80/ATS/actions/runs/41201102022) passed both jobs. Backend: **64 tests passed, 4 skipped** for optional environment/setup. The run log confirms `test_real_candidate_membership_query_hides_cross_tenant_candidate` passed against PostgreSQL 16: GET, PATCH, and DELETE all return 404 for a real candidate row belonging to another organisation, and the candidate row remains unchanged. The disposable PostgreSQL migration smoke test also passed. Frontend TypeScript checks and production build passed.
+- This is stronger evidence for the candidate membership query and HTTP response behaviour, but it is still a disposable PostgreSQL harness with an overridden current-user dependency. It does not prove live Supabase JWT validation, actual Supabase RLS behaviour, or full production environment parity.
+- Idea 04 remains **41.7% evidenced / 58.3% pending** against six provisional acceptance criteria. This additional integration test strengthens the tenant-boundary evidence but does not close an entire criterion.
+- Vercel exact-head preview remains unavailable because the team's daily build-rate limit is blocking deployments. Browser/device acceptance remains outstanding.
+- No staging/production database writes or migrations, merge, or production deployment occurred.
