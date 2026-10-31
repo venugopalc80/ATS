@@ -513,3 +513,13 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Idea 04 remains **41.7% evidenced / 58.3% pending** against six provisional acceptance criteria. This additional integration test strengthens the tenant-boundary evidence but does not close an entire criterion.
 - Vercel exact-head preview remains unavailable because the team's daily build-rate limit is blocking deployments. Browser/device acceptance remains outstanding.
 - No staging/production database writes or migrations, merge, or production deployment occurred.
+
+
+### Bulk CV aggregate upload limit hardened and verified (2026-10-31)
+
+- Review found that `POST /api/documents/bulk-cv` enforced the 4 MB batch limit using `sum(file.size or 0)`. Starlette's `UploadFile.size` can be absent, so this check alone did not reliably enforce the aggregate limit against received bytes.
+- Added `read_bulk_cv_files` to read the batch and enforce the aggregate limit against actual bytes before any candidate, document metadata, audit event, or storage writes occur. On an over-limit batch, all file handles are closed and the request is rejected with 413.
+- Added tests for an aggregate over-limit batch with unknown declared sizes and a valid batch under the limit.
+- Current PR #69 head: `a0fcd08ff129c8177ddc69d0d5c11a5cefcdd7ce`. GitHub Actions run [#853](https://github.com/venugopalc80/ATS/actions/runs/41201353521) passed: **66 backend tests, 4 skipped**, PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and production build.
+- This closes the specific aggregate-size enforcement gap. It does not resolve the separate duplicate-import race risk: email/hash duplicate checks are read-before-write and are not backed by a demonstrated database uniqueness guarantee. That needs a migration-safe data review and concurrency design before adding constraints.
+- No staging/production database writes or migrations, merge, or production deployment occurred.
