@@ -456,5 +456,81 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertNotIn("update public.conversations", cursor.query)
 
 
+    def test_duplicate_message_send_returns_original_without_bumping_conversation(self):
+        from datetime import datetime, timezone
+
+        conversation_id, user_id, client_id, message_id = uuid4(), uuid4(), uuid4(), uuid4()
+        created_at = datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc)
+
+        class IdempotentCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.fetchone_rows = [
+                    {"id": conversation_id},
+                    {"joined_at": created_at},
+                    None,
+                    {"id": message_id, "sender_user_id": user_id, "body": "Review this CV", "created_at": created_at},
+                ]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = IdempotentCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(collaboration.send_message(
+                conversation_id=conversation_id,
+                payload=collaboration.MessageCreate(body="Review this CV", client_message_id=client_id),
+                user_id=user_id,
+            ))
+
+        self.assertEqual(result["id"], str(message_id))
+        self.assertEqual(result["body"], "Review this CV")
+        self.assertIn("do nothing", cursor.queries[2].lower())
+        self.assertTrue(any("from public.messages" in query.lower() for query in cursor.queries))
+        self.assertFalse(any("update public.conversations" in query.lower() for query in cursor.queries))
+
+    def test_message_idempotency_key_cannot_be_reused_for_different_content(self):
+        from datetime import datetime, timezone
+
+        conversation_id, user_id, client_id = uuid4(), uuid4(), uuid4()
+        created_at = datetime(2026, 10, 31, 12, 0, tzinfo=timezone.utc)
+
+        class IdempotencyConflictCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.fetchone_rows = [
+                    {"id": conversation_id},
+                    {"joined_at": created_at},
+                    None,
+                    {"id": uuid4(), "sender_user_id": user_id, "body": "Original text", "created_at": created_at},
+                ]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = IdempotencyConflictCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.send_message(
+                    conversation_id=conversation_id,
+                    payload=collaboration.MessageCreate(body="Different text", client_message_id=client_id),
+                    user_id=user_id,
+                ))
+
+        self.assertEqual(error.exception.status_code, 409)
+        self.assertIn("idempotency key", error.exception.detail)
+        self.assertFalse(any("update public.conversations" in query.lower() for query in cursor.queries))
+
+
 if __name__ == "__main__":
     unittest.main()
