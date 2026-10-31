@@ -85,21 +85,41 @@ class PrivacyRequestCreate(BaseModel):
     due_at: datetime | None = None
 
     @model_validator(mode="after")
-    def validate_due_at_timezone(self):
+    def validate_request_payload(self):
         if self.due_at is not None and (self.due_at.tzinfo is None or self.due_at.utcoffset() is None):
             raise ValueError("Privacy request due_at must include a timezone")
+        try:
+            scope_size = len(json.dumps(self.requested_scope, allow_nan=False).encode("utf-8"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError("requested_scope must contain JSON-compatible values") from exc
+        if scope_size > 16_384:
+            raise ValueError("requested_scope must not exceed 16 KB")
         return self
 
 
 class PrivacyRequestUpdate(BaseModel):
     status: RequestStatus
-    affected_systems: list[str] = Field(default_factory=list)
+    affected_systems: list[str] = Field(default_factory=list, max_length=50)
     exception_details: str | None = Field(default=None, max_length=4000)
     retention_justification: str | None = Field(default=None, max_length=4000)
     identity_verification_method: IdentityVerificationMethod | None = None
 
     @model_validator(mode="after")
-    def validate_exceptions(self):
+    def validate_request_update(self):
+        normalized_systems = []
+        seen_systems = set()
+        for system in self.affected_systems:
+            normalized = system.strip()
+            if not normalized:
+                raise ValueError("affected_systems entries must not be blank")
+            if len(normalized) > 120:
+                raise ValueError("affected_systems entries must not exceed 120 characters")
+            key = normalized.casefold()
+            if key in seen_systems:
+                raise ValueError("affected_systems entries must be unique")
+            seen_systems.add(key)
+            normalized_systems.append(normalized)
+        self.affected_systems = normalized_systems
         if self.status in {"partially_completed", "declined"} and not (
             (self.exception_details or "").strip() or (self.retention_justification or "").strip()
         ):
