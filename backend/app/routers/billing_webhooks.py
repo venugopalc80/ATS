@@ -174,7 +174,7 @@ async def stripe_webhook(
                         if rejection_reason:
                             cursor.execute(
                                 """update public.billing_webhook_events
-                                   set organization_id=%s, processing_status='processed',
+                                   set organization_id=%s, processing_status='ignored',
                                        processed_at=now(), failure_code=%s
                                    where id=%s""",
                                 [organization_id, rejection_reason, receipt["id"]],
