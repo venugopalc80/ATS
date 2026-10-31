@@ -56,12 +56,8 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                     (OTHER_JOB, OTHER_ORG),
                 )
                 cursor.execute(
-                    "insert into public.candidates(id,organization_id) values (%s,%s) on conflict (id) do nothing",
-                    (OTHER_CANDIDATE, OTHER_ORG),
-                )
-                cursor.execute(
                     "insert into public.candidates(id,organization_id,first_name) values (%s,%s,'Private Candidate') "
-                    "on conflict (id) do nothing",
+                    "on conflict (id) do update set first_name=excluded.first_name",
                     (OTHER_CANDIDATE, OTHER_ORG),
                 )
                 cursor.execute(
