@@ -8,7 +8,7 @@ on:
       - "backend/tests/test_recruitment_documents.py"
       - "backend/tests/test_documents_validation.py"
       - "backend/requirements.txt"
-      - "supabase/migrations/014_recruitment_documents_esignatures.sql"
+      - "supabase/migrations/20261031120000_recruitment_documents_esignatures.sql"
       - ".github/workflows/idea-13-recruitment-documents.yml"
 
 jobs:
