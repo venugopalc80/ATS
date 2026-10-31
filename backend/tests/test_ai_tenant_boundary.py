@@ -41,5 +41,30 @@ class AIAssistantTenantBoundaryTests(unittest.TestCase):
         provider.assert_not_called()
 
 
+    def test_non_member_cannot_submit_feedback_to_another_organisation_run(self):
+        from app.routers.ai import FeedbackInput, feedback
+
+        requested_organisation_id = uuid4()
+        user_id = uuid4()
+        run_id = uuid4()
+        payload = FeedbackInput(
+            organization_id=requested_organisation_id,
+            feedback_status="unsafe",
+            feedback_text="Synthetic cross-tenant feedback attempt",
+        )
+
+        with patch(
+            "app.routers.ai.assert_org_member",
+            side_effect=HTTPException(status_code=403, detail="Not an organisation member"),
+        ) as membership_check:
+            with patch("app.routers.ai.get_connection") as database:
+                with self.assertRaises(HTTPException) as caught:
+                    asyncio.run(feedback(run_id, payload, user_id=user_id))
+
+        self.assertEqual(caught.exception.status_code, 403)
+        membership_check.assert_called_once_with(user_id, requested_organisation_id)
+        database.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
