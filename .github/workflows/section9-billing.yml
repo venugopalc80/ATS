@@ -15,6 +15,7 @@ on:
       - "backend/tests/test_platform_ops.py"
       - "supabase/migrations/20261022160000_section9_platform_support.sql"
       - "supabase/migrations/20261025010000_section9_stripe_event_ordering.sql"
+      - "supabase/migrations/20261025120000_section8_retention_exception_integrity.sql"
       - "frontend/app/platform/ops/page.tsx"
       - "frontend/package.json"
       - "frontend/tsconfig.json"
