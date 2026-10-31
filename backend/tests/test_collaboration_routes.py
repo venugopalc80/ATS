@@ -200,6 +200,48 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertEqual(result, {"added": [str(reactivated_id)]})
 
 
+    def test_owner_cannot_remove_themselves_through_member_removal_route(self):
+        conversation_id, owner_id = uuid4(), uuid4()
+
+        class OwnerCursor(FakeCursor):
+            def fetchone(self):
+                return {"kind": "group", "member_role": "owner"}
+
+        cursor = OwnerCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.remove_group_member(
+                    conversation_id=conversation_id,
+                    target_user_id=owner_id,
+                    user_id=owner_id,
+                ))
+
+        self.assertEqual(error.exception.status_code, 422)
+        self.assertIn("select c.kind, cm.member_role", cursor.query)
+
+
+    def test_remove_group_member_returns_not_found_for_inactive_member(self):
+        conversation_id, owner_id, target_id = uuid4(), uuid4(), uuid4()
+
+        class RemoveCursor(FakeCursor):
+            rowcount = 0
+
+            def fetchone(self):
+                return {"kind": "group", "member_role": "owner"}
+
+        cursor = RemoveCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.remove_group_member(
+                    conversation_id=conversation_id,
+                    target_user_id=target_id,
+                    user_id=owner_id,
+                ))
+
+        self.assertEqual(error.exception.status_code, 404)
+        self.assertIn("left_at is null", cursor.query)
+
+
     def test_owner_leaving_transfers_ownership_to_oldest_active_member(self):
         conversation_id, owner_id, successor_id = uuid4(), uuid4(), uuid4()
 
