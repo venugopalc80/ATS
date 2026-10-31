@@ -76,7 +76,7 @@ export default function CollaborationPage() {
         const byId = new Map(current.map((message) => [message.id, message]));
         data.forEach((message) => byId.set(message.id, message));
         return Array.from(byId.values()).sort((a, b) =>
-          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+          Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id)
         );
       });
       if (replace) setHasMoreMessages(data.length === 50);
@@ -97,7 +97,7 @@ export default function CollaborationPage() {
         const byId = new Map(data.map((message) => [message.id, message]));
         current.forEach((message) => byId.set(message.id, message));
         return Array.from(byId.values()).sort((a, b) =>
-          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+          Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id)
         );
       });
       setHasMoreMessages(data.length === 50);
