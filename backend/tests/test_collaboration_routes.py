@@ -285,6 +285,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             def __init__(self):
                 super().__init__()
                 self.rows_to_fetch = [
+                    {"id": conversation_id},
                     {"joined_at": "joined"},
                     {"kind": "group", "member_role": "owner"},
                     None,
@@ -308,6 +309,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             )
 
         self.assertEqual(result, {"left": True, "ownership_transferred": True})
+        self.assertIn("for update", cursor.queries[0].lower())
         self.assertTrue(any("set archived_at=now()" in query for query in cursor.queries))
 
     def test_direct_conversation_cannot_be_left_through_group_endpoint(self):
