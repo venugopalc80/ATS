@@ -115,6 +115,40 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertEqual(cursor.params, [conversation_id, user_id])
 
 
+    def test_messages_route_uses_composite_cursor_for_same_timestamp_messages(self):
+        from datetime import datetime, timezone
+
+        conversation_id, user_id, anchor_id = uuid4(), uuid4(), uuid4()
+        joined_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        anchor_time = datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc)
+        message_id = uuid4()
+
+        class Cursor(FakeCursor):
+            def __init__(self):
+                super().__init__(rows=[{
+                    "id": message_id, "sender_user_id": user_id, "body": "Earlier message",
+                    "created_at": anchor_time, "edited_at": None, "deleted_at": None,
+                }])
+                self.fetchone_rows = [{"joined_at": joined_at}, {"created_at": anchor_time}]
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = Cursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(collaboration.list_messages(
+                conversation_id=conversation_id,
+                before=None,
+                before_message_id=anchor_id,
+                limit=25,
+                user_id=user_id,
+            ))
+
+        self.assertIn("(created_at,id) < (%s,%s)", cursor.query)
+        self.assertEqual(cursor.params, [conversation_id, joined_at, anchor_time, anchor_id, 25])
+        self.assertEqual(result[0]["id"], str(message_id))
+
+
     def test_add_members_response_only_includes_members_actually_added(self):
         organization_id = uuid4()
         conversation_id = uuid4()
