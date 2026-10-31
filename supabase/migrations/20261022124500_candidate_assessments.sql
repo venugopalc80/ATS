@@ -114,6 +114,32 @@ create table if not exists public.assessment_reviews (
   foreign key (organization_id, assignment_id, result_id) references public.assessment_results(organization_id, assignment_id, id) on delete set null (result_id)
 );
 
+-- Upgrade-safe tenant and assignment integrity for environments where the assessment
+-- tables were created by the earlier candidate_assessments migration. CREATE TABLE IF
+-- NOT EXISTS does not retrofit constraints on pre-existing tables.
+create unique index if not exists assessment_submissions_org_assignment_id_uidx
+  on public.assessment_submissions (organization_id, assignment_id, id);
+create unique index if not exists assessment_results_org_assignment_id_uidx
+  on public.assessment_results (organization_id, assignment_id, id);
+
+alter table public.assessment_results
+  drop constraint if exists assessment_results_organization_id_submission_id_fkey,
+  drop constraint if exists assessment_results_organization_id_assignment_id_submission_id_fkey;
+alter table public.assessment_results
+  add constraint assessment_results_assignment_submission_fk
+  foreign key (organization_id, assignment_id, submission_id)
+  references public.assessment_submissions (organization_id, assignment_id, id)
+  on delete set null (submission_id);
+
+alter table public.assessment_reviews
+  drop constraint if exists assessment_reviews_organization_id_result_id_fkey,
+  drop constraint if exists assessment_reviews_organization_id_assignment_id_result_id_fkey;
+alter table public.assessment_reviews
+  add constraint assessment_reviews_assignment_result_fk
+  foreign key (organization_id, assignment_id, result_id)
+  references public.assessment_results (organization_id, assignment_id, id)
+  on delete set null (result_id);
+
 -- Append-only operational history for assignment, deadline, accommodation and provider events.
 create table if not exists public.assessment_assignment_events (
   id uuid primary key default gen_random_uuid(),
