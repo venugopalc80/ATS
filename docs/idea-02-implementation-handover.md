@@ -83,3 +83,10 @@
 - Added a dedicated `migration-rls-tests` GitHub Actions job using its own ephemeral PostgreSQL 16 service. It does not connect to ATS-Staging or production.
 - Coverage includes recruiter and hiring-manager creation, viewer denial, invalid role assignments, cross-organisation client/assignee denial, requester ownership/status update restrictions, admin update access, and protected lifecycle-column grants.
 - The harness is committed but **not yet verified by a completed GitHub Actions run**. Treat the test result as pending until the job executes successfully; no claim is made that migration 026 has been applied.
+
+
+### First RLS harness execution and correction
+- GitHub Actions run [41199295316](https://github.com/venugopalc80/ATS/actions/runs/41199295316) executed the isolated PostgreSQL job and confirmed migrations 024, 025 and 026 applied successfully; initial role checks progressed through recruiter creation, hiring-manager creation, viewer denial, invalid assignee denial, and own-draft update.
+- The run then failed on a malformed PL/pgSQL anonymous-block delimiter in the remaining requester update assertions (`DO $` rather than `DO $$`). This was a test-harness syntax defect, not a migration failure.
+- Corrected in commit `78097c5e5bed08276e7abf694d279f59bd7b9a3d`. Awaiting a fresh CI execution before marking the harness passed.
+- Staging and production remain unchanged; migration 026 is still unapplied.
