@@ -216,12 +216,23 @@ async def send_message(conversation_id: UUID, payload: MessageCreate, user_id: U
             cursor.execute("""
               insert into public.messages (conversation_id,sender_user_id,body,client_message_id,created_at)
               values (%s,%s,%s,%s,clock_timestamp())
-              on conflict (conversation_id,sender_user_id,client_message_id)
-              do update set client_message_id=excluded.client_message_id
+              on conflict (conversation_id,sender_user_id,client_message_id) do nothing
               returning id,sender_user_id,body,created_at
             """, [conversation_id,user_id,body,payload.client_message_id])
             message = cursor.fetchone()
-            cursor.execute("update public.conversations set updated_at=now() where id=%s", [conversation_id])
+            if message is None and payload.client_message_id is not None:
+                cursor.execute("""
+                  select id,sender_user_id,body,created_at
+                  from public.messages
+                  where conversation_id=%s and sender_user_id=%s and client_message_id=%s
+                """, [conversation_id,user_id,payload.client_message_id])
+                message = cursor.fetchone()
+                if message is None:
+                    raise HTTPException(status_code=409, detail="Message send conflicted; retry with a new idempotency key")
+                if message["body"] != body:
+                    raise HTTPException(status_code=409, detail="This message idempotency key was already used for different content")
+            else:
+                cursor.execute("update public.conversations set updated_at=now() where id=%s", [conversation_id])
             return {"id":str(message["id"]), "sender_user_id":str(message["sender_user_id"]),
                     "body":message["body"], "created_at":message["created_at"].isoformat()}
 
