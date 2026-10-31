@@ -95,7 +95,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                     select 1 from public.organization_members m
                     where m.organization_id = target_org and m.user_id = auth.uid()
                   )
-                $$;
+                $$
             """)
             cursor.execute("""
                 create table public.jobs (
@@ -103,10 +103,33 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                   organization_id uuid not null references public.organizations(id) on delete cascade
                 )
             """)
+            # Match the candidate columns selected by CandidateService. Keeping this
+            # fixture aligned with the core schema lets the HTTP tenant-isolation test
+            # exercise the real candidate query rather than fail during fixture setup.
             cursor.execute("""
                 create table public.candidates (
                   id uuid primary key,
-                  organization_id uuid not null references public.organizations(id) on delete cascade
+                  organization_id uuid not null references public.organizations(id) on delete cascade,
+                  first_name text not null,
+                  last_name text,
+                  email text,
+                  phone text,
+                  city text,
+                  region text,
+                  country_code text check (country_code in ('GB','US','IN','AU')),
+                  status text not null default 'active'
+                    check (status in ('active','inactive','placed','do_not_contact')),
+                  current_title text,
+                  years_experience numeric,
+                  skills text[] not null default '{}',
+                  resume_path text,
+                  resume_text text,
+                  ai_summary text,
+                  consent_recorded_at timestamptz,
+                  consent_purpose text,
+                  retention_until timestamptz,
+                  created_at timestamptz not null default now(),
+                  updated_at timestamptz not null default now()
                 )
             """)
             cursor.execute("""
@@ -146,14 +169,14 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 "insert into public.jobs(id,organization_id) values (%s,%s)", (JOB, ORG)
             )
             cursor.execute(
-                "insert into public.candidates(id,organization_id) values (%s,%s)",
+                "insert into public.candidates(id,organization_id,first_name) values (%s,%s,'Test Candidate')",
                 (CANDIDATE, ORG),
             )
             cursor.execute(
                 "insert into public.jobs(id,organization_id) values (%s,%s)", (JOB2, ORG)
             )
             cursor.execute(
-                "insert into public.candidates(id,organization_id) values (%s,%s)",
+                "insert into public.candidates(id,organization_id,first_name) values (%s,%s,'Second Candidate')",
                 (CANDIDATE2, ORG),
             )
             # Simulate an application that predates migration 014, for baseline backfill.
