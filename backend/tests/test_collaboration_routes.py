@@ -400,5 +400,33 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertNotIn("update public.conversations", cursor.query)
 
 
+    def test_mark_read_uses_wall_clock_cursor_after_membership_check(self):
+        conversation_id, user_id = uuid4(), uuid4()
+
+        class ReadCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.fetchone_rows = [{"joined_at": "joined"}]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = ReadCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(collaboration.mark_read(
+                conversation_id=conversation_id,
+                user_id=user_id,
+            ))
+
+        self.assertEqual(result, {"ok": True})
+        self.assertTrue(any("set last_read_at=clock_timestamp()" in query for query in cursor.queries))
+        self.assertEqual(cursor.params, [conversation_id, user_id])
+
+
 if __name__ == "__main__":
     unittest.main()
