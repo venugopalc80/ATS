@@ -8,7 +8,7 @@ from pydantic import ValidationError
 from app.routers import privacy as privacy_module
 
 from app.routers.privacy import (
-    ProcessingRecordCreate, PrivacyRequestUpdate, RetentionPolicyCreate,
+    ProcessingRecordCreate, PrivacyRequestCreate, PrivacyRequestUpdate, RetentionPolicyCreate,
     retention_category_definition,
 )
 
@@ -18,6 +18,29 @@ def base_processing_record(**overrides):
                "purpose": "recruitment", "legal_basis": "legitimate_interests"}
     payload.update(overrides)
     return payload
+
+
+def test_privacy_request_accepts_timezone_aware_manual_deadline():
+    request = PrivacyRequestCreate(
+        organization_id=uuid4(),
+        request_type="access",
+        due_at="2026-11-30T17:00:00+00:00",
+    )
+    assert request.due_at.utcoffset().total_seconds() == 0
+
+
+def test_privacy_request_rejects_timezone_naive_manual_deadline():
+    with pytest.raises(ValidationError, match="must include a timezone"):
+        PrivacyRequestCreate(
+            organization_id=uuid4(),
+            request_type="access",
+            due_at="2026-11-30T17:00:00",
+        )
+
+
+def test_privacy_request_deadline_remains_optional():
+    request = PrivacyRequestCreate(organization_id=uuid4(), request_type="access")
+    assert request.due_at is None
 
 
 def test_non_consent_legal_basis_does_not_require_consent():
