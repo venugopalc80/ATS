@@ -25,3 +25,10 @@ Scope: Section 7 AI governance tables only. This is a read-only inspection repor
 ## Release conclusion
 
 Section 7 table grants and policy definitions match the intended read-only direct Data API surface. This is a partial acceptance result, not proof of full tenant isolation. Continue with runtime two-tenant RLS tests, API role checks, provider-backed AI evaluations, retention scheduling, and browser QA before promoting the draft PR.
+
+## Additional checks on 2026-10-31
+
+- Added API regression coverage proving a non-member cannot invoke the AI assistant using another organisation ID; the membership denial must happen before role lookup, database access or provider invocation.
+- Added API regression coverage proving a non-member cannot submit feedback against an AI run in another organisation; membership denial must happen before database access.
+- In staging, simulated the existing owner identity through the JWT subject claim and evaluated the shared membership helper. It returned `true` for the owner's existing organisation and `false` for an unrelated UUID. This is a helper-level check only; it does not replace a live Data API/RLS test with two separate authenticated users and tenant-owned rows.
+- Latest tenant-boundary tests were committed on the feature branch. Their CI result must be confirmed before treating them as passing.
