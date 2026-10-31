@@ -104,6 +104,16 @@ def test_non_consent_legal_basis_does_not_require_consent():
     assert record.consent_status is None
 
 
+def test_processing_preferences_reject_non_json_values():
+    with pytest.raises(ValidationError, match="JSON-compatible"):
+        ProcessingRecordCreate(**base_processing_record(processing_preferences={"invalid": object()}))
+
+
+def test_processing_preferences_reject_oversized_payload():
+    with pytest.raises(ValidationError, match="16 KB"):
+        ProcessingRecordCreate(**base_processing_record(processing_preferences={"details": "x" * 16_500}))
+
+
 def test_consent_basis_requires_status_and_capture_timestamp():
     with pytest.raises(ValidationError, match="explicit status and capture timestamp"):
         ProcessingRecordCreate(**base_processing_record(legal_basis="consent"))
