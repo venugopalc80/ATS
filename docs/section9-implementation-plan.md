@@ -74,13 +74,13 @@ Production is read-only for this work.
 
 Section 9 implementation is now present on `feat/section9-commercial-operations`:
 
-- **Idea 46:** subscription plan and entitlement schema, billing APIs, Stripe Checkout, webhook signature verification, idempotent receipt handling, subscription history and billing UI are implemented. Backend entitlement policy helpers exist, but they are not yet wired into all protected recruitment operations. Stripe payment-failure/recovery lifecycle handling, equal-second event reconciliation and end-to-end provider tests remain open.
+- **Idea 46:** subscription plan and entitlement schema, billing APIs, Stripe Checkout, webhook signature verification, idempotent receipt handling, subscription history and billing UI are implemented. Backend entitlement policy helpers exist, but they are not yet wired into all protected recruitment operations. Stripe payment-failure/recovery lifecycle handling, automated reconciliation of quarantined equal-second events and end-to-end provider tests remain open. The webhook now refuses equal-second updates and records them as ignored with `ambiguous_provider_event_timestamp`; this prevents arrival order from silently overwriting subscription state.
 - **Idea 47:** organisation settings schema, owner/admin API, versioning, audit and settings UI are implemented. Concurrency and role acceptance tests remain open.
 - **Idea 48:** resumable onboarding progress, searchable help content, API and initial UI are implemented. Broader content, UX and privacy acceptance remain open.
 - **Idea 49:** scoped support cases, customer-approved time-limited access grants, support APIs and operations/support UIs are implemented. Deeper expiry/revocation integration tests and privileged platform-operator provisioning remain open.
 - Staging-only migrations and seed content have been applied and checked. Production has not been changed.
-- GitHub Actions runs 41198692173 (billing) and 41198692190 (acceptance) passed on the code commit before the progress-document update. The documentation-only update triggered fresh validation runs 41200410637 and 41200410650; those are pending at the time of this update.
+- GitHub Actions runs 41198692173 (billing), 41198692190 (acceptance), 41200410637 (billing) and 41200410650 (acceptance) passed. The latest branch-integrated runs 41202107706 (billing) and 41202107713 (acceptance) were started after the equal-timestamp quarantine and branch integration; final results must be checked before release review.
 
-The feature branch is 84 commits ahead of `main` and 1 commit behind. The one base-branch commit is an additive Section 8 retention-exception integrity migration. Incorporate it and rerun validation before release review.
+The feature branch includes the Section 8 retention-exception integrity migration and is now 91 commits ahead of `main` with no commits behind. Revalidation against the integrated branch is in progress.
 
 Current estimated feature completion remains 47% overall. These are engineering scope estimates, not test coverage or release readiness. Keep PR #81 in draft; do not merge or deploy without explicit approval.
