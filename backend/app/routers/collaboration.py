@@ -244,6 +244,7 @@ def _assert_group_owner(cursor, conversation_id: UUID, user_id: UUID):
       join public.conversation_members cm on cm.conversation_id=c.id
       join public.organization_members om on om.organization_id=c.organization_id and om.user_id=cm.user_id
       where c.id=%s and cm.user_id=%s and cm.left_at is null and c.archived_at is null
+      for update of c
     """, [conversation_id, user_id])
     row = cursor.fetchone()
     if row is None:
@@ -297,6 +298,13 @@ async def remove_group_member(conversation_id: UUID, target_user_id: UUID,
 async def leave_group(conversation_id: UUID, user_id: UUID = Depends(get_current_user_id)):
     with get_connection() as connection:
         with connection.cursor() as cursor:
+            cursor.execute("""
+              select id from public.conversations
+              where id=%s and archived_at is null
+              for update
+            """, [conversation_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Conversation not found")
             _member(cursor, conversation_id, user_id)
             cursor.execute("""
               select c.kind, cm.member_role
