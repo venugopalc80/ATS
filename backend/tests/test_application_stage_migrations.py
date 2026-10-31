@@ -5,6 +5,7 @@ This test resets that database's schemas before running the real migration files
 """
 from __future__ import annotations
 
+import asyncio
 import os
 import unittest
 from pathlib import Path
@@ -246,6 +247,43 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 self.assertFalse(authenticated_select, f"authenticated unexpectedly has SELECT on {table}")
                 self.assertTrue(rls_enabled, f"RLS is not enabled on {table}")
         self.connection.commit()
+
+        # Exercise the actual backend service against disposable PostgreSQL,
+        # rather than only simulating the transition in a mocked cursor.
+        previous_database_url = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
+        try:
+            from app.services.application_service import ApplicationService
+
+            transitioned = asyncio.run(
+                ApplicationService().transition_application(
+                    UUID("99999999-9999-4999-8999-999999999999"),
+                    "interview",
+                    ACTOR_UUID,
+                    "PostgreSQL service integration test",
+                )
+            )
+            self.assertEqual(transitioned["status"], "interview")
+        finally:
+            if previous_database_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_database_url
+
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                "select previous_stage,new_stage,actor_user_id,reason "
+                "from public.application_stage_history "
+                "where application_id=%s and reason=%s",
+                (
+                    "99999999-9999-4999-8999-999999999999",
+                    "PostgreSQL service integration test",
+                ),
+            )
+            self.assertEqual(
+                cursor.fetchone(),
+                ("screening", "interview", ACTOR_UUID, "PostgreSQL service integration test"),
+            )
 
 
 if __name__ == "__main__":
