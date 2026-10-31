@@ -55,7 +55,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - GitHub Actions billing workflow run **41198692173** passed, including entitlement policy, billing API, settings/onboarding/support validation, Stripe webhook safeguards, frontend typecheck and frontend production build.
 - GitHub Actions acceptance workflow run **41198692190** passed both backend tests and frontend checks, including frontend typecheck and production build.
 - Documentation refresh validation runs **41200410637** (billing) and **41200410650** (acceptance) also passed.
-- The duplicate Stripe webhook delivery regression test and equal-timestamp quarantine tests are in the current branch head. New validation runs **41202107706** (billing) and **41202107713** (acceptance) were started for the merge commit and were queued/in progress when last checked.
+- The duplicate Stripe webhook delivery regression test and equal-timestamp quarantine tests are in the current branch head. Latest integrated-branch validation runs **41202127560** (billing) and **41202127587** (acceptance) both passed. They include backend tests, Stripe webhook safeguards (including equal-second quarantine), frontend typecheck and production build.
 - Vercel preview deployment checks remain blocked by the account's deployment rate limit; the reported message requests retry after 24 hours. This is separate from the successful GitHub Actions checks.
 - No production database changes, merges or production deployments were performed.
 - Existing unrelated Supabase security advisor findings remain on assessment tables, the public-schema vector extension, a callable SECURITY DEFINER membership helper, and disabled leaked-password protection.
