@@ -223,7 +223,7 @@ async def mark_read(conversation_id: UUID, user_id: UUID = Depends(get_current_u
     with get_connection() as connection:
         with connection.cursor() as cursor:
             _member(cursor, conversation_id, user_id)
-            cursor.execute("update public.conversation_members set last_read_at=now() where conversation_id=%s and user_id=%s",
+            cursor.execute("update public.conversation_members set last_read_at=clock_timestamp() where conversation_id=%s and user_id=%s",
                            [conversation_id,user_id])
             return {"ok": True}
 
