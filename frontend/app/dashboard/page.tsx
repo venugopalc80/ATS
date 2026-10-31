@@ -50,6 +50,8 @@ type DashboardData = {
   vacancy_health: Array<{ id: string; title: string; applicants: number; days_open: number; reasons: string[] }>;
   priorities: Priority[];
   activity: Activity[];
+  team_workload: Array<{ user_id: string; name: string; open_vacancies: number; active_applications: number; overdue_decisions: number }>;
+  talent_intelligence: Array<{ skill: string; open_roles: number; active_candidates: number; gap: number }>;
   rules: { vacancy_target_days: number; vacancy_min_applications: number; offer_expiry_window_days: number; awaiting_decision_days: number };
   date_range: { from: string | null; to: string | null };
 };
@@ -310,6 +312,55 @@ export default function Dashboard() {
                     const target = ["job", "jobs"].includes(item.entity_type) ? "/jobs?job_id=" + item.entity_id : ["candidate", "candidates"].includes(item.entity_type) ? "/candidates/" + item.entity_id : ["interview", "interviews"].includes(item.entity_type) ? "/interviews/" + item.entity_id : ["placement", "placements"].includes(item.entity_type) ? "/placements/" + item.entity_id : ["offer", "offers"].includes(item.entity_type) ? "/offers/" + item.entity_id : "/submissions/" + item.entity_id;
                     return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
                   })}
+                </div>
+              )}
+            </section>
+          </div>
+
+          <div className="dashboard-section-grid dashboard-intelligence-grid">
+            <section className="card dashboard-team-workload">
+              <div className="card-head">
+                <div><span className="card-title">Team workload</span><p className="muted-small">Assigned open vacancies and active application work</p></div>
+                <span className="badge blue">{data?.team_workload.length ?? 0} team members</span>
+              </div>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.team_workload.length ? (
+                <div className="dashboard-empty"><strong>No assigned workload yet</strong><p>Assign open vacancies to recruiters to see workload here.</p></div>
+              ) : (
+                <div className="dashboard-team-list">
+                  {data.team_workload.map((member) => (
+                    <div key={member.user_id} className="dashboard-team-row">
+                      <div className="dashboard-team-identity"><span className="dashboard-team-avatar" aria-hidden="true">{member.name.trim().slice(0, 1).toUpperCase()}</span><strong>{member.name}</strong></div>
+                      <div className="dashboard-team-stat"><strong>{member.open_vacancies}</strong><span>Open vacancies</span></div>
+                      <div className="dashboard-team-stat"><strong>{member.active_applications}</strong><span>Active applications</span></div>
+                      <div className="dashboard-team-stat"><strong className={member.overdue_decisions > 0 ? "dashboard-number-warning" : ""}>{member.overdue_decisions}</strong><span>Overdue decisions</span></div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="card dashboard-talent-intelligence">
+              <div className="card-head">
+                <div><span className="card-title">Talent intelligence summary</span><p className="muted-small">Recorded skills in open vacancies versus active candidate profiles</p></div>
+                <span className="badge blue">Skills</span>
+              </div>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.talent_intelligence.length ? (
+                <div className="dashboard-empty"><strong>Not enough structured skills yet</strong><p>Add required skills to open vacancies and skills to candidate profiles to surface supply and demand.</p></div>
+              ) : (
+                <div className="dashboard-talent-list">
+                  {data.talent_intelligence.map((item) => {
+                    const maxValue = Math.max(item.open_roles, item.active_candidates, 1);
+                    return <div key={item.skill} className="dashboard-talent-row">
+                      <div className="dashboard-talent-title"><strong>{item.skill}</strong><span>{item.open_roles} open role{item.open_roles === 1 ? "" : "s"} · {item.active_candidates} active candidate{item.active_candidates === 1 ? "" : "s"}</span></div>
+                      <div className="dashboard-talent-bars" aria-label={item.skill + ": " + item.open_roles + " open roles and " + item.active_candidates + " active candidates"}>
+                        <span className="dashboard-talent-demand" style={{ width: (item.open_roles / maxValue * 100) + "%" }} />
+                        <span className="dashboard-talent-supply" style={{ width: (item.active_candidates / maxValue * 100) + "%" }} />
+                      </div>
+                      {item.gap > 0 && <span className="badge amber">{item.gap} role{item.gap === 1 ? "" : "s"} above candidate count</span>}
+                    </div>;
+                  })}
+                  <div className="dashboard-talent-legend"><span><i className="dashboard-talent-demand" />Open-role demand</span><span><i className="dashboard-talent-supply" />Recorded candidate supply</span></div>
+                  <p className="muted-small">Counts show recorded skills, not verified availability or candidate suitability. Review profiles before making hiring decisions.</p>
                 </div>
               )}
             </section>
