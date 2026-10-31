@@ -148,6 +148,7 @@ export default function Dashboard() {
           ["Dashboard", "/dashboard", "⌂"],
           ["Jobs", "/jobs", "▣"],
           ["Candidates", "/candidates", "♙"],
+          ["Collaboration", "/collaboration", "✳"],
           ["Submissions", "/submissions", "↗"],
           ["Interviews", "/interviews", "◷"],
           ["Clients", "/clients", "□"],
