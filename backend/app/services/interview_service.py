@@ -15,6 +15,24 @@ ALLOWED_INTERVIEW_TRANSITIONS = {
 }
 
 
+def _validate_interviewer_membership(cursor: Any, organization_id: UUID, interviewer_ids: list[UUID]) -> None:
+    """Prevent scheduling users who are not members of the interview's organisation."""
+    if not interviewer_ids:
+        return
+
+    cursor.execute(
+        """
+        select user_id
+        from public.organization_members
+        where organization_id = %s and user_id = any(%s)
+        """,
+        [organization_id, interviewer_ids],
+    )
+    member_ids = {UUID(str(row["user_id"])) for row in cursor.fetchall()}
+    if member_ids != set(interviewer_ids):
+        raise ValueError("All interviewers must belong to the same organization")
+
+
 class InterviewService:
     async def list_interviews(self, organization_id: UUID, status: str | None = None):
         query = f"select {COLUMNS} from public.interviews where organization_id=%s"
@@ -35,9 +53,13 @@ class InterviewService:
         vals = [d[x] for x in cols]
         with get_connection() as c:
             with c.cursor() as cur:
-                cur.execute("select 1 from public.applications where id=%s and organization_id=%s", [payload.application_id, payload.organization_id])
+                cur.execute(
+                    "select 1 from public.applications where id=%s and organization_id=%s",
+                    [payload.application_id, payload.organization_id],
+                )
                 if cur.fetchone() is None:
                     raise ValueError("Application must belong to the same organization")
+                _validate_interviewer_membership(cur, payload.organization_id, payload.interviewer_ids)
                 cur.execute(
                     f"insert into public.interviews ({','.join(cols)}) values ({','.join(['%s'] * len(cols))}) returning {COLUMNS}",
                     vals,
@@ -60,19 +82,34 @@ class InterviewService:
 
         with get_connection() as c:
             with c.cursor() as cur:
-                cur.execute("select status from public.interviews where id=%s", [interview_id])
+                cur.execute(
+                    "select organization_id, status from public.interviews where id=%s for update",
+                    [interview_id],
+                )
                 existing = cur.fetchone()
                 if existing is None:
                     return None
 
+                current_status = existing["status"]
+
+                # Scheduling changes are lifecycle changes too; don't let API callers
+                # move a completed/cancelled/no-show interview by patching only its date.
+                if "scheduled_at" in d and d["scheduled_at"] is not None:
+                    if current_status not in {"scheduled", "rescheduled"}:
+                        raise ValueError("Only scheduled interviews can be rescheduled")
+                    if "status" not in d:
+                        d["status"] = "rescheduled"
+
                 if "status" in d:
-                    current_status = existing["status"]
                     next_status = d["status"]
                     if (
                         next_status != current_status
                         and next_status not in ALLOWED_INTERVIEW_TRANSITIONS.get(current_status, set())
                     ):
                         raise ValueError("Invalid interview status transition")
+
+                if "interviewer_ids" in d and d["interviewer_ids"] is not None:
+                    _validate_interviewer_membership(cur, existing["organization_id"], d["interviewer_ids"])
 
                 cur.execute(
                     "select set_config('app.actor_user_id', %s, true)",
