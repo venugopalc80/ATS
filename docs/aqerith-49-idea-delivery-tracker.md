@@ -38,7 +38,7 @@ The repository has a large open-PR queue. The audit PR #78 recorded 42 open PRs,
 | Idea / scope | Evidence visible in GitHub | Current assessment | Release blockers / next evidence |
 |---|---|---|---|
 | Ideas 09–13: interviews, scorecards, assessments, offers, recruitment documents | Draft PR #71 integrates the group; individual PRs #64–#67 also exist | In progress; integration not accepted | Run full backend tests, frontend typecheck/build, migration ordering/RLS review, tenant/role tests and authenticated browser acceptance. Resolve stacked-branch dependency. |
-| Idea 04: application pipeline stages | Draft PRs #69 and #70 overlap; audit #78 flags duplication | Blocked pending consolidation | Compare diffs and tests; choose one canonical implementation, close/rebase duplicate only after evidence and explicit review. |
+| Idea 04: application pipeline stages | Canonical draft PR #69 (`feat/idea-04-application-pipeline`); duplicate PR #70 was closed on 2026-10-31 without merge | In progress; migration smoke tests and backend/frontend CI passed on verified earlier heads; additional real-row tenant-isolation tests are running on current head | Reconcile staging history migration provenance/ledger; apply stage config in staging only after approval; finish real Supabase permission/auth checks, preview browser QA, candidate confidentiality review, bulk actions, recruiter assignment and SLA handling. |
 | Idea 05: application forms and candidate self-service | Draft PR #62 | In progress | Secure CV upload, staging migration verification, accessibility, tenant isolation and abuse tests. |
 | Idea 13: recruitment documents and e-signatures | Draft PR #67 | In progress | Native provider webhook verification, rendering/workspace UI, secure link lifecycle, full checks and provider review. |
 | Ideas 14–15: communication hub and notification preferences | Draft PR #68 | In progress | Provider sending/retries/webhooks and notification event production are not enabled; test, RLS and browser acceptance remain. |
@@ -146,3 +146,30 @@ The ATS production database was queried read-only; no writes were executed.
 - Production `public.candidate_documents.candidate_id` also uses `ON DELETE CASCADE`; the live `document_type` and SHA-256 constraints match those observed in ATS-Staging.
 - Production's migration ledger differs materially from staging's ledger: production records `candidate_documents_bulk_cv_import`, while staging records `013_candidate_documents` and the reconstructed feature migration sequence.
 - Treat this as a migration-history/schema-provenance concern. Do not apply a migration or alter production as part of this audit. First establish the authoritative migration history and intended schema, then test any proposed forward migration in a safe environment.
+
+
+## Evidence refresh — 2026-10-31
+
+This refresh is specific to Idea 04 and does not change the overall 49-idea completion calculation.
+
+### Idea 04 — Applications & Recruitment Pipeline
+
+- Canonical implementation: [PR #69](https://github.com/venugopalc80/ATS/pull/69), branch `feat/idea-04-application-pipeline`, currently draft/open and not merged.
+- Duplicate [PR #70](https://github.com/venugopalc80/ATS/pull/70) was closed on 2026-10-31 as a duplicate. Its branch remains as historical reference; no code was merged or deleted.
+- CI run [#801](https://github.com/venugopalc80/ATS/actions/runs/41197807696) passed on code commit `7c37a2091a95d0998bfdabc51c60674df64eb15d`: 61 backend tests (4 optional skips), disposable PostgreSQL migration/service smoke tests, frontend typecheck and production build.
+- CI run [#803](https://github.com/venugopalc80/ATS/actions/runs/41197882091) passed on documentation commit `0fab904f63d151d4ea6cf677b262c2d95fc4125f`.
+- Current PR head at this refresh: `5fc448c4ec52c0e9c31b1d0d0fd62e9125124458`. Run [#805](https://github.com/venugopalc80/ATS/actions/runs/41197991414) is queued/in progress for the latest real-row tenant-isolation test changes. Do not mark those latest tests passed until the run completes successfully.
+- The disposable PostgreSQL migration test applies both Idea 04 migration files, checks idempotent rerun/partial-state repair, history baseline, actor/reason capture, stage seeding, RLS and browser-role table grants. A service-level integration test invokes `ApplicationService.transition_application` against that disposable database and checks persisted stage, actor and reason.
+- The latest tenant-isolation test changes remove the mocked application lookup: they create a real application row with tenant-owned job/candidate records and exercise the FastAPI read/transition and stage-config endpoints against real PostgreSQL membership/role queries. Supabase JWT validation is still dependency-overridden in this disposable test, so this is not live-auth integration coverage.
+- The API preview for commit `0fab904f63d151d4ea6cf677b262c2d95fc4125f` reached Vercel READY. The newest preview for current commit `5fc448c4ec52c0e9c31b1d0d0fd62e9125124458` was queued at the time checked; frontend browser/device acceptance remains outstanding.
+- Read-only ATS-Staging checks found the existing application stage-history table, constraints, index, policies, function and triggers match the intended history migration objects, but the Supabase migration ledger does not record version `20261026150000`. The stage-config table is absent and the application status constraint remains legacy.
+- Read-only ATS production checks found neither Idea 04 table. Production's latest recorded migration is `20261012091011`, materially behind staging's `20261026143744`; a chronological production schema/migration reconciliation is required before any release plan.
+- A detailed safe reconciliation proposal is recorded in `docs/idea-04-staging-migration-reconciliation.md` on PR #69's feature branch.
+- No live Supabase migrations, migration repairs, database writes, merges or production deployments were performed.
+
+**Current Idea 04 status:** In progress, not staging-verified and not released. The feature is not accepted for production.
+
+### Overall tracker reporting
+
+- Verified delivery percentage: still not calculable until the canonical 49-row register and production deployment evidence are reconciled.
+- Evidence coverage percentage: still not calculated. The Idea 04 evidence above increases coverage for one idea only; it does not establish the remaining 48 ideas.
