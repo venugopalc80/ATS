@@ -5,14 +5,12 @@ use live Supabase JWT validation or claim full production database integration c
 """
 import os
 import unittest
-from unittest.mock import AsyncMock, patch
 from uuid import UUID
 
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user_id
 from app.main import app
-from app.routers import applications
 
 
 ORG = UUID("11111111-1111-4111-8111-111111111111")
@@ -51,6 +49,21 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                     "on conflict (organization_id,user_id) do update set role=excluded.role",
                     (ORG, RECRUITER),
                 )
+                cursor.execute(
+                    "insert into public.jobs(id,organization_id) values (%s,%s) on conflict (id) do nothing",
+                    (JOB, OTHER_ORG),
+                )
+                cursor.execute(
+                    "insert into public.candidates(id,organization_id) values (%s,%s) on conflict (id) do nothing",
+                    (CANDIDATE, OTHER_ORG),
+                )
+                cursor.execute(
+                    "insert into public.applications "
+                    "(id,organization_id,job_id,candidate_id,source,status,match_explanation) "
+                    "values (%s,%s,%s,%s,'careers_page','new','confidential recruiter assessment') "
+                    "on conflict (id) do nothing",
+                    (APPLICATION, OTHER_ORG, JOB, CANDIDATE),
+                )
             connection.commit()
 
     @classmethod
@@ -78,41 +91,46 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
             "updated_at": NOW,
         }
 
-    def test_real_membership_query_blocks_cross_tenant_read_and_transition(self):
+    def test_real_application_lookup_and_membership_block_cross_tenant_read_and_transition(self):
+        # The route performs a real application SELECT and then a real membership
+        # query. No application lookup or transition service method is mocked.
         self.current_user["id"] = str(ACTOR)
-        with patch.object(
-            applications.service, "get_application", new_callable=AsyncMock,
-            return_value=self._application_row(),
-        ):
-            response = self.client.get(f"/api/applications/{APPLICATION}")
+        response = self.client.get(f"/api/applications/{APPLICATION}")
         self.assertEqual(response.status_code, 403)
         self.assertNotIn("confidential recruiter assessment", response.text)
 
-        with patch.object(
-            applications.service, "get_application", new_callable=AsyncMock,
-            return_value=self._application_row(),
-        ):
-            with patch.object(
-                applications.service, "transition_application", new_callable=AsyncMock
-            ) as transition:
-                response = self.client.post(
-                    f"/api/applications/{APPLICATION}/transition",
-                    json={"status": "screening", "reason": "CV reviewed"},
-                )
+        response = self.client.post(
+            f"/api/applications/{APPLICATION}/transition",
+            json={"status": "screening", "reason": "CV reviewed"},
+        )
         self.assertEqual(response.status_code, 403)
-        transition.assert_not_awaited()
+
+        import psycopg
+
+        with psycopg.connect(os.environ["TEST_DATABASE_URL"]) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select status from public.applications where id=%s", (APPLICATION,))
+                self.assertEqual(cursor.fetchone()[0], "new")
 
     def test_real_membership_role_blocks_recruiter_stage_config_write(self):
+        # This uses the real membership row and real stage-config endpoint.
         self.current_user["id"] = str(RECRUITER)
-        with patch.object(
-            applications.service, "update_stage_config", new_callable=AsyncMock
-        ) as update_stage:
-            response = self.client.patch(
-                f"/api/applications/stages/screening?organization_id={ORG}",
-                json={"label": "Private review"},
-            )
+        response = self.client.patch(
+            f"/api/applications/stages/screening?organization_id={ORG}",
+            json={"label": "Private review"},
+        )
         self.assertEqual(response.status_code, 403)
-        update_stage.assert_not_awaited()
+
+        import psycopg
+
+        with psycopg.connect(os.environ["TEST_DATABASE_URL"]) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select label from public.application_stage_config "
+                    "where organization_id=%s and stage_key='screening'",
+                    (ORG,),
+                )
+                self.assertEqual(cursor.fetchone()[0], "Screening")
 
 
 if __name__ == "__main__":
