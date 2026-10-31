@@ -40,9 +40,18 @@ def _from_epoch(value: Any) -> datetime | None:
     return datetime.fromtimestamp(int(value), tz=timezone.utc)
 
 
+def subscription_event_rejection_reason(stored_created: int | None, incoming_created: int) -> str | None:
+    """Reject older events and equal-second events whose true order cannot be established."""
+    if stored_created is None or incoming_created > stored_created:
+        return None
+    if incoming_created == stored_created:
+        return "ambiguous_provider_event_timestamp"
+    return "stale_provider_event"
+
+
 def should_apply_subscription_event(stored_created: int | None, incoming_created: int) -> bool:
-    """Apply provider events monotonically; older events must not roll back newer state."""
-    return stored_created is None or incoming_created >= stored_created
+    """Apply only events with a strictly newer provider timestamp."""
+    return subscription_event_rejection_reason(stored_created, incoming_created) is None
 
 
 def _normalise_status(status: str, event_type: str) -> str:
@@ -159,17 +168,20 @@ async def stripe_webhook(
                         # must never be accepted under another organisation's metadata.
                         if str(existing["organization_id"]) != str(organization_id):
                             raise ValueError("Stripe subscription tenant metadata does not match stored tenant")
-                        if not should_apply_subscription_event(
+                        rejection_reason = subscription_event_rejection_reason(
                             existing.get("provider_event_created_at"), event_created
-                        ):
+                        )
+                        if rejection_reason:
                             cursor.execute(
                                 """update public.billing_webhook_events
                                    set organization_id=%s, processing_status='processed',
-                                       processed_at=now(), failure_code='stale_provider_event'
+                                       processed_at=now(), failure_code=%s
                                    where id=%s""",
-                                [organization_id, receipt["id"]],
+                                [organization_id, rejection_reason, receipt["id"]],
                             )
-                            return {"received": True, "processed": False, "stale": True}
+                            result = {"received": True, "processed": False}
+                            result["ambiguous" if rejection_reason == "ambiguous_provider_event_timestamp" else "stale"] = True
+                            return result
 
                     previous_state = {}
                     if existing:
