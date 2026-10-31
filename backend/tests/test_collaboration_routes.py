@@ -424,7 +424,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             ))
 
         self.assertEqual(result, {"ok": True})
-        self.assertTrue(any("set last_read_at=clock_timestamp()" in query for query in cursor.queries))
+        self.assertTrue(any("set last_read_at=greatest(coalesce(last_read_at,'-infinity'::timestamptz),clock_timestamp())" in query for query in cursor.queries))
         self.assertEqual(cursor.params, [conversation_id, user_id])
 
 
