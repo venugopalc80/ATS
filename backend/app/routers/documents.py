@@ -265,6 +265,27 @@ async def preview_candidate_document(
 
 MAX_BULK_FILES = 20
 MAX_BULK_BYTES = 4 * 1024 * 1024  # Stay below the Vercel Functions request-body limit.
+
+
+async def read_bulk_cv_files(files: list[UploadFile]) -> list[bytes]:
+    """Read and enforce the aggregate batch limit before any candidate/storage writes."""
+    payloads: list[bytes] = []
+    total_bytes = 0
+    try:
+        for file in files:
+            data = await file.read(MAX_BYTES + 1)
+            total_bytes += len(data)
+            if total_bytes > MAX_BULK_BYTES:
+                raise HTTPException(
+                    status_code=413,
+                    detail="The total batch must be 4 MB or smaller. Split larger batches into multiple uploads.",
+                )
+            payloads.append(data)
+        return payloads
+    except Exception:
+        for file in files:
+            await file.close()
+        raise
 CV_SKILL_KEYWORDS = (
     "python", "java", "javascript", "typescript", "react", "next.js", "node.js",
     "sql", "postgresql", "mysql", "mongodb", "aws", "azure", "gcp", "docker",
@@ -341,15 +362,14 @@ async def bulk_upload_cvs(
     if len(files) > MAX_BULK_FILES:
         raise HTTPException(status_code=413, detail=f"Upload up to {MAX_BULK_FILES} CVs per batch")
 
-    declared_total = sum(file.size or 0 for file in files)
-    if declared_total > MAX_BULK_BYTES:
-        raise HTTPException(status_code=413, detail="The total batch must be 4 MB or smaller. Split larger batches into multiple uploads.")
+    # UploadFile.size is not guaranteed to be populated. Enforce the aggregate
+    # limit against bytes actually read, before importing any file in the batch.
+    file_payloads = await read_bulk_cv_files(files)
 
     results = []
-    for file in files:
+    for file, data in zip(files, file_payloads, strict=True):
         filename = Path(file.filename or "resume.pdf").name
         mime = (file.content_type or "").lower()
-        data = await file.read(MAX_BYTES + 1)
         try:
             extension = validate_document_bytes(data, mime)
             filename = safe_filename(file.filename, extension)
