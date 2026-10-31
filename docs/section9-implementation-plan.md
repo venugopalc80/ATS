@@ -79,7 +79,7 @@ Section 9 implementation is now present on `feat/section9-commercial-operations`
 - **Idea 48:** resumable onboarding progress, searchable help content, API and initial UI are implemented. Broader content, UX and privacy acceptance remain open.
 - **Idea 49:** scoped support cases, customer-approved time-limited access grants, support APIs and operations/support UIs are implemented. Deeper expiry/revocation integration tests and privileged platform-operator provisioning remain open.
 - Staging-only migrations and seed content have been applied and checked. Production has not been changed.
-- GitHub Actions runs 41198692173 (billing), 41198692190 (acceptance), 41200410637 (billing) and 41200410650 (acceptance) passed. The latest branch-integrated runs 41202107706 (billing) and 41202107713 (acceptance) were started after the equal-timestamp quarantine and branch integration; final results must be checked before release review.
+- GitHub Actions runs 41198692173 (billing), 41198692190 (acceptance), 41200410637 (billing) and 41200410650 (acceptance) passed. The latest integrated-branch runs 41202127560 (billing) and 41202127587 (acceptance) both passed, including webhook safeguards, backend tests, frontend typecheck and production build. They ran on commit `1d307e63c4d4b7fee4e417804320cc9039258b85`; subsequent changes were documentation and PR metadata only.
 
 The feature branch includes the Section 8 retention-exception integrity migration and is now 91 commits ahead of `main` with no commits behind. Revalidation against the integrated branch is in progress.
 
