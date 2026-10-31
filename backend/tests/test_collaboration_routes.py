@@ -272,6 +272,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             )
 
         self.assertEqual(result, {"left": True, "ownership_transferred": True})
+        self.assertIn("for update", cursor.queries[0][0].lower())
         self.assertTrue(any("set member_role='owner'" in query for query, _ in cursor.queries))
         self.assertTrue(any("order by cm.joined_at asc limit 1" in query for query, _ in cursor.queries))
         self.assertTrue(any("'member_left'" in query for query, _ in cursor.queries))
@@ -446,6 +447,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
 
         self.assertEqual(error.exception.status_code, 404)
         self.assertIn("c.archived_at is null", cursor.query)
+        self.assertIn("for update of c", cursor.query.lower())
         self.assertNotIn("update public.conversations", cursor.query)
 
 
