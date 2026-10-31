@@ -49,12 +49,11 @@ async def get_candidate(
     user_id: UUID = Depends(get_current_user_id),
 ) -> CandidateOut:
     try:
-        row = await service.get_candidate(candidate_id)
+        row = await service.get_candidate_for_member(candidate_id, user_id)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    assert_org_member(user_id, row["organization_id"])
     return CandidateOut.model_validate(row)
 
 
@@ -65,10 +64,9 @@ async def update_candidate(
     user_id: UUID = Depends(get_current_user_id),
 ) -> CandidateOut:
     try:
-        existing = await service.get_candidate(candidate_id)
+        existing = await service.get_candidate_for_member(candidate_id, user_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
-        assert_org_member(user_id, existing["organization_id"])
         row = await service.update_candidate(candidate_id, existing["organization_id"], payload)
         if row is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
@@ -83,7 +81,7 @@ async def delete_candidate(
     user_id: UUID = Depends(get_current_user_id),
 ) -> None:
     try:
-        existing = await service.get_candidate(candidate_id)
+        existing = await service.get_candidate_for_member(candidate_id, user_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
         assert_org_admin(user_id, existing["organization_id"])
