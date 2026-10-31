@@ -411,7 +411,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         class ReadCursor(FakeCursor):
             def __init__(self):
                 super().__init__()
-                self.fetchone_rows = [{"joined_at": "joined"}]
+                self.fetchone_rows = [{"id": conversation_id}, {"joined_at": "joined"}]
                 self.queries = []
 
             def execute(self, query, params=None):
@@ -429,6 +429,7 @@ class CollaborationRouteScopeTests(unittest.TestCase):
             ))
 
         self.assertEqual(result, {"ok": True})
+        self.assertIn("for update", cursor.queries[0].lower())
         self.assertTrue(any("set last_read_at=greatest(coalesce(last_read_at,'-infinity'::timestamptz),clock_timestamp())" in query for query in cursor.queries))
         self.assertEqual(cursor.params, [conversation_id, user_id])
 
