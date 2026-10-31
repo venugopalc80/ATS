@@ -21,6 +21,7 @@ class FakeCursor:
         self.sql = ""
         self.params = []
         self.queries = []
+        self.job_status = "open"
 
     def __enter__(self):
         return self
@@ -34,6 +35,8 @@ class FakeCursor:
         self.queries.append((self.sql, self.params))
 
     def fetchone(self):
+        if "select timezone from public.organizations" in self.sql:
+            return {"timezone": "Europe/London"}
         if "from public.jobs where" in self.sql:
             return {"total": 2}
         if "from public.candidates where" in self.sql:
@@ -58,7 +61,7 @@ class FakeCursor:
         if "left join public.applications" in self.sql:
             return [{
                 "id": JOB, "title": "Backend Engineer", "client": "Example Ltd",
-                "status": "open", "applicants": 1, "days_open": 42,
+                "status": self.job_status, "applicants": 1, "days_open": 42,
             }]
         if "from public.interviews i" in self.sql and "scheduled_at" in self.sql and "limit 10" in self.sql:
             if "feedback is null" in self.sql:
@@ -121,19 +124,72 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["metrics"]["open_jobs"], 2)
         self.assertEqual(result["metrics"]["active_candidates"], 8)
         self.assertEqual(result["metrics"]["interviews_today"], 1)
+        self.assertEqual(result["timezone"], "Europe/London")
+        count_query = next((sql, params) for sql, params in cursor.queries if "from public.interviews where" in sql)
+        self.assertIn("scheduled_at >= %s and scheduled_at < %s", count_query[0])
+        self.assertEqual(count_query[1][0], ORG)
+        self.assertEqual(len(count_query[1]), 3)
+        list_query = next((sql, params) for sql, params in cursor.queries if "from public.interviews i" in sql and "feedback is null" not in sql)
+        self.assertIn("scheduled_at >= %s", list_query[0])
+        self.assertEqual(list_query[1][0], ORG)
+        self.assertEqual(len(list_query[1]), 3)
         self.assertEqual(result["metrics"]["placements_active"], 4)
         self.assertEqual(result["pipeline"]["new"], 2)
         self.assertEqual(result["pipeline"]["rejected"], 1)
         self.assertEqual(result["date_range"], {"from": "2026-10-01", "to": "2026-10-13"})
-        self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews/{INTERVIEW}" for item in result["priorities"]))
-        self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers/{OFFER}" for item in result["priorities"]))
+        self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews?interview_id={INTERVIEW}" for item in result["priorities"]))
+        self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers?offer_id={OFFER}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "vacancy_health" and item["href"] == f"/jobs?job_id={JOB}" for item in result["priorities"]))
         self.assertEqual(result["activity"][0]["actor_name"], "Recruiter")
         # Every data query must include the requested organisation scope.
         self.assertTrue(cursor.queries)
         for sql, params in cursor.queries:
-            self.assertIn("organization_id", sql, f"Missing tenant scope in query: {sql}")
+            if "select timezone from public.organizations" in sql:
+                self.assertIn("where id=%s", sql)
+            else:
+                self.assertIn("organization_id", sql, f"Missing tenant scope in query: {sql}")
             self.assertIn(ORG, params, f"Missing requested organisation parameter: {sql}")
+
+
+    def test_organisation_day_bounds_handle_timezone_and_dst(self):
+        helper = dashboard_router.organisation_day_bounds_utc
+        start, end = helper("Europe/London", datetime(2026, 7, 15, 12, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 7, 14, 23, tzinfo=timezone.utc))
+        self.assertEqual(end, datetime(2026, 7, 15, 23, tzinfo=timezone.utc))
+        start, end = helper("Asia/Kolkata", datetime(2026, 10, 13, 12, tzinfo=timezone.utc))
+        self.assertEqual(start, datetime(2026, 10, 12, 18, 30, tzinfo=timezone.utc))
+        self.assertEqual(end, datetime(2026, 10, 13, 18, 30, tzinfo=timezone.utc))
+        start, end = helper("Europe/London", datetime(2026, 3, 29, 12, tzinfo=timezone.utc))
+        self.assertEqual((end - start).total_seconds(), 23 * 3600)
+        start, end = helper("Europe/London", datetime(2026, 10, 25, 12, tzinfo=timezone.utc))
+        self.assertEqual((end - start).total_seconds(), 25 * 3600)
+
+    def test_invalid_organisation_timezone_is_rejected(self):
+        with self.assertRaises(HTTPException) as error:
+            dashboard_router.organisation_day_bounds_utc("Not/A_Real_Zone")
+        self.assertEqual(error.exception.status_code, 500)
+
+    async def test_on_hold_vacancy_is_flagged_for_attention(self):
+        cursor = FakeCursor()
+        cursor.job_status = "on_hold"
+
+        @contextmanager
+        def fake_connection():
+            with FakeConnection(cursor) as connection:
+                yield connection
+
+        with patch.object(dashboard_router, "assert_org_member"), patch.object(
+            dashboard_router, "get_connection", fake_connection
+        ):
+            result = await dashboard_router.dashboard(
+                organization_id=ORG, date_from=None, date_to=None, user_id=USER,
+            )
+
+        self.assertEqual(result["jobs"][0]["health"], "needs_attention")
+        self.assertIn("Role is on hold", result["jobs"][0]["health_reasons"])
+        vacancy_query = next(sql for sql, _params in cursor.queries if "left join public.applications" in sql)
+        self.assertIn("order by case when j.status='on_hold' then 0 else 1 end", vacancy_query)
+        self.assertIn("coalesce(j.opened_at,j.created_at) asc limit 10", vacancy_query)
 
     async def test_rejects_non_member_before_database_access(self):
         with patch.object(
