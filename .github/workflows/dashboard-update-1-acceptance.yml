@@ -5,6 +5,7 @@ on:
     paths:
       - "backend/**"
       - "frontend/**"
+      - "supabase/**"
       - ".github/workflows/dashboard-update-1-acceptance.yml"
 
 jobs:
