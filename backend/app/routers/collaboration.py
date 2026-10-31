@@ -157,13 +157,29 @@ async def create_conversation(payload: ConversationCreate, user_id: UUID = Depen
 
 @router.get("/conversations/{conversation_id}/messages")
 async def list_messages(conversation_id: UUID, before: datetime | None = None,
+                        before_message_id: UUID | None = None,
                         limit: int = Query(default=50, ge=1, le=100),
                         user_id: UUID = Depends(get_current_user_id)):
     with get_connection() as connection:
         with connection.cursor() as cursor:
             membership = _member(cursor, conversation_id, user_id)
             joined_at = membership["joined_at"]
-            if before:
+            if before_message_id:
+                cursor.execute("""
+                  select created_at from public.messages
+                  where id=%s and conversation_id=%s and created_at >= %s
+                """, [before_message_id, conversation_id, joined_at])
+                anchor = cursor.fetchone()
+                if anchor is None:
+                    raise HTTPException(status_code=404, detail="Message cursor not found")
+                cursor.execute("""
+                  select id,sender_user_id,body,created_at,edited_at,deleted_at
+                  from public.messages
+                  where conversation_id=%s and created_at >= %s
+                    and (created_at,id) < (%s,%s)
+                  order by created_at desc,id desc limit %s
+                """, [conversation_id, joined_at, anchor["created_at"], before_message_id, limit])
+            elif before:
                 cursor.execute("""
                   select id,sender_user_id,body,created_at,edited_at,deleted_at
                   from public.messages
