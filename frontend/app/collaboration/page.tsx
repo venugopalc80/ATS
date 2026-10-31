@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch, API_BASE } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
@@ -38,6 +38,7 @@ export default function CollaborationPage() {
   const [manageMembers, setManageMembers] = useState(false);
   const [addMemberIds, setAddMemberIds] = useState<string[]>([]);
   const [editedGroupTitle, setEditedGroupTitle] = useState("");
+  const knownMessageIds = useRef<Set<string>>(new Set());
 
   const request = useCallback(async (path: string, init?: RequestInit) => {
     if (!API_BASE) throw new Error("AQERITH API is not configured.");
@@ -79,11 +80,21 @@ export default function CollaborationPage() {
           Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id)
         );
       });
-      if (replace) setHasMoreMessages(data.length === 50);
-      await request("/api/collaboration/conversations/" + id + "/read", { method: "POST" });
-      setConversations((items) => items.map((c) => c.id === id ? { ...c, unread_count: 0 } : c));
+      const hasNewInboundMessage = data.some(
+        (message) => message.sender_user_id !== currentUserId && !knownMessageIds.current.has(message.id)
+      );
+      if (replace) {
+        knownMessageIds.current = new Set(data.map((message) => message.id));
+        setHasMoreMessages(data.length === 50);
+      } else {
+        data.forEach((message) => knownMessageIds.current.add(message.id));
+      }
+      if (replace || hasNewInboundMessage) {
+        await request("/api/collaboration/conversations/" + id + "/read", { method: "POST" });
+        setConversations((items) => items.map((c) => c.id === id ? { ...c, unread_count: 0 } : c));
+      }
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load messages."); }
-  }, [request]);
+  }, [currentUserId, request]);
 
   const loadOlderMessages = useCallback(async () => {
     if (!activeId || !messages.length || !hasMoreMessages || loadingOlderMessages) return;
@@ -108,6 +119,7 @@ export default function CollaborationPage() {
   useEffect(() => {
     setMessages([]);
     setHasMoreMessages(false);
+    knownMessageIds.current = new Set();
     if (activeId) void loadMessages(activeId, true);
   }, [activeId, loadMessages]);
 
