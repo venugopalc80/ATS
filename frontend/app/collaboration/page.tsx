@@ -26,6 +26,8 @@ export default function CollaborationPage() {
   const [activeId, setActiveId] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [hasMoreMessages, setHasMoreMessages] = useState(false);
+  const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [draft, setDraft] = useState("");
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -66,16 +68,48 @@ export default function CollaborationPage() {
   useEffect(() => { getSupabaseClient().auth.getUser().then(({ data }) => setCurrentUserId(data.user?.id ?? "")).catch(() => setCurrentUserId("")); }, []);
 
   const active = conversations.find((c) => c.id === activeId) ?? null;
-  const loadMessages = useCallback(async (id: string) => {
+  const loadMessages = useCallback(async (id: string, replace = false) => {
     try {
-      const data = await request("/api/collaboration/conversations/" + id + "/messages?limit=50");
-      setMessages(data);
+      const data: Message[] = await request("/api/collaboration/conversations/" + id + "/messages?limit=50");
+      setMessages((current) => {
+        if (replace) return data;
+        const byId = new Map(current.map((message) => [message.id, message]));
+        data.forEach((message) => byId.set(message.id, message));
+        return Array.from(byId.values()).sort((a, b) =>
+          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+        );
+      });
+      if (replace) setHasMoreMessages(data.length === 50);
       await request("/api/collaboration/conversations/" + id + "/read", { method: "POST" });
       setConversations((items) => items.map((c) => c.id === id ? { ...c, unread_count: 0 } : c));
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load messages."); }
   }, [request]);
 
-  useEffect(() => { setMessages([]); if (activeId) void loadMessages(activeId); }, [activeId, loadMessages]);
+  const loadOlderMessages = useCallback(async () => {
+    if (!activeId || !messages.length || !hasMoreMessages || loadingOlderMessages) return;
+    setLoadingOlderMessages(true);
+    try {
+      const cursor = messages[0].id;
+      const data: Message[] = await request(
+        "/api/collaboration/conversations/" + activeId + "/messages?limit=50&before_message_id=" + encodeURIComponent(cursor)
+      );
+      setMessages((current) => {
+        const byId = new Map(data.map((message) => [message.id, message]));
+        current.forEach((message) => byId.set(message.id, message));
+        return Array.from(byId.values()).sort((a, b) =>
+          a.created_at.localeCompare(b.created_at) || a.id.localeCompare(b.id)
+        );
+      });
+      setHasMoreMessages(data.length === 50);
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not load older messages."); }
+    finally { setLoadingOlderMessages(false); }
+  }, [activeId, hasMoreMessages, loadingOlderMessages, messages, request]);
+
+  useEffect(() => {
+    setMessages([]);
+    setHasMoreMessages(false);
+    if (activeId) void loadMessages(activeId, true);
+  }, [activeId, loadMessages]);
 
   // Poll the active thread until server-side realtime delivery is introduced.
   useEffect(() => {
@@ -255,6 +289,7 @@ export default function CollaborationPage() {
               </>}
             </div>}
             <div aria-live="polite" style={{ flex: 1, overflowY: "auto", padding: "20px clamp(14px, 3vw, 32px)", display: "flex", flexDirection: "column", gap: 14 }}>
+              {hasMoreMessages && <button type="button" onClick={() => void loadOlderMessages()} disabled={loadingOlderMessages} style={{ alignSelf: "center", border: "1px solid #e0e5ec", borderRadius: 9, padding: "8px 12px", background: "#fff", color: "#536174", fontSize: 12, cursor: loadingOlderMessages ? "wait" : "pointer" }}>{loadingOlderMessages ? "Loading…" : "Load older messages"}</button>}
               {messages.length === 0 && <div style={{ margin: "auto", textAlign: "center", maxWidth: 300, color: "#7b8595" }}><div style={{ fontSize: 30, marginBottom: 8 }}>✳</div><strong style={{ color: "#344054" }}>Start a useful conversation</strong><p style={{ fontSize: 13, lineHeight: 1.6 }}>Coordinate a vacancy, share an update or agree on the next step.</p></div>}
               {messages.map((m) => <div key={m.id} style={{ alignSelf: m.sender_user_id === currentUserId ? "flex-end" : "flex-start", maxWidth: "80%" }}><div style={{ padding: "11px 14px", borderRadius: 14, background: "#f1f3f7", fontSize: 14, lineHeight: 1.55, overflowWrap: "anywhere" }}>{m.body}</div><div style={{ fontSize: 10, color: "#8a94a3", marginTop: 5 }}>{timeLabel(m.created_at)}</div></div>)}
             </div>
