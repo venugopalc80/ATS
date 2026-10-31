@@ -142,6 +142,86 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any("update public.organization_subscriptions" in sql for sql, _ in cursor.executed))
 
 
+    async def test_equal_timestamp_event_is_flagged_for_reconciliation(self):
+        org_id = UUID("11111111-1111-4111-8111-111111111111")
+        plan_id = UUID("33333333-3333-4333-8333-333333333333")
+        subscription_id = UUID("44444444-4444-4444-8444-444444444444")
+
+        class Cursor:
+            def __init__(self):
+                self.sql = ""
+                self.responses = [
+                    {"id": UUID("55555555-5555-4555-8555-555555555555")},  # receipt
+                    {"id": org_id},  # organisation exists
+                    {"id": plan_id},  # plan exists
+                    {
+                        "id": subscription_id,
+                        "organization_id": org_id,
+                        "plan_id": plan_id,
+                        "status": "active",
+                        "provider_event_created_at": 200,
+                    },
+                ]
+                self.executed = []
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def execute(self, sql, params=None):
+                self.sql = " ".join(sql.split())
+                self.executed.append((self.sql, params))
+
+            def fetchone(self):
+                return self.responses.pop(0) if self.responses else None
+
+        cursor = Cursor()
+
+        class Connection:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args):
+                return False
+
+            def cursor(self):
+                return cursor
+
+        @contextmanager
+        def fake_connection():
+            with Connection() as connection:
+                yield connection
+
+        event = {
+            "id": "evt_equal_timestamp_123",
+            "type": "customer.subscription.updated",
+            "created": 200,
+            "data": {
+                "object": {
+                    "id": "sub_test_123",
+                    "metadata": {
+                        "organization_id": str(org_id),
+                        "plan_id": str(plan_id),
+                    },
+                    "status": "past_due",
+                    "customer": "cus_test_123",
+                }
+            },
+        }
+
+        with patch.dict("os.environ", {"STRIPE_WEBHOOK_SECRET": "whsec_test"}), patch.object(
+            billing_webhooks.stripe.Webhook, "construct_event", return_value=event
+        ), patch.object(billing_webhooks, "get_connection", fake_connection):
+            result = await billing_webhooks.stripe_webhook(FakeRequest(b'{"test":true}'), "sig_test")
+
+        self.assertEqual(result, {"received": True, "processed": False, "ambiguous": True})
+        self.assertTrue(any("failure_code=%s" in sql for sql, _ in cursor.executed))
+        self.assertIn("ambiguous_provider_event_timestamp", [params[1] for _, params in cursor.executed if params and len(params) > 1])
+        self.assertFalse(any("update public.organization_subscriptions" in sql for sql, _ in cursor.executed))
+
+
     async def test_stale_event_with_wrong_tenant_metadata_is_rejected(self):
         stored_org_id = UUID("11111111-1111-4111-8111-111111111111")
         incoming_org_id = UUID("22222222-2222-4222-8222-222222222222")
