@@ -14,10 +14,20 @@ from fastapi import APIRouter, Depends, File, Header, HTTPException, Query, Requ
 from pydantic import BaseModel, Field, ValidationError
 from supabase import create_client
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import get_current_user_id, get_org_role
 from app.db import get_connection
 
 router = APIRouter(tags=["recruitment documents"])
+DOCUMENT_MANAGER_ROLES = {"owner", "admin", "recruiter", "hiring_manager"}
+
+
+def require_document_manager_role(role: str) -> None:
+    if role not in DOCUMENT_MANAGER_ROLES:
+        raise HTTPException(status_code=403, detail="Recruiter or hiring-manager access required")
+
+
+def require_document_manager(user_id: UUID, organization_id: UUID) -> None:
+    require_document_manager_role(get_org_role(user_id, organization_id))
 TEMPLATE_PLACEHOLDERS = {
     "candidate.first_name", "candidate.last_name", "candidate.email",
     "job.title", "job.location", "organization.name",
@@ -83,7 +93,7 @@ def list_recruitment_document_templates(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_document_manager(user_id, organization_id)
     with get_connection() as connection, connection.cursor() as cursor:
         cursor.execute(
             """select t.id, t.organization_id, t.name, t.document_type, t.jurisdiction_code,
@@ -104,7 +114,7 @@ def create_recruitment_document_template(
     payload: TemplateCreate,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, payload.organization_id)
+    require_document_manager(user_id, payload.organization_id)
     placeholders, digest = _template_body(payload.body)
     with get_connection() as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -143,7 +153,7 @@ def create_recruitment_document_template_version(
     payload: TemplateVersionCreate,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_document_manager(user_id, organization_id)
     placeholders, digest = _template_body(payload.body)
     with get_connection() as connection, connection.cursor() as cursor:
         cursor.execute(
@@ -405,7 +415,7 @@ def list_recruitment_documents(
     offer_id: UUID | None = None,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_document_manager(user_id, organization_id)
     _verify_document_parents(organization_id, candidate_id, application_id, offer_id)
     filters = ["organization_id=%s"]
     values: list[object] = [organization_id]
@@ -445,7 +455,7 @@ async def store_recruitment_document(
     This endpoint stores supplied PDF/DOCX bytes; it does not itself render template
     placeholders into a PDF. The rendering pipeline must pass its generated artifact here.
     """
-    assert_org_member(user_id, organization_id)
+    require_document_manager(user_id, organization_id)
     if not any((candidate_id, application_id, offer_id)):
         raise HTTPException(status_code=422, detail="A candidate, application, or offer must be linked")
     _verify_document_parents(organization_id, candidate_id, application_id, offer_id)
@@ -536,7 +546,7 @@ def create_recruitment_document_download(
     preview: bool = Query(default=False),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_document_manager(user_id, organization_id)
     with get_connection() as connection, connection.cursor() as cursor:
         cursor.execute(
             """select storage_bucket, storage_path, file_name, status
