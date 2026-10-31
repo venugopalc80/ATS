@@ -4,7 +4,25 @@ import unittest
 
 from fastapi import HTTPException
 
-from app.routers.recruitment_documents import _template_body, _validate_recruitment_file, verify_adapter_signature
+from app.routers.recruitment_documents import (
+    _template_body, _validate_recruitment_file, require_document_manager_role,
+    verify_adapter_signature,
+)
+
+
+
+class RecruitmentDocumentPermissionTests(unittest.TestCase):
+    def test_allows_hiring_roles(self):
+        for role in ("owner", "admin", "recruiter", "hiring_manager"):
+            with self.subTest(role=role):
+                require_document_manager_role(role)
+
+    def test_denies_non_hiring_roles(self):
+        for role in ("interviewer", "candidate", "member", "viewer"):
+            with self.subTest(role=role):
+                with self.assertRaises(HTTPException) as error:
+                    require_document_manager_role(role)
+                self.assertEqual(error.exception.status_code, 403)
 
 
 class RecruitmentDocumentTemplateTests(unittest.TestCase):
