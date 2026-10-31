@@ -40,6 +40,7 @@ export default function CollaborationPage() {
   const [editedGroupTitle, setEditedGroupTitle] = useState("");
   const knownMessageIds = useRef<Set<string>>(new Set());
   const activeConversationRef = useRef("");
+  activeConversationRef.current = activeId;
 
   const request = useCallback(async (path: string, init?: RequestInit) => {
     if (!API_BASE) throw new Error("AQERITH API is not configured.");
@@ -115,13 +116,13 @@ export default function CollaborationPage() {
           Date.parse(a.created_at) - Date.parse(b.created_at) || a.id.localeCompare(b.id)
         );
       });
+      data.forEach((message) => knownMessageIds.current.add(message.id));
       setHasMoreMessages(data.length === 50);
     } catch (e) { setError(e instanceof Error ? e.message : "Could not load older messages."); }
     finally { setLoadingOlderMessages(false); }
   }, [activeId, hasMoreMessages, loadingOlderMessages, messages, request]);
 
   useEffect(() => {
-    activeConversationRef.current = activeId;
     setMessages([]);
     setHasMoreMessages(false);
     knownMessageIds.current = new Set();
