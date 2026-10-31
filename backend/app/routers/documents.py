@@ -292,41 +292,174 @@ def extract_cv_text(data: bytes, mime: str) -> str:
     return ""
 
 
+def parse_education_records(raw_education: str | None) -> list[dict]:
+    """Parse education lines conservatively; preserve the source line for recruiter correction."""
+    if not raw_education:
+        return []
+    records = []
+    seen = set()
+    for raw_line in raw_education.split(" | "):
+        line = re.sub(r"\s+", " ", raw_line).strip(" •\t-")
+        if not line or line.casefold() in seen:
+            continue
+        seen.add(line.casefold())
+        year_match = re.search(r"\b(19\d{2}|20\d{2}|2100)\b", line)
+        graduation_year = int(year_match.group(1)) if year_match else None
+        without_year = re.sub(r"[,;|()\-]*\s*\b(?:19\d{2}|20\d{2}|2100)\b\s*[,;|()\-]*", " ", line).strip(" ,;|()")
+        parts = [part.strip(" ,;|") for part in re.split(r"[,;|]", without_year) if part.strip(" ,;|")]
+        qualification = parts[0][:180] if parts else None
+        institution = parts[1][:240] if len(parts) > 1 else None
+        field_of_study = None
+        if qualification:
+            field_match = re.search(r"\b(?:of|in)\s+(.+)$", qualification, re.I)
+            if field_match:
+                field_of_study = field_match.group(1).strip(" ,;")[:180] or None
+        records.append({
+            "institution": institution,
+            "qualification": qualification,
+            "field_of_study": field_of_study,
+            "graduation_year": graduation_year,
+            "raw_text": line[:500],
+        })
+    return records
+
+
 def cv_candidate_fields(text: str, filename: str) -> dict:
+    """Extract conservative candidate fields from selectable CV text.
+
+    Keep this deterministic and explainable: section headings and explicit labels
+    take priority over broad guesses. Image-only PDFs require OCR before this runs.
+    """
+    lines = [re.sub(r"\s+", " ", line).strip(" \t|•-") for line in text.splitlines()]
+    lines = [line for line in lines if line]
     email_match = re.search(r"[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}", text, re.I)
     phone_match = re.search(r"(?<!\w)(?:\+?\d[\d ()\-.]{7,}\d)(?!\w)", text)
     excluded = {
         "curriculum vitae", "resume", "résumé", "cv", "professional summary",
         "summary", "profile", "contact", "contact details", "work experience",
         "professional experience", "education", "skills", "experience",
+        "core skills", "key skills", "technical skills", "soft skills",
+        "career summary", "objective", "career objective", "personal details",
+        "personal information", "about me", "highlights", "certifications",
+        "projects", "languages", "references", "achievements", "areas of expertise",
     }
+    # Name: prefer early standalone text that looks like a person's name; never
+    # use a section heading or a role/title line. Single-word names are supported.
     name = ""
-    for raw_line in text.splitlines()[:15]:
-        line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
-        if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+    role_words = re.compile(
+        r"\b(engineer|developer|analyst|scientist|manager|consultant|architect|"
+        r"administrator|designer|specialist|recruiter|accountant|coordinator|"
+        r"technician|director|officer|nurse|teacher|researcher|intern|scrum master)\b", re.I
+    )
+    for line in lines[:18]:
+        if len(line) > 70 or "@" in line or re.search(r"\d{3}", line):
             continue
-        if line.casefold() in excluded or len(line.split()) > 5:
+        if line.casefold().rstrip(":") in excluded or role_words.search(line):
             continue
-        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
-            name = line
-            break
-    if not name:
-        stem = Path(filename).stem
-        stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
-        stem = re.sub(r"[_-]+", " ", stem)
-        name = re.sub(r"\s+", " ", stem).strip(" .-_")
+        if re.match(r"^(name|email|phone|mobile|tel)\s*:", line, re.I):
+            if line.lower().startswith("name:"):
+                line = line.split(":", 1)[1].strip()
+            else:
+                continue
+        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ][A-Za-zÀ-ÖØ-öø-ÿ'’. -]*", line):
+            words = line.split()
+            if 1 <= len(words) <= 5 and len(line) >= 3:
+                name = line
+                break
+    # Do not turn a filename into a candidate identity. Filenames can contain
+    # job titles, agency names, or arbitrary labels; the import route rejects
+    # this sentinel when no plausible person name was found in the CV text.
     parts = name.split()
     first_name = (parts[0] if parts else "CV candidate")[:100]
     last_name = (" ".join(parts[1:]) if len(parts) > 1 else None)
+
+    title = None
+    title_prefix = re.compile(r"^(?:role|current\s+(?:job\s+)?title|professional title|position|designation)\s*[:：-]\s*(.+)$", re.I)
+    title_terms = re.compile(
+        r"\b(engineer|developer|analyst|scientist|manager|consultant|architect|"
+        r"administrator|designer|specialist|recruiter|accountant|coordinator|"
+        r"technician|director|officer|nurse|teacher|researcher|intern|scrum master)\b", re.I
+    )
+    def clean_title(raw: str) -> str | None:
+        value = raw.strip(" .|:-")
+        value = re.split(r"\s+(?:at|@)\s+", value, maxsplit=1, flags=re.I)[0]
+        value = re.split(r"\s+(?:and|with)\s+(?=(?:certified|\d|over|more than|nearly|around)\b)", value, maxsplit=1, flags=re.I)[0]
+        value = re.sub(r"\s{2,}.*$", "", value)
+        value = re.sub(r"\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*[’']?\s*\d{2,4}.*$", "", value, flags=re.I)
+        value = re.sub(r"\s+\(?\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s*[’']?\s*\d{2,4}\b.*$", "", value, flags=re.I)
+        return value[:100].strip() if 3 <= len(value.strip()) <= 100 and title_terms.search(value) else None
+
+    # Prefer a role in the CV header: role labels deeper in a CV may refer to older jobs.
+    for line in lines[:24]:
+        if len(line) <= 100 and "@" not in line and not re.search(r"\d{3}", line):
+            candidate = clean_title(line)
+            if candidate:
+                title = candidate
+                break
+    # If the header has no usable title, prefer explicit role labels in employment history.
+    experience_idx = next((i for i, line in enumerate(lines) if re.search(r"^(professional experience|work experience|employment history)\b", line, re.I)), None)
+    if not title:
+        search_lines = lines[experience_idx:experience_idx + 120] if experience_idx is not None else lines[:180]
+        for line in search_lines:
+            match = title_prefix.match(line)
+            if match:
+                candidate = clean_title(match.group(1))
+                if candidate:
+                    title = candidate
+                    break
+    # Last fallback: use the first role-like line in employment history.
+    if not title and experience_idx is not None:
+        for line in lines[experience_idx:experience_idx + 100]:
+            candidate = clean_title(line)
+            if candidate:
+                title = candidate
+                break
+
+    experience = None
+    # Only accept explicit numeric claims; vague phrases such as "over a decade"
+    # intentionally remain unknown rather than being converted into guessed values.
+    experience_patterns = (
+        r"(?:total\s+)?(?:professional\s+|work\s+)?experience\s*[:：-]?\s*(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?",
+        r"(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?(?:professional\s+)?experience",
+        r"around\s+(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+of\s+experience",
+        r"(\d{1,2}(?:\.\d+)?)\s*\+?\s+years?\s+(?:in|of)\s+(?:the\s+)?(?:IT|software|technology|development|engineering|recruitment|data|business\s+analysis)\b",
+        r"(?:over|more\s+than)\s+(\d{1,2}(?:\.\d+)?)\s*\+?\s*years?\s+(?:of\s+)?experience",
+    )
+    for pattern in experience_patterns:
+        match = re.search(pattern, text[:16000], re.I)
+        if match:
+            value = float(match.group(1))
+            if 0 <= value <= 80:
+                experience = value
+                break
+
+    education = None
+    education_heading = re.compile(r"^\s*(education|academic background|qualifications|educational qualifications)\s*[:：]?\s*$", re.I)
+    section_heading = re.compile(r"^\s*(professional experience|work experience|employment history|technical skills|skills|areas of expertise|certifications|projects|references|awards|publications)\s*[:：]?\s*$", re.I)
+    for index, line in enumerate(lines):
+        if education_heading.match(line):
+            collected = []
+            for candidate_line in lines[index + 1:index + 12]:
+                if section_heading.match(candidate_line):
+                    break
+                if len(candidate_line) <= 220 and not candidate_line.lower().startswith(("•", "-")):
+                    collected.append(candidate_line)
+            if collected:
+                education = " | ".join(collected)[:500]
+                break
+
     skills = [skill for skill in CV_SKILL_KEYWORDS if re.search(r"(?<![a-z0-9])" + re.escape(skill) + r"(?![a-z0-9])", text, re.I)]
     return {
         "first_name": first_name,
         "last_name": last_name[:100] if last_name else None,
         "email": email_match.group(0).lower() if email_match else None,
         "phone": re.sub(r"\s+", " ", phone_match.group(0)).strip()[:50] if phone_match else None,
+        "current_title": title,
+        "years_experience": experience,
+        "education": education,
+        "education_records": parse_education_records(education),
         "skills": skills[:30],
     }
-
 
 @router.post("/bulk-cv", status_code=200)
 async def bulk_upload_cvs(
@@ -355,9 +488,23 @@ async def bulk_upload_cvs(
             filename = safe_filename(file.filename, extension)
             digest = hashlib.sha256(data).hexdigest()
             text = extract_cv_text(data, mime)
+            if not text.strip():
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": "No readable text was found. This may be a scanned/image-only PDF; use a text-based PDF or DOCX until OCR support is available.",
+                    "text_extracted": False,
+                })
+                continue
             fields = cv_candidate_fields(text, filename)
-            if not fields["first_name"].strip():
-                fields["first_name"] = "CV candidate"
+            if not fields["first_name"].strip() or fields["first_name"] == "CV candidate":
+                results.append({
+                    "filename": filename,
+                    "status": "error",
+                    "message": "Could not confidently detect a candidate name. This CV was not imported to avoid creating a misleading candidate record.",
+                    "text_extracted": True,
+                })
+                continue
 
             with get_connection() as connection:
                 with connection.cursor() as cursor:
@@ -389,12 +536,23 @@ async def bulk_upload_cvs(
                     with connection.cursor() as cursor:
                         cursor.execute(
                             """insert into public.candidates
-                               (id, organization_id, first_name, last_name, email, phone, status,
+                               (id, organization_id, first_name, last_name, email, phone, current_title, years_experience, status,
                                 skills, resume_path, resume_text, created_at, updated_at)
-                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
+                               values (%s,%s,%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
                             [candidate_id, organization_id, fields["first_name"], fields["last_name"],
-                             fields["email"], fields["phone"], fields["skills"], path, text or None],
+                             fields["email"], fields["phone"], fields["current_title"], fields["years_experience"],
+                             fields["skills"], path, text or None],
                         )
+                        for education in fields["education_records"]:
+                            cursor.execute(
+                                """insert into public.candidate_education
+                                   (organization_id, candidate_id, institution, qualification,
+                                    field_of_study, graduation_year, raw_text)
+                                   values (%s,%s,%s,%s,%s,%s,%s)""",
+                                [organization_id, candidate_id, education["institution"],
+                                 education["qualification"], education["field_of_study"],
+                                 education["graduation_year"], education["raw_text"]],
+                            )
                         cursor.execute(
                             """insert into public.candidate_documents
                                (id, organization_id, candidate_id, application_id, document_type,
@@ -414,7 +572,9 @@ async def bulk_upload_cvs(
                 results.append({
                     "filename": filename, "status": "imported", "candidate_id": str(candidate_id),
                     "name": " ".join(part for part in [fields["first_name"], fields["last_name"]] if part),
-                    "email": fields["email"], "skills_found": fields["skills"],
+                    "email": fields["email"], "current_title": fields["current_title"],
+                    "years_experience": fields["years_experience"], "education": fields["education"],
+                    "skills_found": fields["skills"],
                     "text_extracted": bool(text.strip()),
                 })
             except Exception:
