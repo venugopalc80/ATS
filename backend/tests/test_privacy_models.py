@@ -43,6 +43,61 @@ def test_privacy_request_deadline_remains_optional():
     assert request.due_at is None
 
 
+
+def test_privacy_request_scope_accepts_json_compatible_bounded_data():
+    request = PrivacyRequestCreate(
+        organization_id=uuid4(),
+        request_type="access",
+        requested_scope={"systems": ["ATS", "CRM"], "date_range": {"from": "2026-01-01"}},
+    )
+    assert request.requested_scope["systems"] == ["ATS", "CRM"]
+
+
+def test_privacy_request_scope_rejects_non_json_values():
+    with pytest.raises(ValidationError, match="JSON-compatible"):
+        PrivacyRequestCreate(
+            organization_id=uuid4(),
+            request_type="access",
+            requested_scope={"invalid": object()},
+        )
+
+
+def test_privacy_request_scope_rejects_oversized_payload():
+    with pytest.raises(ValidationError, match="16 KB"):
+        PrivacyRequestCreate(
+            organization_id=uuid4(),
+            request_type="access",
+            requested_scope={"details": "x" * 16_500},
+        )
+
+
+def test_privacy_request_affected_systems_are_trimmed_and_case_insensitively_unique():
+    request = PrivacyRequestUpdate(
+        status="in_progress",
+        affected_systems=[" ATS ", "CRM"],
+    )
+    assert request.affected_systems == ["ATS", "CRM"]
+    with pytest.raises(ValidationError, match="must be unique"):
+        PrivacyRequestUpdate(
+            status="in_progress",
+            affected_systems=["ATS", " ats "],
+        )
+
+
+def test_privacy_request_affected_systems_reject_blank_and_oversized_entries():
+    with pytest.raises(ValidationError, match="must not be blank"):
+        PrivacyRequestUpdate(status="in_progress", affected_systems=["  "])
+    with pytest.raises(ValidationError, match="120 characters"):
+        PrivacyRequestUpdate(status="in_progress", affected_systems=["x" * 121])
+
+
+def test_privacy_request_affected_systems_have_bounded_item_count():
+    with pytest.raises(ValidationError):
+        PrivacyRequestUpdate(
+            status="in_progress",
+            affected_systems=[f"system-{index}" for index in range(51)],
+        )
+
 def test_non_consent_legal_basis_does_not_require_consent():
     record = ProcessingRecordCreate(**base_processing_record())
     assert record.legal_basis == "legitimate_interests"
