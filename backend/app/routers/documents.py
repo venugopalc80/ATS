@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, UploadFile
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 from pydantic import BaseModel
@@ -200,7 +200,7 @@ async def create_document_download(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select storage_bucket, storage_path, original_filename
+                    """select candidate_id, storage_bucket, storage_path, original_filename
                        from public.candidate_documents
                        where id=%s and organization_id=%s and deleted_at is null""",
                     [document_id, organization_id],
@@ -208,6 +208,13 @@ async def create_document_download(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s,%s,'candidate_document_download_link_created','candidate_document',%s,%s::jsonb)""",
+                    [organization_id, user_id, document_id,
+                     __import__("json").dumps({"candidate_id": str(row["candidate_id"])})],
+                )
         result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": False})
         signed_url = result.get("signedURL") or result.get("signedUrl")
         if not signed_url:
@@ -239,6 +246,13 @@ async def preview_candidate_document(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s,%s,'candidate_document_preview_requested','candidate_document',%s,%s::jsonb)""",
+                    [organization_id, user_id, document_id,
+                     __import__("json").dumps({"candidate_id": str(row["candidate_id"])})],
+                )
         if row["content_type"] == "application/pdf":
             result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(
                 row["storage_path"], 60, options={"download": False}
@@ -433,3 +447,279 @@ async def bulk_upload_cvs(
     return {"total": len(files), "imported": sum(item["status"] == "imported" for item in results),
             "duplicates": sum(item["status"] == "duplicate" for item in results),
             "failed": sum(item["status"] == "error" for item in results), "results": results}
+
+
+# Idea 06 — extraction is stored separately from confirmed candidate data.
+PARSER_VERSION = "aqerith-cv-parser-v1"
+CONFIRMABLE_FIELDS = {"first_name", "last_name", "email", "phone", "skills", "current_title", "years_experience"}
+
+
+class ConfirmExtractionIn(BaseModel):
+    fields: dict
+
+
+def _document_for_extraction(document_id: UUID, organization_id: UUID) -> dict:
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """select id, organization_id, candidate_id, storage_bucket, storage_path,
+                          original_filename, content_type
+                   from public.candidate_documents
+                   where id=%s and organization_id=%s and deleted_at is null""",
+                [document_id, organization_id],
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="Document not found")
+            return row
+
+
+def _structured_cv_fields(text: str, filename: str) -> tuple[dict, dict, dict]:
+    fields = cv_candidate_fields(text, filename)
+    lines = [re.sub(r"\s+", " ", line).strip(" \\t|•-") for line in text.splitlines()]
+    lines = [line for line in lines if line]
+    sections = {"work_history": [], "education": [], "qualifications": []}
+    current = None
+    headings = {
+        "work_history": {"experience", "work experience", "employment history", "professional experience", "career history"},
+        "education": {"education", "academic background", "education history"},
+        "qualifications": {"qualifications", "certifications", "certificates", "licenses", "licences"},
+    }
+    for line in lines:
+        normalized = re.sub(r"[^a-z ]", "", line.casefold()).strip()
+        matched = next((key for key, values in headings.items() if normalized in values), None)
+        if matched:
+            current = matched
+            continue
+        if normalized in {"skills", "technical skills", "summary", "professional summary", "profile", "projects", "references"}:
+            current = None
+            continue
+        if current and len(line) <= 240:
+            sections[current].append(line)
+    data = {
+        **fields,
+        "work_history": sections["work_history"][:80],
+        "education": sections["education"][:40],
+        "qualifications": sections["qualifications"][:40],
+    }
+    confidence = {
+        "first_name": 0.55 if fields.get("first_name") else 0.0,
+        "last_name": 0.55 if fields.get("last_name") else 0.0,
+        "email": 0.99 if fields.get("email") else 0.0,
+        "phone": 0.75 if fields.get("phone") else 0.0,
+        "skills": 0.65 if fields.get("skills") else 0.0,
+        "work_history": 0.45 if sections["work_history"] else 0.0,
+        "education": 0.45 if sections["education"] else 0.0,
+        "qualifications": 0.4 if sections["qualifications"] else 0.0,
+    }
+    provenance = {
+        "source": "original_document_text",
+        "filename": filename,
+        "method": "rule_based",
+        "parser_version": PARSER_VERSION,
+        "text_characters": len(text),
+        "limitations": ["Scanned PDFs require OCR", "Confidence values are heuristic and require recruiter review"],
+    }
+    return data, confidence, provenance
+
+
+def _run_document_extraction(document_id: UUID, organization_id: UUID, user_id: UUID) -> None:
+    try:
+        doc = _document_for_extraction(document_id, organization_id)
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """update public.document_extractions
+                       set status='processing', attempt_count=attempt_count+1,
+                           started_at=now(), updated_at=now(), errors='[]'::jsonb
+                       where organization_id=%s and document_id=%s and status='queued'""",
+                    [organization_id, document_id],
+                )
+                if cursor.rowcount == 0:
+                    return
+        raw = storage_client().storage.from_(doc["storage_bucket"]).download(doc["storage_path"])
+        text = extract_cv_text(raw, doc["content_type"])
+        if not text.strip():
+            raise ValueError("No readable text was found. The PDF may be scanned, corrupted or password-protected.")
+        data, confidence, provenance = _structured_cv_fields(text, doc["original_filename"])
+        import json
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """update public.document_extractions
+                       set status='review_required', parser_version=%s, extraction_data=%s::jsonb,
+                           field_confidence=%s::jsonb, provenance=%s::jsonb, errors='[]'::jsonb,
+                           completed_at=now(), updated_at=now()
+                       where organization_id=%s and document_id=%s and status <> 'confirmed'""",
+                    [PARSER_VERSION, json.dumps(data), json.dumps(confidence), json.dumps(provenance),
+                     organization_id, document_id],
+                )
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s,%s,'cv_extraction_completed','candidate_document',%s,%s::jsonb)""",
+                    [organization_id, user_id, document_id,
+                     json.dumps({"parser_version": PARSER_VERSION, "text_characters": len(text)})],
+                )
+    except Exception as exc:
+        logger.exception("CV extraction failed for document %s", document_id)
+        import json
+        safe_error = str(exc)[:500] if isinstance(exc, (ValueError, HTTPException)) else "Document processing failed. Check file integrity and processing configuration."
+        try:
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """update public.document_extractions
+                           set status='failed', errors=%s::jsonb, completed_at=now(), updated_at=now()
+                           where organization_id=%s and document_id=%s and status <> 'confirmed'""",
+                        [json.dumps([safe_error]), organization_id, document_id],
+                    )
+        except Exception:
+            logger.exception("Unable to persist CV extraction failure for document %s", document_id)
+
+
+@router.post("/{document_id}/parse", status_code=202)
+async def parse_candidate_document(
+    document_id: UUID,
+    background_tasks: BackgroundTasks,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, organization_id)
+    doc = _document_for_extraction(document_id, organization_id)
+    import json
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """insert into public.document_extractions
+                   (organization_id, document_id, candidate_id, status, parser_version, requested_by)
+                   values (%s,%s,%s,'queued',%s,%s)
+                   on conflict (organization_id, document_id) do update
+                     set status=case when public.document_extractions.status in ('confirmed','processing')
+                                     then public.document_extractions.status else 'queued' end,
+                         requested_by=excluded.requested_by, updated_at=now(),
+                         errors=case when public.document_extractions.status='confirmed'
+                                     then public.document_extractions.errors else '[]'::jsonb end
+                   returning id, status, attempt_count""",
+                [organization_id, document_id, doc["candidate_id"], PARSER_VERSION, user_id],
+            )
+            state = cursor.fetchone()
+            if state["status"] != "confirmed":
+                cursor.execute(
+                    """insert into public.audit_events
+                       (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                       values (%s,%s,'cv_extraction_requested','candidate_document',%s,%s::jsonb)""",
+                    [organization_id, user_id, document_id,
+                     json.dumps({"parser_version": PARSER_VERSION})],
+                )
+    if state["status"] == "queued":
+        background_tasks.add_task(_run_document_extraction, document_id, organization_id, user_id)
+    return {"document_id": str(document_id), "status": state["status"], "processing": state["status"] in {"queued", "processing"}}
+
+
+@router.get("/{document_id}/extraction")
+async def get_document_extraction(
+    document_id: UUID,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, organization_id)
+    _document_for_extraction(document_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """select id, document_id, candidate_id, status, parser_version, attempt_count,
+                          extraction_data, field_confidence, provenance, errors, requested_by,
+                          started_at, completed_at, confirmed_at, confirmed_by, created_at, updated_at
+                   from public.document_extractions
+                   where organization_id=%s and document_id=%s""",
+                [organization_id, document_id],
+            )
+            row = cursor.fetchone()
+            if row is None:
+                raise HTTPException(status_code=404, detail="No extraction has been requested for this document")
+            return row
+
+
+@router.post("/{document_id}/confirm-extraction")
+async def confirm_document_extraction(
+    document_id: UUID,
+    payload: ConfirmExtractionIn,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_member(user_id, organization_id)
+    doc = _document_for_extraction(document_id, organization_id)
+    invalid = set(payload.fields.keys()) - CONFIRMABLE_FIELDS
+    if invalid:
+        raise HTTPException(status_code=422, detail="Unsupported candidate fields: " + ", ".join(sorted(invalid)))
+    fields = payload.fields
+    for name_field in ("first_name", "last_name", "phone", "current_title"):
+        if name_field in fields and fields[name_field] is not None:
+            if not isinstance(fields[name_field], str):
+                raise HTTPException(status_code=422, detail=f"{name_field} must be text")
+            if len(fields[name_field]) > 200:
+                raise HTTPException(status_code=422, detail=f"{name_field} must be 200 characters or fewer")
+    if "first_name" in fields and (not isinstance(fields["first_name"], str) or not fields["first_name"].strip()):
+        raise HTTPException(status_code=422, detail="First name cannot be empty")
+    if "skills" in fields:
+        if not isinstance(fields["skills"], list) or len(fields["skills"]) > 100 or any(not isinstance(skill, str) or len(skill) > 100 for skill in fields["skills"]):
+            raise HTTPException(status_code=422, detail="Skills must be a list of up to 100 text values, each 100 characters or fewer")
+    if "email" in fields and fields["email"] is not None:
+        email = str(fields["email"]).strip().lower()
+        if email and not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", email):
+            raise HTTPException(status_code=422, detail="Email address is invalid")
+        fields["email"] = email or None
+    if "skills" in fields and not isinstance(fields["skills"], list):
+        raise HTTPException(status_code=422, detail="Skills must be a list")
+    if "years_experience" in fields and fields["years_experience"] is not None:
+        try:
+            years = float(fields["years_experience"])
+        except (TypeError, ValueError) as exc:
+            raise HTTPException(status_code=422, detail="Years of experience must be numeric") from exc
+        if years < 0 or years > 80:
+            raise HTTPException(status_code=422, detail="Years of experience must be between 0 and 80")
+        fields["years_experience"] = years
+    import json
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """select status, extraction_data from public.document_extractions
+                   where organization_id=%s and document_id=%s for update""",
+                [organization_id, document_id],
+            )
+            extraction = cursor.fetchone()
+            if extraction is None or extraction["status"] not in {"review_required", "confirmed"}:
+                raise HTTPException(status_code=409, detail="Extraction must finish successfully before confirmation")
+            existing_data = extraction["extraction_data"] or {}
+            if extraction["status"] == "confirmed" and all(existing_data.get(key) == value for key, value in fields.items()):
+                return {"document_id": str(document_id), "candidate_id": str(doc["candidate_id"]), "status": "confirmed", "unchanged": True}
+            assignments = []
+            values = []
+            for key, value in fields.items():
+                assignments.append(f"{key}=%s")
+                values.append(value)
+            if assignments:
+                values.extend([doc["candidate_id"], organization_id])
+                cursor.execute(
+                    "update public.candidates set " + ", ".join(assignments) +
+                    ", updated_at=now() where id=%s and organization_id=%s",
+                    values,
+                )
+            confirmed_data = dict(extraction["extraction_data"] or {})
+            confirmed_data.update(fields)
+            cursor.execute(
+                """update public.document_extractions
+                   set status='confirmed', extraction_data=%s::jsonb, confirmed_at=now(),
+                       confirmed_by=%s, updated_at=now()
+                   where organization_id=%s and document_id=%s""",
+                [json.dumps(confirmed_data), user_id, organization_id, document_id],
+            )
+            cursor.execute(
+                """insert into public.audit_events
+                   (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
+                   values (%s,%s,'cv_extraction_confirmed','candidate_document',%s,%s::jsonb)""",
+                [organization_id, user_id, document_id,
+                 json.dumps({"candidate_id": str(doc["candidate_id"]), "confirmed_fields": sorted(fields.keys())})],
+            )
+    return {"document_id": str(document_id), "candidate_id": str(doc["candidate_id"]), "status": "confirmed"}
