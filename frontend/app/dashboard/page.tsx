@@ -160,7 +160,7 @@ export default function Dashboard() {
           </Link>
         ))}
         <div className="nav-label">Administration</div>
-        <div className="nav-item"><span aria-hidden="true">⚙</span><span>Settings</span></div>
+        <Link href="/settings" className="nav-item"><span aria-hidden="true">⚙</span><span>Settings</span></Link>
         <div className="nav-item"><span aria-hidden="true">?</span><span>Help &amp; support</span></div>
       </aside>
 
