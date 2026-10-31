@@ -88,5 +88,5 @@
 ### First RLS harness execution and correction
 - GitHub Actions run [41199295316](https://github.com/venugopalc80/ATS/actions/runs/41199295316) executed the isolated PostgreSQL job and confirmed migrations 024, 025 and 026 applied successfully; initial role checks progressed through recruiter creation, hiring-manager creation, viewer denial, invalid assignee denial, and own-draft update.
 - The run then failed on a malformed PL/pgSQL anonymous-block delimiter in the remaining requester update assertions (`DO $` rather than `DO $$`). This was a test-harness syntax defect, not a migration failure.
-- Corrected in commit `78097c5e5bed08276e7abf694d279f59bd7b9a3d`. Awaiting a fresh CI execution before marking the harness passed.
+- An attempted correction in commit `78097c5e5bed08276e7abf694d279f59bd7b9a3d` did not change the stored SQL file; the next run exposed the same delimiter error. The actual file correction is now committed as `bd7313a19aeb88ab8fbd6bba4b77d9a195598d01`. A fresh CI execution is in progress.
 - Staging and production remain unchanged; migration 026 is still unapplied.
