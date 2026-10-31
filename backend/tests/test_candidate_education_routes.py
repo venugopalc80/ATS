@@ -9,14 +9,12 @@ from app.routers import candidates as candidates_router
 
 
 ORG = UUID("11111111-1111-4111-8111-111111111111")
-OTHER_ORG = UUID("99999999-9999-4999-8999-999999999999")
 USER = UUID("22222222-2222-4222-8222-222222222222")
 CANDIDATE = UUID("33333333-3333-4333-8333-333333333333")
 
 
 class FakeCursor:
-    def __init__(self, candidate_org=ORG):
-        self.candidate_org = candidate_org
+    def __init__(self):
         self.sql = ""
         self.params = []
         self.executed = []
@@ -37,7 +35,7 @@ class FakeCursor:
 
     def fetchone(self):
         if self.sql.startswith("select organization_id from public.candidates"):
-            return {"organization_id": self.candidate_org}
+            return {"organization_id": ORG}
         if "returning id, institution" in self.sql:
             return {
                 "id": UUID("44444444-4444-4444-8444-444444444444"),
@@ -90,20 +88,22 @@ class CandidateEducationEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(params, [CANDIDATE, ORG])
 
     async def test_non_member_is_rejected_before_education_rows_are_read(self):
+        cursor = FakeCursor()
+
         @contextmanager
         def fake_connection():
-            yield FakeConnection(FakeCursor())
+            yield FakeConnection(cursor)
 
         with patch.object(candidates_router, "get_connection", fake_connection), patch.object(
             candidates_router, "assert_org_member",
             side_effect=HTTPException(status_code=403, detail="forbidden"),
-        ), patch.object(candidates_router, "get_connection", wraps=fake_connection) as connection:
+        ):
             with self.assertRaises(HTTPException) as error:
                 await candidates_router.list_candidate_education(CANDIDATE, USER)
 
         self.assertEqual(error.exception.status_code, 403)
-        # Candidate ownership is looked up first; the education query must not run after denial.
-        self.assertEqual(connection.call_count, 1)
+        self.assertEqual(len(cursor.executed), 1)
+        self.assertTrue(cursor.executed[0][0].startswith("select organization_id from public.candidates"))
 
     async def test_empty_replacement_deletes_existing_education(self):
         cursors = []
@@ -117,9 +117,7 @@ class CandidateEducationEndpointTests(unittest.IsolatedAsyncioTestCase):
         with patch.object(candidates_router, "get_connection", fake_connection), patch.object(
             candidates_router, "assert_org_member"
         ):
-            result = await candidates_router.replace_candidate_education(
-                CANDIDATE, [], USER
-            )
+            result = await candidates_router.replace_candidate_education(CANDIDATE, [], USER)
 
         self.assertEqual(result, [])
         self.assertTrue(cursors[-1].deleted)
@@ -144,11 +142,36 @@ class CandidateEducationEndpointTests(unittest.IsolatedAsyncioTestCase):
             candidates_router, "assert_org_member"
         ):
             with self.assertRaises(HTTPException) as error:
-                await candidates_router.replace_candidate_education(
-                    CANDIDATE, [record], USER
-                )
+                await candidates_router.replace_candidate_education(CANDIDATE, [record], USER)
 
         self.assertEqual(error.exception.status_code, 422)
+
+    async def test_valid_replacement_inserts_organisation_scoped_record(self):
+        cursors = []
+        record = candidates_router.CandidateEducationInput(
+            institution="Coventry University",
+            qualification="MSc",
+            field_of_study="Computer Science",
+            start_year=2024,
+            graduation_year=2025,
+            raw_text="MSc Computer Science, Coventry University",
+        )
+
+        @contextmanager
+        def fake_connection():
+            cursor = FakeCursor()
+            cursors.append(cursor)
+            yield FakeConnection(cursor)
+
+        with patch.object(candidates_router, "get_connection", fake_connection), patch.object(
+            candidates_router, "assert_org_member"
+        ):
+            result = await candidates_router.replace_candidate_education(CANDIDATE, [record], USER)
+
+        self.assertEqual(len(result), 1)
+        insert_query, params = cursors[-1].executed[-1]
+        self.assertIn("insert into public.candidate_education", insert_query)
+        self.assertEqual(params[:2], [ORG, CANDIDATE])
 
 
 if __name__ == "__main__":
