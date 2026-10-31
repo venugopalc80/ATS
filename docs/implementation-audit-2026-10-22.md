@@ -489,3 +489,15 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Current PR #69 head after these changes: `f9ea9291e1818aa4167db71fb7da43f85db8e016`. CI is running for the new commits; results are not yet verified.
 - The candidate detail read still resolves the candidate by ID before checking membership, so it can distinguish a nonexistent ID (404) from an existing cross-tenant ID (403). This is an existence-oracle concern to review separately; no claim is made that all candidate endpoints now conceal record existence.
 - No staging/production database writes, migrations, merge, or production deployment were performed.
+
+
+### Candidate read existence-oracle hardening (2026-10-31)
+
+- Candidate detail, update, and delete routes previously fetched candidate records by candidate ID before checking the caller's organisation membership. This produced different responses for unknown IDs (404) and existing cross-tenant IDs (403), allowing an authenticated user to infer whether a candidate ID exists.
+- Added `CandidateService.get_candidate_for_member(candidate_id, user_id)`, which returns a row only when an `organization_members` record exists for the candidate's organisation and caller. The detail, update, and delete routes now use this membership-scoped lookup. Unknown and cross-tenant IDs therefore follow the same not-found path.
+- Added a SQL-contract test asserting the candidate lookup is constrained by the organisation-membership EXISTS predicate.
+- Current candidate tenant-mutation test suite now has six tests. GitHub Actions run #41200176382 backend job passed on PR head `30121396983fadad5663d7c11af3142697cfe9f4`: 63 backend tests total, 4 skipped for optional environment/setup. The latest frontend check was still running at the time of this note.
+- This test suite checks the generated SQL contract with mocked database connections. It does not replace a full Supabase integration test under authenticated database roles/RLS.
+- Document preview/download endpoints were reviewed: they require organisation membership and filter document rows by both document ID and organisation ID before creating a 60-second signed URL or returning extracted DOCX text. Fine-grained candidate/document role permissions have not been specified or verified, so no role-policy change was assumed.
+- Bulk CV import creates candidate/document records and an audit event, but it does not itself capture historic consent evidence. It must not be interpreted as proving consent. A future historic-consent import needs source, original timestamp, purpose/notice version where known, evidence reference, and explicit distinction between verified, unknown, and missing evidence; the import must not invent a consent timestamp.
+- No staging/production database writes, migrations, merge, or production deployment were performed.
