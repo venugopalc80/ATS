@@ -23,6 +23,19 @@ class CandidateTenantMutationTests(unittest.IsolatedAsyncioTestCase):
         self.connection_context.__enter__.return_value = self.connection
         self.connection_context.__exit__.return_value = False
 
+    async def test_candidate_read_requires_membership_in_candidate_organisation(self):
+        self.cursor.fetchone.return_value = None
+        with patch("app.services.candidate_service.get_connection", return_value=self.connection_context):
+            result = await CandidateService().get_candidate_for_member(CANDIDATE, OTHER_ORG)
+
+        sql, params = self.cursor.execute.call_args.args
+        self.assertIn("from public.candidates c", sql.lower())
+        self.assertIn("from public.organization_members om", sql.lower())
+        self.assertIn("om.organization_id = c.organization_id", sql)
+        self.assertIn("om.user_id = %s", sql)
+        self.assertEqual(params, [CANDIDATE, OTHER_ORG])
+        self.assertIsNone(result)
+
     async def test_update_query_scopes_candidate_id_and_organization_id(self):
         self.cursor.fetchone.return_value = {"id": CANDIDATE, "organization_id": ORG}
         with patch("app.services.candidate_service.get_connection", return_value=self.connection_context):
