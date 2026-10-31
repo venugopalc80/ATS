@@ -341,5 +341,64 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertFalse(any("set left_at=now()" in query for query in cursor.queries))
 
 
+    def test_add_group_members_rejects_users_outside_conversation_organization(self):
+        conversation_id, owner_id, foreign_user_id = uuid4(), uuid4(), uuid4()
+        organization_id = uuid4()
+
+        class ForeignMemberCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.fetchone_rows = [
+                    {"kind": "group", "member_role": "owner"},
+                    {"organization_id": organization_id},
+                ]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+            def fetchall(self):
+                if "select user_id from public.organization_members" in self.query:
+                    return []
+                return []
+
+        cursor = ForeignMemberCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.add_group_members(
+                    conversation_id=conversation_id,
+                    payload=collaboration.GroupMembersAdd(member_ids=[foreign_user_id]),
+                    user_id=owner_id,
+                ))
+
+        self.assertEqual(error.exception.status_code, 422)
+        self.assertIn("organization_members", cursor.query)
+        self.assertFalse(any("insert into public.conversation_members" in query for query in cursor.queries))
+
+    def test_former_organization_member_cannot_manage_group(self):
+        conversation_id, former_owner_id = uuid4(), uuid4()
+
+        class FormerOwnerCursor(FakeCursor):
+            def fetchone(self):
+                return None
+
+        cursor = FormerOwnerCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.update_group_title(
+                    conversation_id=conversation_id,
+                    payload=collaboration.GroupTitleUpdate(title="Renamed"),
+                    user_id=former_owner_id,
+                ))
+
+        self.assertEqual(error.exception.status_code, 404)
+        self.assertIn("organization_members", cursor.query)
+        self.assertNotIn("update public.conversations", cursor.query)
+
+
 if __name__ == "__main__":
     unittest.main()
