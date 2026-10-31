@@ -87,14 +87,27 @@ class CandidateService:
                 return cursor.fetchone()
 
     async def update_candidate(
-        self, candidate_id: UUID, payload: CandidateUpdate
+        self,
+        candidate_id: UUID,
+        organization_id: UUID,
+        payload: CandidateUpdate,
     ) -> dict[str, Any] | None:
         data = payload.model_dump(mode="python", exclude_unset=True)
         if not data:
-            return await self.get_candidate(candidate_id)
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        f"""
+                        select {CANDIDATE_COLUMNS}
+                        from public.candidates
+                        where id = %s and organization_id = %s
+                        """,
+                        [candidate_id, organization_id],
+                    )
+                    return cursor.fetchone()
 
         assignments = ", ".join(f"{column} = %s" for column in data)
-        values = list(data.values()) + [candidate_id]
+        values = list(data.values()) + [candidate_id, organization_id]
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -102,18 +115,18 @@ class CandidateService:
                     f"""
                     update public.candidates
                     set {assignments}, updated_at = now()
-                    where id = %s
+                    where id = %s and organization_id = %s
                     returning {CANDIDATE_COLUMNS}
                     """,
                     values,
                 )
                 return cursor.fetchone()
 
-    async def delete_candidate(self, candidate_id: UUID) -> bool:
+    async def delete_candidate(self, candidate_id: UUID, organization_id: UUID) -> bool:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "delete from public.candidates where id = %s",
-                    [candidate_id],
+                    "delete from public.candidates where id = %s and organization_id = %s",
+                    [candidate_id, organization_id],
                 )
                 return cursor.rowcount > 0
