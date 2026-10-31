@@ -99,6 +99,8 @@ class CommunicationSchemaTests(unittest.TestCase):
         other_thread_id = UUID("22222222-2222-4222-8222-222222222222")
         template_id = UUID("33333333-3333-4333-8333-333333333333")
         message = {
+            "visibility": "candidate",
+            "status": "draft",
             "thread_id": thread_id,
             "body_text": "Interview details",
             "subject": "Interview",
@@ -128,6 +130,8 @@ class CommunicationSchemaTests(unittest.TestCase):
     def test_idempotent_retry_requires_same_recipient(self):
         thread_id = UUID("11111111-1111-4111-8111-111111111111")
         message = {
+            "visibility": "candidate",
+            "status": "draft",
             "thread_id": thread_id,
             "body_text": "Interview details",
             "subject": None,
