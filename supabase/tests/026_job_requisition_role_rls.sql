@@ -134,7 +134,7 @@ end $$;
 -- or their own submitted request.
 update public.job_requisitions set title='Own draft edited'
 where id='40000000-0000-0000-0000-000000000003';
-do $ declare affected integer; begin
+do $$ declare affected integer; begin
  update public.job_requisitions set title='Hijacked draft'
  where id='40000000-0000-0000-0000-000000000001';
  get diagnostics affected = row_count;
