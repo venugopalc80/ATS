@@ -1,8 +1,8 @@
 # Section 6 — Analytics and Business Intelligence
 
 **Scope:** AQERITH Ideas 28–33  
-**Status:** Metric contract, KPI/funnel/workload/source APIs, six-month baseline demand forecast, allowlisted CSV exports and first analytics workspace UI are committed on the feature branch. Forecast/campaign SQL was checked read-only against staging; staging has no recruitment/campaign rows for numerical reconciliation. Check the linked pull request's Actions checks for the latest code acceptance status.  
-**Last reviewed:** 2026-10-26
+**Status:** Metric contract, KPI/funnel/workload/source APIs, six-month baseline demand forecast, allowlisted CSV exports and first analytics workspace UI are committed on the feature branch. Forecast/campaign SQL was checked read-only against staging; staging has no recruitment/campaign rows for numerical reconciliation. The latest branch acceptance run at `d8ff6f40233f26f59dda9b9259fd3b27b287ddbd` passed backend tests, frontend type-checking and the production build (GitHub Actions run 40341573786).  
+**Last reviewed:** 2026-10-31
 
 This document defines the proposed shared contract for analytics APIs, dashboards, exports and forecast comparisons. A metric is not accepted solely because the UI displays a value.
 
@@ -117,3 +117,10 @@ The staging analytics tables also contain no recruitment/campaign rows suitable 
 - Offers expose status, sent_at and responded_at; validate transitions and multiple offers per application.
 - Source and campaign tables exist, but raw events, qualification semantics, attribution links and comparable cost data must be verified before ROI reporting.
 - Persistence for forecast runs, saved reports, exports and scheduled delivery has not yet been confirmed.
+
+
+## Migration-ledger reconciliation check (2026-10-31)
+
+A read-only query of `supabase_migrations.schema_migrations` in the connected staging project returned **67 applied migration versions**, ranging from `20261013110516` through `20261026143744`. The feature branch currently contains 11 SQL migration files. The staging ledger contains version identifiers only; it does not provide the original SQL definitions. The repository migration filenames also do not correspond one-to-one with the staging ledger versions.
+
+This confirms a migration-history provenance gap, not that the staging database is missing those objects. Do not attempt to mark migrations as applied, reset the ledger, or generate replacement DDL from table names alone. The safe next step is to recover the original migration source from the deployment/repository history or obtain a reviewed schema dump and reconcile it against the committed migrations in an isolated database. This check was read-only; no migration, table, policy or data was changed.
