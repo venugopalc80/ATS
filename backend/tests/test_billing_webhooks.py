@@ -39,10 +39,16 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
     def test_older_subscription_event_is_ignored(self):
         self.assertFalse(billing_webhooks.should_apply_subscription_event(200, 199))
 
-    def test_newer_or_equal_subscription_event_is_applied(self):
-        self.assertTrue(billing_webhooks.should_apply_subscription_event(200, 200))
+    def test_newer_subscription_event_is_applied(self):
         self.assertTrue(billing_webhooks.should_apply_subscription_event(200, 201))
         self.assertTrue(billing_webhooks.should_apply_subscription_event(None, 1))
+
+    def test_equal_timestamp_subscription_event_is_rejected_as_ambiguous(self):
+        self.assertFalse(billing_webhooks.should_apply_subscription_event(200, 200))
+        self.assertEqual(
+            billing_webhooks.subscription_event_rejection_reason(200, 200),
+            "ambiguous_provider_event_timestamp",
+        )
 
     def test_deleted_subscription_cannot_remain_active(self):
         self.assertEqual(
@@ -131,7 +137,8 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
             result = await billing_webhooks.stripe_webhook(FakeRequest(b'{"test":true}'), "sig_test")
 
         self.assertEqual(result, {"received": True, "processed": False, "stale": True})
-        self.assertTrue(any("failure_code='stale_provider_event'" in sql for sql, _ in cursor.executed))
+        self.assertTrue(any("failure_code=%s" in sql for sql, _ in cursor.executed))
+        self.assertIn("stale_provider_event", [params[1] for _, params in cursor.executed if params and len(params) > 1])
         self.assertFalse(any("update public.organization_subscriptions" in sql for sql, _ in cursor.executed))
 
 
