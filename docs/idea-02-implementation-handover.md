@@ -68,3 +68,11 @@
 - Do not apply this migration to production.
 - Existing API job deletion is retained as a compatibility route but now closes rather than physically deleting a vacancy.
 - Review direct database grants and RLS with the staging advisor after migration; backend database access is privileged and therefore must enforce organisation membership and cross-tenant link validation itself.
+
+
+## Additional security hardening — migration 026
+- Migration `026_job_requisition_role_rls.sql` tightens direct authenticated Supabase access: requisition creators must have an eligible organisation role; hiring-manager and recruiter assignments must use eligible roles; requester updates are limited to their own draft/rejected requisitions while owners/admins retain administrative update access.
+- This mirrors the API's existing role and assignment checks at the database RLS boundary, preventing direct Supabase clients from bypassing those restrictions.
+- Migration 026 has been committed to the Idea 02 feature branch but has **not** been applied to ATS-Staging or production. Apply to staging only after the migration review and CI checks pass, then verify with authenticated RLS tests.
+- The acceptance workflow now runs when `supabase/**` changes, so database migration changes trigger the same backend integration and frontend build checks.
+- New database-outage regression tests cover 503 responses during requisition create/update link validation. GitHub Actions run #755 passed both backend PostgreSQL integration and frontend typecheck/build jobs. Run #795, which includes migration 026 and workflow path changes, is currently in progress at handover update time.
