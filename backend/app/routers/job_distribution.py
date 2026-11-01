@@ -49,7 +49,7 @@ async def save_job_distribution(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "job.manage")
     channel_ids = [item.channel_id for item in payload.channels]
     if len(channel_ids) != len(set(channel_ids)):
         raise HTTPException(status_code=422, detail="Each distribution channel can only appear once")
