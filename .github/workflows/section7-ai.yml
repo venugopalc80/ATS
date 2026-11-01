@@ -1,0 +1,52 @@
+name: Section 7 AI acceptance
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/section7-ai.yml"
+  push:
+    branches: [feat/section7-responsible-ai]
+    paths:
+      - "backend/**"
+      - "frontend/**"
+      - "supabase/migrations/**"
+      - ".github/workflows/section7-ai.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backend-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install backend dependencies
+        run: pip install -r backend/requirements.txt
+      - name: Compile backend source
+        working-directory: backend
+        run: python -m compileall -q app tests
+      - name: Run backend unit tests
+        working-directory: backend
+        run: python -m unittest discover -s tests -v
+
+  frontend-typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install --no-audit --no-fund
+      - name: Typecheck frontend
+        working-directory: frontend
+        run: npm run typecheck

@@ -15,8 +15,9 @@ from app.routers.notes import router as notes_router
 from app.routers.job_distribution import router as job_distribution_router
 from app.routers.public_jobs import router as public_jobs_router
 from app.routers.documents import router as documents_router
+from app.routers.ai import router as ai_router
 
-app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
+app=FastAPI(title="AQERITH API",version="0.11.0",description="Recruitment operations and responsible AI API")
 frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
 frontend_origins = {
     origin.strip().rstrip("/")
@@ -46,9 +47,12 @@ app.include_router(notes_router)
 app.include_router(job_distribution_router)
 app.include_router(public_jobs_router)
 app.include_router(documents_router)
+app.include_router(ai_router)
 
 @app.get("/")
-async def root()->dict[str,str]: return {"status":"ok","service":"ats-api","docs":"/docs"}
+async def root()->dict[str,str]:
+    return {"status":"ok","service":"aqerith-api","docs":"/docs"}
 
 @app.get("/health")
-async def health()->dict[str,str]: return {"status":"ok","service":"ats-api"}
+async def health()->dict[str,str]:
+    return {"status":"ok","service":"aqerith-api"}
