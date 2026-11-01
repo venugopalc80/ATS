@@ -145,6 +145,38 @@ do $$ declare affected integer; begin
  if affected <> 0 then raise exception 'requester updated submitted requisition'; end if;
 end $$;
 
+-- UPDATE WITH CHECK must also reject invalid reassignment and tenant changes.
+do $ begin
+ begin
+  update public.job_requisitions
+  set client_id='30000000-0000-0000-0000-000000000002'
+  where id='40000000-0000-0000-0000-000000000003';
+  raise exception 'requester assigned a cross-organisation client during update';
+ exception when insufficient_privilege then null;
+ end;
+ begin
+  update public.job_requisitions
+  set hiring_manager_id='20000000-0000-0000-0000-000000000005'
+  where id='40000000-0000-0000-0000-000000000003';
+  raise exception 'requester assigned an ineligible hiring manager during update';
+ exception when insufficient_privilege then null;
+ end;
+ begin
+  update public.job_requisitions
+  set recruiter_id='20000000-0000-0000-0000-000000000002'
+  where id='40000000-0000-0000-0000-000000000003';
+  raise exception 'requester assigned an ineligible recruiter during update';
+ exception when insufficient_privilege then null;
+ end;
+ begin
+  update public.job_requisitions
+  set organization_id='10000000-0000-0000-0000-000000000002'
+  where id='40000000-0000-0000-0000-000000000003';
+  raise exception 'requester moved requisition to another organisation';
+ exception when insufficient_privilege then null;
+ end;
+end $;
+
 -- Admin retains administrative update access.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',false);
 update public.job_requisitions set title='Admin updated'
