@@ -50,7 +50,7 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
     def tearDownClass(cls):
         app.dependency_overrides.pop(get_current_user_id, None)
 
-    def test_cross_tenant_application_read_returns_forbidden(self):
+    def test_cross_tenant_application_read_returns_not_found(self):
         with patch.object(
             applications.service, "get_application_for_member", new_callable=AsyncMock,
             return_value=None,
@@ -65,7 +65,7 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
         self.assertNotIn("match_explanation", response.text)
         get_application.assert_awaited_once_with(APPLICATION, USER)
 
-    def test_cross_tenant_history_read_is_denied_before_history_query(self):
+    def test_cross_tenant_history_read_returns_not_found_before_history_query(self):
         with patch.object(
             applications.service, "get_application_for_member", new_callable=AsyncMock,
             return_value=None,
@@ -82,7 +82,7 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
         self.assertEqual(response.status_code, 404)
         list_history.assert_not_awaited()
 
-    def test_cross_tenant_transition_is_denied_before_transition_write(self):
+    def test_cross_tenant_transition_returns_not_found_before_transition_write(self):
         with patch.object(
             applications.service, "get_application_for_member", new_callable=AsyncMock,
             return_value=None,
@@ -115,7 +115,7 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
                     json={"label": "Private review"},
                 )
 
-        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response.status_code, 403)
         update_stage.assert_not_awaited()
 
 
