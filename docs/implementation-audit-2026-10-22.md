@@ -544,3 +544,16 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Added a regression test where one item succeeds, the next encounters a database failure, and the final item is explicitly marked unprocessed.
 - Current PR #69 head: `55057f42eb40ea57dda7963b0957bb979cff0f5b`. GitHub Actions run [#908](https://github.com/venugopalc80/ATS/actions/runs/41327840136) passed: **73 backend tests, 4 skipped**, PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and production build. The run log confirms the database-interruption test, bulk CV lock tests, and cross-tenant document preview/download test passed.
 - No staging/production database writes or migrations, merge, or production deployment occurred.
+
+
+### Exact-head Vercel previews restored and current-head CI passed (2026-11-01)
+
+- Current PR #69 head: `55057f42eb40ea57dda7963b0957bb979cff0f5b`.
+- GitHub Actions run [#908](https://github.com/venugopalc80/ATS/actions/runs/41327840136) passed on this exact head: **73 backend tests passed, 4 skipped**, disposable PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and frontend production build.
+- Current-head Vercel deployment records show all three preview projects in READY state:
+  - ATS API: https://ats-rn1v1j3aq-the-pixel-muses.vercel.app
+  - AQERITH frontend: https://aqerith-g2daaazq1-the-pixel-muses.vercel.app
+  - ATS staging API: https://ats-staging-bkysu5mwr-the-pixel-muses.vercel.app
+- Each deployment record identifies commit `55057f42eb40ea57dda7963b0957bb979cff0f5b`. This supersedes earlier notes that exact-head previews were blocked by the Vercel daily build limit.
+- Preview browser acceptance is still outstanding: non-custom preview domains are SSO-protected, and no authorised authenticated recruiter workflow has been completed.
+- PR #69 remains draft/open/unmerged. No staging or production migrations, database writes, or production deployment were performed.
