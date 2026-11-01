@@ -154,3 +154,26 @@ class ApplicationSLADueService:
                     [organization_id],
                 )
                 return list(cursor.fetchall())
+
+
+    async def list_organization_deadlines(self, organization_id) -> list[dict]:
+        """Return an organisation-scoped SLA work queue for dashboards and reporting."""
+        from app.db import get_connection
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select d.id, d.application_id, d.milestone, d.starts_at, d.due_at, "
+                    "case when d.status in ('pending','overdue') and d.due_at < now() "
+                    "then 'overdue' else d.status end as status, d.completed_at, "
+                    "a.status as application_status, c.first_name, c.last_name, j.title as job_title "
+                    "from public.application_sla_deadlines d "
+                    "join public.applications a on a.id=d.application_id "
+                    "join public.candidates c on c.id=a.candidate_id "
+                    "join public.jobs j on j.id=a.job_id "
+                    "where d.organization_id=%s "
+                    "order by case when d.status='completed' then 1 else 0 end, d.due_at "
+                    "limit 500",
+                    [organization_id],
+                )
+                return list(cursor.fetchall())
