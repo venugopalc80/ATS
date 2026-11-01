@@ -143,6 +143,7 @@ export default function CollaborationPage() {
 
   // Poll the active thread until server-side realtime delivery is introduced.
   const pollInFlight = useRef(false);
+  const pinRequestsInFlight = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!activeId || !organizationId) return;
     const conversationId = activeId;
@@ -269,10 +270,18 @@ export default function CollaborationPage() {
   }
 
   async function togglePin(chat: Conversation) {
+    // Ignore repeated clicks while this conversation's pin request is unresolved.
+    if (pinRequestsInFlight.current.has(chat.id)) return;
+    pinRequestsInFlight.current.add(chat.id);
+    const nextPinned = !chat.is_pinned;
     try {
-      await request("/api/collaboration/conversations/" + chat.id + "/pin?pinned=" + String(!chat.is_pinned), { method: "POST" });
-      setConversations((items) => items.map((c) => c.id === chat.id ? { ...c, is_pinned: !c.is_pinned } : c));
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not update pin."); }
+      await request("/api/collaboration/conversations/" + chat.id + "/pin?pinned=" + String(nextPinned), { method: "POST" });
+      setConversations((items) => items.map((c) => c.id === chat.id ? { ...c, is_pinned: nextPinned } : c));
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Could not update pin.");
+    } finally {
+      pinRequestsInFlight.current.delete(chat.id);
+    }
   }
 
   const activeTitle = active?.kind === "group" ? (active.title || "Group conversation") : active?.members.filter((m) => m.id !== currentUserId).map((m) => m.full_name).filter(Boolean).join(", ") || "Direct message";
