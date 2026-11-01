@@ -273,16 +273,47 @@ $$;
 
 drop trigger if exists interview_feedback_immutable on public.interview_feedback;
 create trigger interview_feedback_immutable
-before update on public.interview_feedback
+before update or delete on public.interview_feedback
 for each row execute function public.prevent_submitted_interview_feedback_mutation();
 
 drop trigger if exists scorecard_response_immutable on public.scorecard_responses;
 create trigger scorecard_response_immutable
-before insert or update on public.scorecard_responses
+before insert or update or delete on public.scorecard_responses
 for each row execute function public.prevent_submitted_scorecard_response_mutation();
 
 revoke all on function public.prevent_submitted_interview_feedback_mutation() from public;
 revoke all on function public.prevent_submitted_scorecard_response_mutation() from public;
+
+-- A response must belong to a competency in the exact template version used
+-- by its feedback record. Tenant-safe FKs alone do not enforce this relationship.
+create or replace function public.enforce_scorecard_response_template_match()
+returns trigger
+language plpgsql
+set search_path = public, pg_temp
+as $
+declare
+  feedback_template_id uuid;
+  competency_template_id uuid;
+begin
+  select template_id into feedback_template_id
+    from public.interview_feedback
+    where organization_id = new.organization_id and id = new.feedback_id;
+  select template_id into competency_template_id
+    from public.competencies
+    where organization_id = new.organization_id and id = new.competency_id;
+  if feedback_template_id is null or competency_template_id is null
+     or feedback_template_id <> competency_template_id then
+    raise exception 'Scorecard response competency must belong to the feedback template version';
+  end if;
+  return new;
+end;
+$;
+
+drop trigger if exists scorecard_response_template_match on public.scorecard_responses;
+create trigger scorecard_response_template_match
+before insert or update on public.scorecard_responses
+for each row execute function public.enforce_scorecard_response_template_match();
+revoke all on function public.enforce_scorecard_response_template_match() from public;
 
 
 create table if not exists public.interview_scorecard_decisions (
