@@ -68,10 +68,15 @@ export default function OrganizationSettingsPage() {
       const response = await apiFetch(API_BASE + "/api/organizations/" + encodeURIComponent(organizationId) + "/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(settings),
+        body: JSON.stringify({ ...settings, expected_version: version }),
       });
       const body = await response.json().catch(() => ({}));
-      if (!response.ok) throw new Error(body.detail || "Unable to save settings. Owner or admin access may be required.");
+      if (!response.ok) {
+        if (response.status === 409) {
+          throw new Error(body.detail || "Settings changed in another session. Reload the latest settings before saving.");
+        }
+        throw new Error(body.detail || "Unable to save settings. Owner or admin access may be required.");
+      }
       setSettings({ ...defaults, ...(body.settings ?? {}) });
       setVersion(body.version ?? version);
       setMessage("Settings saved as version " + (body.version ?? version) + ".");
