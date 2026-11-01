@@ -317,3 +317,18 @@ This entry supersedes the earlier #87 follow-up status above. PR #87 was closed 
 - The overdue refresh endpoint is not yet scheduled. There is no claim of automatic background monitoring or notifications.
 
 **Current Idea 04 estimate:** approximately 84% implementation complete / 16% remaining (engineering estimate only). Still draft and not staging-verified or production-ready.
+
+
+### SLA lifecycle and work-queue update — 2026-11-01
+
+- Current follow-up remains [PR #88](https://github.com/venugopalc80/ATS/pull/88), draft/open, not merged; branch `feat/idea-04-assignment-sla-rebased`.
+- Latest exact-head commit: `9b6375cbef889afe663e55486dc543d3309af97b`.
+- Applications Inbox now requests the organisation SLA work queue and displays the overdue count.
+- Inbox-created applications trigger initial-review and first-recruiter-action deadline calculation when an enabled SLA policy exists.
+- Moving an application out of `new` completes those two initial SLA milestones.
+- Added an organisation-scoped SLA work queue query and an admin-only overdue refresh endpoint. The refresh endpoint is ready for a future scheduled worker, but no scheduler is configured yet.
+- Added PostgreSQL integration coverage that persists initial SLA deadlines and refreshes overdue rows against the disposable PostgreSQL database.
+- Exact-head CI run [#997](https://github.com/venugopalc80/ATS/actions/runs/41337720206) passed on `9b6375cbef889afe663e55486dc543d3309af97b`: 89 backend tests passed, 4 skipped; disposable PostgreSQL 16 migration smoke passed; frontend TypeScript typecheck and production build passed.
+- Candidate follow-up and post-interview milestone event integration, holiday calendars, scheduled overdue scanning, notifications and workload reporting remain outstanding.
+
+**Current Idea 04 estimate:** approximately 86% implementation complete / 14% remaining (engineering estimate only). This does not include authenticated staging acceptance or release readiness. The PR remains draft, no live Supabase migration/write, production deployment or merge has been performed.
