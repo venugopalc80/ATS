@@ -4,7 +4,12 @@ from io import BytesIO
 
 from fastapi import HTTPException, UploadFile
 
-from app.routers.documents import MAX_BULK_BYTES, MAX_BYTES, read_bulk_cv_files
+from app.routers.documents import (
+    MAX_BULK_BYTES,
+    MAX_BYTES,
+    acquire_bulk_cv_dedup_locks,
+    read_bulk_cv_files,
+)
 
 from app.routers.documents import validate_document_bytes
 
@@ -14,6 +19,38 @@ DOCX = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
 
 
 class DocumentValidationTests(unittest.TestCase):
+    def test_bulk_cv_dedup_locks_are_tenant_scoped_and_acquired_in_sorted_order(self):
+        class RecordingCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, query, params):
+                self.calls.append((query, params))
+
+        cursor = RecordingCursor()
+        organization_id = "11111111-1111-4111-8111-111111111111"
+        acquire_bulk_cv_dedup_locks(cursor, organization_id, "Recruiter@Example.com", "a" * 64)
+
+        self.assertEqual(len(cursor.calls), 2)
+        self.assertTrue(all("pg_advisory_xact_lock" in query for query, _ in cursor.calls))
+        keys = [params[0] for _, params in cursor.calls]
+        self.assertEqual(keys, sorted(keys))
+        self.assertTrue(all(organization_id in key for key in keys))
+        self.assertIn("recruiter@example.com", keys[0] + keys[1])
+
+    def test_bulk_cv_dedup_lock_without_email_still_locks_file_hash(self):
+        class RecordingCursor:
+            def __init__(self):
+                self.calls = []
+
+            def execute(self, query, params):
+                self.calls.append((query, params))
+
+        cursor = RecordingCursor()
+        acquire_bulk_cv_dedup_locks(cursor, "org-1", None, "b" * 64)
+        self.assertEqual(len(cursor.calls), 1)
+        self.assertIn("sha256", cursor.calls[0][1][0])
+
     def test_accepts_pdf_signature(self):
         self.assertEqual(validate_document_bytes(b"%PDF-1.7\nbody", PDF), ".pdf")
 
