@@ -44,6 +44,7 @@ type Activity = {
   actor_name: string | null;
 };
 type DashboardData = {
+  timezone: string;
   metrics: MetricSet;
   pipeline: Pipeline;
   jobs: Job[];
@@ -73,11 +74,11 @@ function localDate(daysAgo = 0) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: string | null | undefined, timeZone?: string) {
   if (!value) return "No due date";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Date unavailable";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", ...(timeZone ? { timeZone } : {}) }).format(date);
 }
 
 function friendlyAction(action: string) {
@@ -247,7 +248,7 @@ export default function Dashboard() {
                     <Link key={item.type + item.id} href={item.href} className="dashboard-priority-row">
                       <span className={"dashboard-priority-icon priority-" + item.type} aria-hidden="true">!</span>
                       <span className="dashboard-priority-copy"><strong>{item.title}</strong><span>{item.description}</span></span>
-                      <span className="dashboard-priority-date">{formatDate(item.due_at)}</span>
+                      <span className="dashboard-priority-date">{formatDate(item.due_at, data?.timezone)}</span>
                       <span aria-hidden="true">→</span>
                     </Link>
                   ))}
@@ -320,7 +321,7 @@ export default function Dashboard() {
                 <div className="activity dashboard-activity">
                   {data.activity.map((item) => {
                     const target = ["job", "jobs"].includes(item.entity_type) ? "/jobs?job_id=" + item.entity_id : ["candidate", "candidates"].includes(item.entity_type) ? "/candidates/" + item.entity_id : ["interview", "interviews"].includes(item.entity_type) ? "/interviews/" + item.entity_id : ["placement", "placements"].includes(item.entity_type) ? "/placements/" + item.entity_id : ["offer", "offers"].includes(item.entity_type) ? "/offers/" + item.entity_id : "/submissions/" + item.entity_id;
-                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
+                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at, data?.timezone)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
                   })}
                 </div>
               )}
