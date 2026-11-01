@@ -31,7 +31,7 @@ class WorkingMinutesTests(unittest.TestCase):
 
     def test_respects_configured_weekday_and_hours(self):
         result = add_working_minutes(
-            datetime(2026, 11, 2, 16, 30, tzinfo=timezone.utc),
+            datetime(2026, 11, 2, 17, 30, tzinfo=timezone.utc),
             60,
             timezone_name="Europe/London",
             business_hours_start=time(10, 0),
