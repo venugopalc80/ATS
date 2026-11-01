@@ -3,7 +3,7 @@
 **Review date:** 2026-11-01  
 **Repository:** `venugopalc80/ATS`  
 **Branch:** `feat/section-6-analytics-bi`  
-**Scope:** Read-only comparison of the two committed candidate-document migration files. No database changes were made.
+**Scope:** Read-only comparison of committed migrations and the connected staging schema. No database changes were made.
 
 ## Finding
 
@@ -27,6 +27,20 @@ They are not equivalent. Both use `CREATE TABLE IF NOT EXISTS`, so the first mig
 
 The timestamped migration's comments state that browser clients must not access the table or bucket and that API access is server-side. The numbered migration adds organisation-member policies. These access models must be reconciled with the actual application access path before any migration is changed.
 
+## Read-only staging schema comparison (2026-11-01)
+
+The connected staging schema was inspected through PostgreSQL catalog metadata. The live `candidate_documents` table currently has:
+
+- Document types `cv`, `cover_letter`, `certificate`, `other`, matching the timestamped migration rather than the numbered migration.
+- A lowercase 64-character SHA-256 check constraint.
+- No foreign-key constraint on `uploaded_by`.
+- The organisation/candidate/created partial index, organisation/SHA-256 partial index, and an additional organisation/created partial index.
+- RLS enabled, with no table policies.
+- Table-level `SELECT` privilege for `authenticated`, but no `INSERT`, `UPDATE` or `DELETE` privilege; `anon` has no `SELECT` privilege.
+- A private `candidate-documents` bucket with a 5 MB limit and PDF/DOCX MIME allowlist. No matching direct Storage object policies were found.
+
+This live shape is closer to the timestamped migration, but it is not an exact match because of the additional index. The catalogue cannot prove which historical SQL produced it. With RLS enabled and no table policies, the authenticated table grant does not by itself expose rows through the normal client role. The intended server-side service-role path must still perform tenant and user authorisation before metadata or file access. No access-policy changes were made.
+
 ## Why this matters
 
 1. Migration order can produce different constraints and permissions on staging or a fresh installation.
@@ -46,4 +60,4 @@ The timestamped migration's comments state that browser clients must not access 
 
 ## Safety status
 
-This review was performed from committed repository files only. It did not query or modify staging data, execute DDL, alter migration history, or change storage settings. The candidate-document schema conflict is an additional migration-provenance blocker for reproducible environments; it is not evidence by itself that the live staging schema is currently exposed or broken.
+All staging checks in this review were read-only catalogue queries. No DDL, DML, migration-ledger edits, grants, RLS policies or Storage settings were changed. The candidate-document schema conflict is an additional migration-provenance blocker for reproducible environments; the current catalogue snapshot does not establish that the live staging schema is broken or publicly exposed.
