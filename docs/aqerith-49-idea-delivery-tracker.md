@@ -1,0 +1,392 @@
+# AQERITH 49-Idea Delivery Tracker
+
+**Baseline date:** 2026-10-22  
+**Repository:** https://github.com/venugopalc80/ATS  
+**Baseline branch:** `main`  
+**Baseline commit:** `a4960fc290c9759792667363649966f60ff79994` (reported by current open PR base snapshots; confirm against live HEAD before release decisions)  
+**Purpose:** Measure delivery from evidence, not from PR count or the existence of code on a feature branch.
+
+## Rules for status and completion
+
+Each roadmap idea must be assessed against its own canonical acceptance criteria. Use the following status values:
+
+- **Unassessed** — canonical scope or evidence has not yet been reconciled.
+- **Planned** — scope agreed, implementation not evidenced.
+- **In progress** — code exists on a branch/PR but acceptance is incomplete.
+- **Implemented, unverified** — implementation is present, but required checks are missing.
+- **Verified in staging** — acceptance checks pass in staging with evidence recorded.
+- **Released** — merged to `main`, deployed to the intended environment, and smoke-tested against the deployed commit.
+- **Blocked** — a named dependency or unresolved failure prevents progress.
+
+A PR, migration file, passing unit test, or READY preview alone does not make an idea “Released”. Record production status only when the deployed commit and runtime behavior are verified.
+
+## Evidence-based completion calculation
+
+Report two distinct numbers:
+
+1. **Verified delivery %** = number of ideas marked **Released** ÷ 49 × 100.
+2. **Evidence coverage %** = number of ideas with acceptance criteria and evidence reviewed ÷ 49 × 100.
+
+Do not report a single overall percentage until the canonical 49-idea list is reconciled. Do not count draft PRs as completed ideas. If an idea spans multiple PRs, assess the combined result once, and avoid double-counting duplicate or stacked PRs.
+
+## Current repository snapshot
+
+The repository has a large open-PR queue. The audit PR #78 recorded 42 open PRs, 34 drafts and 6 PRs targeting non-`main` bases at the time of that snapshot. Those counts describe the queue, not completion.
+
+### Known in-flight ideas and integration groups
+
+| Idea / scope | Evidence visible in GitHub | Current assessment | Release blockers / next evidence |
+|---|---|---|---|
+| Ideas 09–13: interviews, scorecards, assessments, offers, recruitment documents | Draft PR #71 integrates the group; individual PRs #64–#67 also exist | In progress; integration not accepted | Run full backend tests, frontend typecheck/build, migration ordering/RLS review, tenant/role tests and authenticated browser acceptance. Resolve stacked-branch dependency. |
+| Idea 04: application pipeline stages | Canonical draft PR #69 (`feat/idea-04-application-pipeline`); duplicate PR #70 was closed on 2026-10-31 without merge | In progress; migration smoke tests and backend/frontend CI passed on verified earlier heads; additional real-row tenant-isolation tests are running on current head | Reconcile staging history migration provenance/ledger; apply stage config in staging only after approval; finish real Supabase permission/auth checks, preview browser QA, candidate confidentiality review, bulk actions, recruiter assignment and SLA handling. |
+| Idea 05: application forms and candidate self-service | Draft PR #62 | In progress | Secure CV upload, staging migration verification, accessibility, tenant isolation and abuse tests. |
+| Idea 13: recruitment documents and e-signatures | Draft PR #67 | In progress | Native provider webhook verification, rendering/workspace UI, secure link lifecycle, full checks and provider review. |
+| Ideas 14–15: communication hub and notification preferences | Draft PR #68 | In progress | Provider sending/retries/webhooks and notification event production are not enabled; test, RLS and browser acceptance remain. |
+| Idea 16: candidate portal/self-service dependency | PR #68 describes dependency on PR #62; canonical standalone scope still to reconcile | Unassessed / dependency-sensitive | Confirm canonical idea definition and verify identity, recovery, session revocation and candidate-safe APIs. |
+| Idea 17: existing draft implementation | PR #68 points to PR #58 | Unassessed / dependency-sensitive | Reconcile PR #58 with canonical roadmap and test on its dependency branch. |
+| Ideas 18–21: search, talent pools, imports and campaigns | Draft PR #72 | In progress; staging checks reported, not released | Per-record ACL integration, asynchronous/import security gaps, attribution, alerts, full API and browser acceptance; Vercel rate-limit failure noted in PR. |
+| Ideas 22–27: organisation/workspaces, roles, agency client portal, collaboration, careers builder, job distribution | Draft audit PR #73; audit-only branch | Audit/planning documented; feature implementation not evidenced by PR #73 | Implement and test permission matrix, hiring-manager job scope, client submission grants/revocation, collaboration permissions, publication controls and provider lifecycle in dependency order. |
+| Section 6: recruitment analytics/KPI dashboard (Idea 28) | User feature brief in project conversation; repository acceptance evidence not reconciled here | Unassessed | Validate metric definitions, query correctness, tenant isolation and dashboard acceptance against canonical scope. |
+| Section 7: AI and responsible automation (Idea 34) | Draft PR #76 | In progress; staging schema and CI checks reported in PR | Cross-tenant/RLS and role tests, real evaluation suite, trusted retention scheduler, privacy/provider review and authenticated browser/accessibility QA. Vercel preview unavailable due to reported rate limit. |
+| Section 8: privacy, consent and data rights (Idea 40) | Draft PR #77 | In progress; foundation only | Retention execution and deletion propagation, rights request orchestration, session revocation/MFA/step-up, provider secrets/webhooks/retries, backup monitoring/restore drills, migration/test verification. |
+| Ideas 01–03 and remaining ideas not listed above | No complete canonical list/acceptance matrix reconciled in this snapshot | Unassessed | Find and pin the source roadmap, then add one row per idea with exact title, acceptance criteria, branch/PR, migration, CI, staging, production commit and evidence links. |
+
+> This table is an initial triage, not a complete 49-row scorecard. Idea names are included only where they are supported by current repository/project evidence. Do not infer missing titles or statuses.
+
+## Required fields for the canonical 49-row register
+
+For every idea, maintain:
+
+- Idea number and exact canonical title
+- Section and acceptance criteria (link to source)
+- Implementation PR(s) and canonical branch
+- Duplicate/stacked PR dependencies
+- Changed backend/frontend files
+- Migration files and environment applied (none / local / staging / production)
+- Automated test, typecheck and build result, with run URL and commit SHA
+- Tenant isolation / role / RLS verification
+- Authenticated UI and accessibility acceptance
+- Deployment URL, environment and verified deployed commit SHA
+- Known gaps, owner/next action and date last checked
+- Status and evidence links
+
+## Immediate execution order
+
+1. Locate and reconcile the authoritative 49-idea roadmap; do not fabricate missing titles.
+2. Snapshot current `main`, all open PRs and dependency relationships; consolidate duplicates and agree merge order.
+3. Verify CI and staging evidence at each exact PR head commit.
+4. Prioritise tenant isolation, role/permission enforcement and data-protection controls before broad release.
+5. Release in small, dependency-ordered batches only after acceptance; do not merge or deploy production based on draft status or a preview badge alone.
+
+## Initial completion reporting
+
+- **Verified delivery percentage:** Not yet verified.
+- **Evidence coverage percentage:** Not yet calculated; the canonical 49-row register is incomplete.
+- **Production release claims:** Must be independently checked against the current deployed commit and runtime before marking any idea Released.
+
+
+## Roadmap source reconciliation — first pass
+
+A project Library source titled **Pasted markdown.md** contains detailed feature briefs for Ideas 04–08. This is source evidence for the idea titles and requirements below; it is not proof that the requirements have been implemented.
+
+| Idea | Canonical title from source | Main acceptance themes from source | Evidence-based repository status |
+|---|---|---|---|
+| 04 | Applications & Recruitment Pipeline | Candidate/application separation; controlled stage transitions; audit history; tenant isolation; safe bulk actions; candidate-facing status separated from internal data | Draft PRs #69 and #70 overlap; consolidation and full acceptance tests still required |
+| 05 | Application Forms & Candidate Self-Service | Versioned forms; server-side validation; candidate review before submission; private uploads; accessible mobile flow; privacy notice separate from marketing permission | Draft PR #62; secure CV upload, staging migration verification, accessibility and abuse tests remain |
+| 06 | CV Parsing & Document Intelligence | Preserve originals; recruiter correction of extraction; confidence/provenance; duplicate detection; safe retries; logged access/processing | Exact repository implementation and acceptance evidence not reconciled in this pass |
+| 07 | Candidate Matching & Job Fit Intelligence | Evidence-linked explanations; missing data not treated as negative; auditable criteria/scoring; recruiter override with reason; quality and fairness evaluation | Exact repository implementation and acceptance evidence not reconciled in this pass |
+| 08 | Recruitment Workflow Automation | Draft/test/publish/disable lifecycle; traceable runs; idempotent retries; runtime permission checks; recovery; logged communications | Draft PR #63 describes a workflow foundation, not a complete execution engine; event producers, workers, execution-time permissions, idempotent side effects and recovery remain |
+
+**Source limitation:** The retrieved source segment contains Ideas 04–08 only. It does not by itself establish the complete authoritative list of all 49 ideas. The remaining titles must be retrieved from the source material before this register can be considered canonical.
+
+## Updated progress snapshot — 2026-10-22
+
+- **Tracker task completion:** 100% for the initial tracker creation; further reconciliation is still in progress.
+- **Roadmap title coverage:** 5 of 49 titles have now been confirmed against the source segment (10.2%). This is title coverage only, not implementation completion.
+- **Verified product delivery:** Not yet calculable; the canonical 49-row acceptance register and production deployment evidence are incomplete.
+- **Pending:** Retrieve the remaining source sections; map each idea to main/PRs/migrations/tests; verify current deployed commit; then calculate verified delivery and evidence coverage.
+
+## Evidence refresh — 2026-10-26
+
+This is a dated evidence snapshot, not a product-completion percentage. CI evidence below is tied to the exact recorded head commit.
+
+| Workstream | PR / commit checked | Automated evidence | Remaining acceptance |
+|---|---|---|---|
+| Candidate deletion guard | [PR #83](https://github.com/venugopalc80/ATS/pull/83), `9105c039e130f0adfe4d7bb16b5157e5e536205d` | [Run 40145143247](https://github.com/venugopalc80/ATS/actions/runs/40145143247) passed backend unit tests, frontend typecheck and production build | Staging schema parity; authenticated linked-record deletion tests; review archive/restore and role controls |
+| Section 6 analytics | [PR #80](https://github.com/venugopalc80/ATS/pull/80), `4b381fc3c785c7b18463d066f892ae53c9ab3109` | [Run 40312149553](https://github.com/venugopalc80/ATS/actions/runs/40312149553) passed backend unit tests, frontend typecheck and production build | Metric/tenant/export acceptance against current staging; browser acceptance and deployed preview verification |
+| Section 9 commercial operations | [PR #81](https://github.com/venugopalc80/ATS/pull/81), `13b1ba417c67820e9b127e31db6af48aa912b0ed` | [Run 40312283758](https://github.com/venugopalc80/ATS/actions/runs/40312283758) passed billing-focused unit checks, frontend typecheck and production build; [run 40312283887](https://github.com/venugopalc80/ATS/actions/runs/40312283887) also passed generic backend/frontend checks | Entitlement enforcement across actual recruitment operations; Stripe test checkout/webhooks end to end; tenant isolation and support-grant expiry/revocation |
+
+### Newly identified migration risk
+
+On the checked-in `main` branch, both `supabase/migrations/013_candidate_documents.sql` and `supabase/migrations/20261012090000_candidate_documents.sql` use `CREATE TABLE IF NOT EXISTS public.candidate_documents`, but define different constraints/indexes. With `IF NOT EXISTS`, the later file does not reconcile an already-created table. The effective staging schema and migration ledger therefore need inspection before treating document retention/deletion safeguards as accepted. Do not rewrite an applied migration in place; use a reviewed forward migration if the actual schema needs correction.
+
+### Status rules reaffirmed
+
+- These CI runs are code-level evidence only; they do not establish staging acceptance or a production release.
+- PRs #80, #81 and #83 remain drafts; no production change is implied by this snapshot.
+- Overall verified delivery and evidence coverage percentages remain **not yet verified** until the canonical 49-idea register and release evidence are reconciled.
+
+### Read-only staging schema check — 2026-10-26
+
+ATS-Staging project `riauyrhfnlsxmtgipuxi` was inspected read-only. No SQL writes or migrations were run.
+
+- The staging migration ledger lists `013_candidate_documents`; it does not list `20261012090000_candidate_documents` as a migration name.
+- The live `public.candidate_documents` table exists and its `candidate_id` FK uses `ON DELETE CASCADE`.
+- The live table has a SHA-256 format check, `candidate_documents_org_sha256_idx`, and `candidate_documents_search_org_created_idx`, which are not all represented in `013_candidate_documents.sql`.
+- The live `uploaded_by` column has no foreign-key constraint.
+- These observations indicate that the live schema and the checked-in candidate-document migration files do not map cleanly by migration name alone. The exact source of each live constraint/index must be reconciled against the full migration history before changing the schema.
+- The candidate deletion guard's table reference is valid in staging, but this does not replace authenticated application-level acceptance tests or verify the full deployed application.
+
+**Next action:** compare the staging ledger and checked-in migration history, establish the intended canonical candidate-document schema, then prepare a reviewed forward migration only if required. Never rewrite an already-applied migration in place.
+
+### Read-only production comparison — 2026-10-26
+
+The ATS production database was queried read-only; no writes were executed.
+
+- Production `public.candidate_documents.candidate_id` also uses `ON DELETE CASCADE`; the live `document_type` and SHA-256 constraints match those observed in ATS-Staging.
+- Production's migration ledger differs materially from staging's ledger: production records `candidate_documents_bulk_cv_import`, while staging records `013_candidate_documents` and the reconstructed feature migration sequence.
+- Treat this as a migration-history/schema-provenance concern. Do not apply a migration or alter production as part of this audit. First establish the authoritative migration history and intended schema, then test any proposed forward migration in a safe environment.
+
+
+## Evidence refresh — 2026-10-31
+
+This refresh is specific to Idea 04 and does not change the overall 49-idea completion calculation.
+
+### Idea 04 — Applications & Recruitment Pipeline
+
+- Canonical implementation: [PR #69](https://github.com/venugopalc80/ATS/pull/69), branch `feat/idea-04-application-pipeline`, currently draft/open and not merged.
+- Duplicate [PR #70](https://github.com/venugopalc80/ATS/pull/70) was closed on 2026-10-31 as a duplicate. Its branch remains as historical reference; no code was merged or deleted.
+- CI run [#801](https://github.com/venugopalc80/ATS/actions/runs/41197807696) passed on code commit `7c37a2091a95d0998bfdabc51c60674df64eb15d`: 61 backend tests (4 optional skips), disposable PostgreSQL migration/service smoke tests, frontend typecheck and production build.
+- CI run [#803](https://github.com/venugopalc80/ATS/actions/runs/41197882091) passed on documentation commit `0fab904f63d151d4ea6cf677b262c2d95fc4125f`.
+- Current PR head at this refresh: `5fc448c4ec52c0e9c31b1d0d0fd62e9125124458`. Run [#805](https://github.com/venugopalc80/ATS/actions/runs/41197991414) is queued/in progress for the latest real-row tenant-isolation test changes. Do not mark those latest tests passed until the run completes successfully.
+- The disposable PostgreSQL migration test applies both Idea 04 migration files, checks idempotent rerun/partial-state repair, history baseline, actor/reason capture, stage seeding, RLS and browser-role table grants. A service-level integration test invokes `ApplicationService.transition_application` against that disposable database and checks persisted stage, actor and reason.
+- The latest tenant-isolation test changes remove the mocked application lookup: they create a real application row with tenant-owned job/candidate records and exercise the FastAPI read/transition and stage-config endpoints against real PostgreSQL membership/role queries. Supabase JWT validation is still dependency-overridden in this disposable test, so this is not live-auth integration coverage.
+- The API preview for commit `0fab904f63d151d4ea6cf677b262c2d95fc4125f` reached Vercel READY. The newest preview for current commit `5fc448c4ec52c0e9c31b1d0d0fd62e9125124458` was queued at the time checked; frontend browser/device acceptance remains outstanding.
+- Read-only ATS-Staging checks found the existing application stage-history table, constraints, index, policies, function and triggers match the intended history migration objects, but the Supabase migration ledger does not record version `20261026150000`. The stage-config table is absent and the application status constraint remains legacy.
+- Read-only ATS production checks found neither Idea 04 table. Production's latest recorded migration is `20261012091011`, materially behind staging's `20261026143744`; a chronological production schema/migration reconciliation is required before any release plan.
+- A detailed safe reconciliation proposal is recorded in `docs/idea-04-staging-migration-reconciliation.md` on PR #69's feature branch.
+- No live Supabase migrations, migration repairs, database writes, merges or production deployments were performed.
+
+**Current Idea 04 status:** In progress, not staging-verified and not released. The feature is not accepted for production.
+
+### Overall tracker reporting
+
+- Verified delivery percentage: still not calculable until the canonical 49-row register and production deployment evidence are reconciled.
+- Evidence coverage percentage: still not calculated. The Idea 04 evidence above increases coverage for one idea only; it does not establish the remaining 48 ideas.
+
+
+## Evidence refresh — 2026-11-01
+
+This refresh records the latest Idea 04 implementation and verification evidence. It does not change the overall 49-idea completion calculation.
+
+### Idea 04 — Applications & Recruitment Pipeline
+
+- Canonical implementation remains [PR #69](https://github.com/venugopalc80/ATS/pull/69), branch `feat/idea-04-application-pipeline`, draft/open and not merged.
+- Current branch head checked: `7b2134c9f158ba5ca075a8457afc5e579b1b1527`.
+- CI run [#890](https://github.com/venugopalc80/ATS/actions/runs/41327292027) passed against the PR head: 69 backend tests passed, 4 skipped; PostgreSQL 16 migration smoke test passed; frontend TypeScript typecheck and production build passed.
+- The PostgreSQL smoke test verified the Idea 04 migrations can be rerun after partial-state changes, baseline stage-history creation, default stage seeding for existing and newly created organisations, actor/reason capture, and browser-role table privilege restrictions.
+- Added a bulk stage-transition endpoint accepting up to 100 unique application IDs. Each application is independently authorised and transitioned; invalid transitions and cross-tenant/missing records are reported individually without aborting the rest of the batch.
+- Updated Applications Inbox with row selection, page-level select-all, bulk target-stage selection, reason capture, and retention of failed records for review/retry.
+- Bulk transition tests cover mixed success, invalid stage transition, cross-tenant not-found behaviour, duplicate IDs and the 100-item limit.
+- Candidate bulk-CV import validation also checks aggregate actual bytes before candidate/storage writes, including when upload-size metadata is absent.
+- Vercel API preview reached READY on the exact current commit: `https://ats-6blz0tpsq-the-pixel-muses.vercel.app`.
+- Vercel frontend preview reached READY on the exact current commit: `https://aqerith-kj63sm03z-the-pixel-muses.vercel.app`.
+- Vercel status checks for `ats`, `aqerith` and `ats-staging-api` are successful for the current commit. Browser/device acceptance is still outstanding; direct preview access could not be verified and preview SSO protection may require an authorised session.
+- Live Supabase JWT verification and actual Supabase RLS/role checks remain outstanding. The disposable PostgreSQL HTTP tests override FastAPI's current-user dependency.
+- Staging migration-history provenance and ledger reconciliation remain unresolved. Staging has the history objects but does not record migration version `20261026150000`; stage configuration is absent. Production still needs chronological migration/schema reconciliation.
+- Recruiter assignment and SLA monitoring remain outstanding. Bulk stage actions are implemented but still need authenticated staging acceptance.
+- No live Supabase migrations, migration repairs, database writes, merges or production deployments were performed.
+
+**Current Idea 04 status:** In progress, not staging-verified and not released. Do not infer production readiness from passing CI or READY preview deployments.
+
+### Overall tracker reporting
+
+- Verified delivery percentage: still not calculable until the canonical 49-row register and production deployment evidence are reconciled.
+- Evidence coverage percentage: still not calculated. This refresh improves evidence for Idea 04 only and does not establish the remaining 48 ideas.
+
+
+## Evidence refresh — 2026-11-01 (recruiter assignment follow-up)
+
+This follow-up is stacked on Idea 04's canonical feature branch. It does not alter the 49-idea completion calculation or release status.
+
+### Recruiter assignment implementation
+
+- Follow-up draft PR: [#87 — Recruiter assignment and audit history](https://github.com/venugopalc80/ATS/pull/87).
+- Branch: `feat/idea-04-recruiter-assignment-sla`.
+- Latest implementation commit at this tracker update: `94a35797529b1e8c4c9e438a363f909247b54c5c`.
+- Added `application_assignments` for current assignment and `application_assignment_history` for assignment/reassignment audit records.
+- Added backend endpoints to assign/unassign, retrieve a single assignment, read assignment history, list organisation recruiters and list organisation assignments.
+- Assignment writes are restricted to organisation owners/admins. The selected assignee must be a member of the same organisation with the `recruiter` role.
+- Application lookup for assignment read/write is tenant-scoped. API tests cover admin restrictions, non-member access and cross-tenant concealment.
+- Added recruiter assignment controls to the Applications Inbox table. The controls are shown only to organisation owners/admins and capture a reason for every assignment change.
+- SLA policies, deadline calculation, background monitoring, notifications and workload reporting are not implemented yet.
+
+### CI evidence and limitations
+
+- Initial run [#980](https://github.com/venugopalc80/ATS/actions/runs/41331585248) failed one assignment authorization test: the assignment read route was still using an unscoped database lookup while the test expected the membership-guarded path. Frontend checks passed (typecheck and production build).
+- Corrected the assignment read endpoints to use the shared tenant-scoped application lookup.
+- Latest run for commit `94a35797529b1e8c4c9e438a363f909247b54c5c`: [GitHub Actions](https://github.com/venugopalc80/ATS/actions/runs/41336129935), queued/in progress at the time of this update. Do not mark the latest backend or frontend checks passed until the run completes.
+- PR #87 remains draft and is stacked on PR #69. It is not merged.
+- No live Supabase migrations, migration repairs, live database writes, production deployments or merges were performed.
+
+**Current Idea 04 status:** Implementation is progressing; recruiter assignment is not yet CI-verified or staging-accepted. SLA work and authenticated acceptance remain outstanding. Do not treat this follow-up as production-ready.
+
+### Overall tracker reporting
+
+- Verified delivery percentage remains uncalculated pending canonical 49-row roadmap reconciliation and production evidence.
+- Evidence coverage percentage remains uncalculated. This follow-up adds evidence for part of Idea 04 only.
+
+
+### CI result update — recruiter assignment follow-up
+
+- Latest follow-up CI run [#981](https://github.com/venugopalc80/ATS/actions/runs/41336129935) completed successfully against commit `94a35797529b1e8c4c9e438a363f909247b54c5c`.
+- Backend unit and migration smoke tests passed.
+- Frontend TypeScript typecheck and production build passed.
+- This verifies the current code against the repository CI environment only. It does not replace authenticated staging acceptance or prove live Supabase JWT/RLS behaviour.
+
+
+## Evidence refresh — 2026-11-01 (SLA policy configuration)
+
+- Idea 04 follow-up PR remains [#87](https://github.com/venugopalc80/ATS/pull/87), draft/open and not merged.
+- Current follow-up branch head: `edd15038104dac0c0f343f8cf9416f60d3b47a0f`.
+- Added organisation-level `application_sla_policies` migration with configurable initial-review, first-recruiter-action, candidate-follow-up and post-interview-update targets; IANA time zone; business-hours window; working-day configuration; and enable/disable state.
+- Added owner/admin SLA policy read/update endpoints and validation for duration limits, IANA time zones, weekday values and business-hours ordering.
+- Added an admin-facing SLA policy editor in the Applications Inbox. Default values are operational suggestions, not statutory or regulatory deadlines.
+- Extended the disposable PostgreSQL migration smoke test to apply the recruiter-assignment and SLA migrations and verify RLS/browser-role privilege restrictions for their tables.
+- Backend CI passed on commit `2dd9f76b5c4f080a1b5de1c9189811b4917fbb1e`, including the SLA validation and authorization tests. This run preceded the latest UI and migration-smoke-test edits.
+- Frontend CI failed on commit `a1531ceac226ca4daec339a477aa8476cc4c4afb` because a literal escaped newline was introduced in the Applications Inbox state declarations. The source was corrected in subsequent commits (`9f4dcf14f7f02f7571b95d2aeb2ad5f0edf7b935`, then type-only import cleanup at current head `edd15038104dac0c0f343f8cf9416f60d3b47a0f)); a successful CI run on the current head is still required.
+- The PR currently reports a merge conflict against its stacked base. Keep it draft; resolve/reconcile the branch against the current Idea 04 base before considering integration.
+- Per-application SLA deadlines, working-time deadline calculation, holiday calendars, background monitoring, reminders/notifications and workload reporting remain outstanding.
+- No live Supabase migrations, live database writes, production deployments or merges were performed.
+
+**Current Idea 04 estimate:** approximately 80% implementation complete / 20% remaining (engineering estimate only). It is not staging-verified or production-ready. The estimate excludes release acceptance gates.
+
+### Overall tracker reporting
+
+- Verified delivery percentage and evidence coverage percentage for the full 49-idea roadmap remain uncalculated pending canonical roadmap reconciliation.
+
+
+## Evidence refresh — 2026-11-01 (rebased recruiter assignment and SLA engine)
+
+This entry supersedes the earlier #87 follow-up status above. PR #87 was closed without merging because its branch diverged from the current Idea 04 base. The work was ported to a clean follow-up branch.
+
+### Current implementation
+- Canonical follow-up PR: [#88 — Recruiter assignment and SLA deadlines](https://github.com/venugopalc80/ATS/pull/88), draft/open, not merged.
+- Branch: `feat/idea-04-assignment-sla-rebased`.
+- Latest verified commit: `dd9e8c5d55cee2a9728a89e378f843a9ff078248`.
+- Base: latest Idea 04 pipeline head `b856f156e86d635c89cf8492b6d81a008d8660b6`; GitHub reports the PR mergeable.
+- PR #87 is closed as superseded; no code was merged from it.
+
+### Delivered in PR #88
+- Organisation-scoped recruiter assignment and assignment history; owner/admin assignment permissions; recruiter must belong to the same organisation.
+- Assignment APIs, recruiter directory and owner/admin assignment controls in the Applications Inbox.
+- Organisation-level SLA policy schema, migration, API and admin UI.
+- Time-zone-aware working-time calculator supporting business hours, working days and UK DST boundary handling.
+- Persisted initial-review and first-recruiter-action deadlines with recalculate/read APIs.
+- PostgreSQL migration smoke test now applies history, assignment, SLA policy, SLA deadline and stage-config migrations in chronological order and checks RLS/browser-role table privilege restrictions.
+
+### Exact-head CI
+- Run [#993](https://github.com/venugopalc80/ATS/actions/runs/41337176503) passed on `dd9e8c5d55cee2a9728a89e378f843a9ff078248`.
+- Backend: 89 tests passed, 4 skipped.
+- Disposable PostgreSQL 16 migration smoke passed.
+- Frontend TypeScript typecheck and production build passed.
+- This does not prove live Supabase JWT validation, live RLS behaviour or authenticated staging acceptance.
+
+### Remaining
+- Automatically create initial deadlines on application creation.
+- Complete/refresh first-action deadlines on recruitment events.
+- Candidate follow-up and post-interview milestone event integration.
+- Holiday calendar support.
+- Background overdue monitoring, notification delivery and recruiter workload reporting.
+- Authenticated staging acceptance and live Supabase security verification.
+
+**Current Idea 04 estimate:** approximately 83% implementation complete / 17% remaining (engineering estimate, not acceptance score). The feature remains draft, not staging-verified and not production-ready. No live Supabase migrations, live database writes, production deployments or merges were performed.
+
+### Overall tracker reporting
+
+- Verified delivery percentage and evidence coverage percentage for all 49 ideas remain uncalculated pending canonical roadmap reconciliation.
+
+
+### Follow-on SLA operations slice — 2026-11-01
+
+- Added an admin-only overdue refresh endpoint backed by an organisation-scoped update query. It marks pending deadlines overdue when `due_at < now()`; it is suitable for invocation by a future scheduled worker.
+- Tightened assignment-history reads to use the same tenant-scoped application lookup as assignment reads and writes.
+- Recruiter directory now selects only the verified profile email field.
+- Follow-up commit: `70f7b807b6545b3ed46e8fea5aab53e73ace99c3`.
+- CI run [#995](https://github.com/venugopalc80/ATS/actions/runs/41337410857) passed on commit `bf8892732fc3a005f4aebcaef9cf38519500a271` (backend tests, frontend typecheck and production build). A new run [#996](https://github.com/venugopalc80/ATS/actions/runs/41337430978) is running against the current branch head `70f7b807b6545b3ed46e8fea5aab53e73ace99c3`.
+- The overdue refresh endpoint is not yet scheduled. There is no claim of automatic background monitoring or notifications.
+
+**Current Idea 04 estimate:** approximately 84% implementation complete / 16% remaining (engineering estimate only). Still draft and not staging-verified or production-ready.
+
+
+### SLA lifecycle and work-queue update — 2026-11-01
+
+- Current follow-up remains [PR #88](https://github.com/venugopalc80/ATS/pull/88), draft/open, not merged; branch `feat/idea-04-assignment-sla-rebased`.
+- Latest exact-head commit: `9b6375cbef889afe663e55486dc543d3309af97b`.
+- Applications Inbox now requests the organisation SLA work queue and displays the overdue count.
+- Inbox-created applications trigger initial-review and first-recruiter-action deadline calculation when an enabled SLA policy exists.
+- Moving an application out of `new` completes those two initial SLA milestones.
+- Added an organisation-scoped SLA work queue query and an admin-only overdue refresh endpoint. The refresh endpoint is ready for a future scheduled worker, but no scheduler is configured yet.
+- Added PostgreSQL integration coverage that persists initial SLA deadlines and refreshes overdue rows against the disposable PostgreSQL database.
+- Exact-head CI run [#997](https://github.com/venugopalc80/ATS/actions/runs/41337720206) passed on `9b6375cbef889afe663e55486dc543d3309af97b`: 89 backend tests passed, 4 skipped; disposable PostgreSQL 16 migration smoke passed; frontend TypeScript typecheck and production build passed.
+- Candidate follow-up and post-interview milestone event integration, holiday calendars, scheduled overdue scanning, notifications and workload reporting remain outstanding.
+
+**Current Idea 04 estimate:** approximately 86% implementation complete / 14% remaining (engineering estimate only). This does not include authenticated staging acceptance or release readiness. The PR remains draft, no live Supabase migration/write, production deployment or merge has been performed.
+
+
+## Evidence refresh — 2026-11-01 (latest CI and workflow-automation repair)
+
+This update records exact-head GitHub Actions evidence checked on 2026-11-01. It does not change any staging or production release status.
+
+### Latest successful exact-head checks
+
+| Workstream | PR / exact head | CI evidence | Assessment |
+|---|---|---|---|
+| Idea 04 — application pipeline | [PR #69](https://github.com/venugopalc80/ATS/pull/69), `b856f156e86d635c89cf8492b6d81a008d8660b6` | [Run #1048](https://github.com/venugopalc80/ATS/actions/runs/41336933297): backend tests, migration smoke tests, frontend typecheck and production build passed | CI passed. Staging migration-ledger reconciliation and authenticated staging acceptance remain blocked. |
+| Ideas 09–13 — interviews, assessments, offers and documents | [PR #71](https://github.com/venugopalc80/ATS/pull/71), `6955ef29164e8f8e28b8d1a62647c237c5e2735d` | [Run #36](https://github.com/venugopalc80/ATS/actions/runs/41329774490) recruitment-document tests passed; [run #932](https://github.com/venugopalc80/ATS/actions/runs/41329774521) backend tests, frontend typecheck and production build passed | Signer-state regression fix is CI-verified. Full feature-group acceptance, migration/RLS review and authenticated browser testing remain. |
+| Collaboration hub | [PR #84](https://github.com/venugopalc80/ATS/pull/84), `75e4a50afab15b1ff1d5369cbdb977100d787104` | [Run #41330115367](https://github.com/venugopalc80/ATS/actions/runs/41330115367) passed backend tests, frontend typecheck and production build | Code checks passed. Multi-user browser/mobile acceptance and server-side realtime delivery remain. |
+| Section 7 — responsible AI | [PR #76](https://github.com/venugopalc80/ATS/pull/76), `1e751fecd87243f616e2186cc86b50bc3d9cd16c` | [Runs #41330042832](https://github.com/venugopalc80/ATS/actions/runs/41330042832) and [#41330042891](https://github.com/venugopalc80/ATS/actions/runs/41330042891) passed | CI passed; provider, fairness, governance and authenticated staging acceptance gates remain. |
+| Section 8 — privacy and security | [PR #77](https://github.com/venugopalc80/ATS/pull/77), `336625c688d44123121c4206f001253b418aa099` | [Runs #41332473612](https://github.com/venugopalc80/ATS/actions/runs/41332473612) and [#41332473606](https://github.com/venugopalc80/ATS/actions/runs/41332473606) passed | CI passed; retention execution, rights-request orchestration and security operations acceptance remain. |
+| Section 6 — analytics | [PR #80](https://github.com/venugopalc80/ATS/pull/80), `b7b4f955438a4f3fdd6eb8528721780f0d60ce70` | [Run #41337267199](https://github.com/venugopalc80/ATS/actions/runs/41337267199) passed | CI passed; metric correctness, tenant isolation, exports and authenticated staging acceptance remain. |
+| Section 9 — commercial operations | [PR #81](https://github.com/venugopalc80/ATS/pull/81), `08183150d7c49ab8d8ef9eb014f42395f21f242b` | [Runs #41332581917](https://github.com/venugopalc80/ATS/actions/runs/41332581917) and [#41332581949](https://github.com/venugopalc80/ATS/actions/runs/41332581949) passed | CI passed; Stripe end-to-end, entitlement enforcement and support-grant acceptance remain. |
+| Idea 16 — candidate portal foundation | [PR #85](https://github.com/venugopalc80/ATS/pull/85), `bf7795499453df6d41cb9933ac39c069dc9bee42` | [Run #41337976850](https://github.com/venugopalc80/ATS/actions/runs/41337976850) passed | CI passed; verified-email linking, recovery, session controls and authenticated candidate-portal acceptance remain. |
+| Ideas 18–21 — search and sourcing | [PR #72](https://github.com/venugopalc80/ATS/pull/72), `40bcf6f06b0a67d0f4cbebbfc422c818d9c66bf4` | [Run #39775491859](https://github.com/venugopalc80/ATS/actions/runs/39775491859) and [#39775491291](https://github.com/venugopalc80/ATS/actions/runs/39775491291) passed | CI passed; remaining per-record ACL, import and browser acceptance still apply. |
+| Ideas 14–15 — communication and notification preferences | [PR #68](https://github.com/venugopalc80/ATS/pull/68), `e685e7b65e2ef23956c1f1cd2e7a1c7ac0f5f8c7` | [Run #41190784044](https://github.com/venugopalc80/ATS/actions/runs/41190784044) passed | CI passed; provider delivery, retries, webhooks and event production are not complete. |
+| Idea 05 — application forms | [PR #62](https://github.com/venugopalc80/ATS/pull/62), `f35c837a3671b12fc7377947c815b1b63c755e7f` | [Run #39760953989](https://github.com/venugopalc80/ATS/actions/runs/39760953989) passed | CI passed; secure public CV upload and staging/browser acceptance remain. |
+| Idea 06 — CV parsing | [PR #61](https://github.com/venugopalc80/ATS/pull/61), `da02ae0feca41de87466234086f88c1ebc1460cb` | [Run #39760486214](https://github.com/venugopalc80/ATS/actions/runs/39760486214) passed | CI passed; OCR, durable worker queue, malware scanning and authenticated acceptance remain. |
+| Idea 03 — candidates and talent pool | [PR #60](https://github.com/venugopalc80/ATS/pull/60), `4bbb9a5781cf01f864caab4f727352e26a0627ea` | [Run #39805490607](https://github.com/venugopalc80/ATS/actions/runs/39805490607) passed backend tests, typecheck and build | CI passed. Separate Vercel checks were reported as failed in the PR body at the time of that record; staging and authenticated deletion/tenant tests remain. |
+
+### Idea 08 — workflow automation: CI failure diagnosed and repaired
+
+- Draft PR: [#63](https://github.com/venugopalc80/ATS/pull/63), branch `feat/recruitment-workflow-automation`.
+- Original run [#39763857297](https://github.com/venugopalc80/ATS/actions/runs/39763857297) failed for two independent reasons:
+  - Backend test discovery imported `backend/tests/test_workflows.py`, which requires pytest, but the acceptance workflow installed only `backend/requirements.txt`.
+  - Frontend TypeScript rejected `preview && ...` because `preview` is typed `unknown` and therefore is not a valid ReactNode condition.
+- Applied two focused fixes on the same feature branch:
+  - The acceptance workflow now installs pytest as a test-only CI dependency.
+  - The preview rendering condition now uses `preview !== null`, yielding a boolean.
+- Fix commit(s): `0f0c9a69bf4a3f71f3832a906747b0c0958c6003` and `9f5c293bd46cb09423fba4b13455016c128d9ca0`.
+- New exact-head run [#41338158346](https://github.com/venugopalc80/ATS/actions/runs/41338158346): backend tests passed and frontend typecheck passed at last inspection; frontend production build was still running. Do not mark the run fully passed until the workflow completes.
+- PR #63 remains draft. Even after CI passes, the feature remains a foundation only: event producers, durable worker execution, execution-time permission checks, approval decisions, idempotent external side effects and recovery are still required.
+
+### Roadmap source coverage
+
+- The project Library source `Pasted markdown.md` confirms exact titles and detailed requirements for Ideas 04–08.
+- The project Library source `Pasted text(1).txt` confirms the exact title `Idea 03 of 49 — Candidates & Talent Pool` and its core profile, lifecycle, duplicate-detection and search requirements.
+- This refresh does not establish the complete canonical 49-title list. Ideas not grounded in the source material remain unassessed; do not infer missing titles from PR groupings.
+
+### Safety and release status
+
+- All PRs above remain draft/open unless separately stated; successful CI is not merge approval.
+- No production merge, deployment, database write or production migration was performed in this refresh.
+- Idea 04 staging migration reconciliation remains blocked on a supported schema-only backup/export and authenticated Supabase CLI migration-repair route. Do not directly edit the Supabase migration ledger or apply the dependent stage-config migration out of order.
+- No verified delivery percentage is claimed. The canonical 49-row register and production release evidence are still incomplete.
+
+
+### CI result update — Idea 08 workflow automation
+
+- Exact-head run [#41338158346](https://github.com/venugopalc80/ATS/actions/runs/41338158346) completed successfully on commit `9f5c293bd46cb09423fba4b13455016c128d9ca0`.
+- Backend unit tests passed.
+- Frontend TypeScript typecheck passed.
+- Frontend production build passed.
+- This closes the two CI failures identified on the previous Idea 08 head. It does not change the feature's foundation-only scope or its outstanding execution-engine requirements.
