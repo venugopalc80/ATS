@@ -127,5 +127,58 @@ class ApplicationPermissionRouteTests(unittest.TestCase):
         self.assertEqual(result.id, self.application_id)
 
 
+
+class OfferCompensationPermissionTests(unittest.TestCase):
+    def test_salary_write_requires_offer_management_and_salary_management(self):
+        from types import SimpleNamespace
+        from app.routers.offers import _require_offer_write
+
+        payload = SimpleNamespace(model_fields_set={"salary_amount"})
+        with patch("app.routers.offers.require_permission") as permission:
+            _require_offer_write(uuid4(), uuid4(), payload)
+        self.assertEqual(
+            [call.args[2] for call in permission.call_args_list],
+            ["offer.manage", "offer.salary.manage"],
+        )
+
+    def test_non_salary_offer_update_requires_offer_management_only(self):
+        from types import SimpleNamespace
+        from app.routers.offers import _require_offer_write
+
+        payload = SimpleNamespace(model_fields_set={"status"})
+        with patch("app.routers.offers.require_permission") as permission:
+            _require_offer_write(uuid4(), uuid4(), payload)
+        permission.assert_called_once()
+        self.assertEqual(permission.call_args.args[2], "offer.manage")
+
+    def test_salary_output_is_redacted_without_salary_read_permission(self):
+        from app.routers.offers import _offer_output
+
+        row = {
+            "organization_id": uuid4(),
+            "application_id": uuid4(),
+            "title": "Engineer",
+            "status": "draft",
+            "employment_type": None,
+            "start_date": None,
+            "salary_amount": 85000,
+            "salary_currency": "GBP",
+            "bonus_amount": 5000,
+            "benefits": None,
+            "expires_at": None,
+            "notes": None,
+            "id": uuid4(),
+            "sent_at": None,
+            "responded_at": None,
+            "created_by": None,
+            "created_at": "2026-01-01T00:00:00Z",
+            "updated_at": "2026-01-01T00:00:00Z",
+        }
+        result = _offer_output(row, include_salary=False)
+        self.assertIsNone(result.salary_amount)
+        self.assertIsNone(result.salary_currency)
+        self.assertIsNone(result.bonus_amount)
+
+
 if __name__ == "__main__":
     unittest.main()
