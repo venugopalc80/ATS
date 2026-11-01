@@ -58,7 +58,8 @@ async def create_candidate(
     require_permission(user_id, payload.organization_id, "candidate.create")
     try:
         row = await service.create_candidate(payload)
-        return CandidateOut.model_validate(row)
+        include_contact = _can_read_contact(user_id, payload.organization_id)
+        return _candidate_output(row, include_contact)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
