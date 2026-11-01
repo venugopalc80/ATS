@@ -32,7 +32,7 @@ CREATE TABLE public.application_stage_history (id uuid PRIMARY KEY, organization
 CREATE OR REPLACE FUNCTION public.audit_workflow_status_change()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp AS $$
 DECLARE actor_id uuid;
-DECLARE entity_type_value text;
+  entity_type_value text;
 BEGIN
   actor_id := NULL;
   entity_type_value := CASE TG_TABLE_NAME
@@ -54,10 +54,10 @@ $$;
 CREATE OR REPLACE FUNCTION public.capture_record_change()
 RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 DECLARE org_id uuid;
-DECLARE row_id uuid;
-DECLARE actor_id uuid;
-DECLARE old_data jsonb;
-DECLARE new_data jsonb;
+  row_id uuid;
+  actor_id uuid;
+  old_data jsonb;
+  new_data jsonb;
 BEGIN
   IF TG_OP = 'DELETE' THEN
     old_data := to_jsonb(OLD); new_data := '{}'::jsonb;
