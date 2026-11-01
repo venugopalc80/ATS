@@ -42,6 +42,7 @@ values
  ('placement.manage','placements','Create and update placement records'),
  ('job.read','jobs','View job records'),
  ('job.manage','jobs','Create and update job records'),
+ ('job.delete','jobs','Delete job records'),
  ('client.read','clients','View client records'),
  ('client.manage','clients','Create and update client records'),
  ('audit.read','administration','View organisation audit events'),
