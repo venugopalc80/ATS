@@ -177,3 +177,24 @@ class ApplicationSLADueService:
                     [organization_id],
                 )
                 return list(cursor.fetchall())
+
+
+    async def complete_milestones(
+        self, application_id, organization_id, milestones: list[str]
+    ) -> list[dict]:
+        allowed = set(self.TARGETS) | {"candidate_follow_up", "post_interview_update"}
+        if not milestones or any(item not in allowed for item in milestones):
+            raise ValueError("One or more SLA milestones are invalid")
+        from app.db import get_connection
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "update public.application_sla_deadlines "
+                    "set status='completed', completed_at=coalesce(completed_at, now()), updated_at=now() "
+                    "where application_id=%s and organization_id=%s and milestone = any(%s) "
+                    "and status <> 'completed' "
+                    "returning id, application_id, milestone, status, completed_at",
+                    [application_id, organization_id, milestones],
+                )
+                return list(cursor.fetchall())
