@@ -315,3 +315,22 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
 .dashboard-user-dropdown button { width:100%; text-align:left; border:0; border-radius:7px; background:transparent; padding:10px; color:var(--ink); font-size:13px; }
 .dashboard-user-dropdown button:hover { background:var(--bg); }
 .dashboard-user-dropdown button:disabled { opacity:.6; cursor:wait; }
+
+
+/* Candidate self-service portal */
+.candidate-portal-page{min-height:100vh;background:#f7f8fc;color:#172033}
+.candidate-portal-header{height:72px;max-width:1120px;margin:auto;padding:0 26px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e8ebf2}
+.candidate-portal-brand{font-size:17px;font-weight:850;letter-spacing:.12em;color:#172033}.candidate-portal-brand span{font-size:9px;letter-spacing:.18em;color:#7c879c;margin-left:8px}
+.candidate-portal-signout{border:1px solid #d9deea;background:#fff;color:#45516a;border-radius:8px;padding:9px 13px;font-size:12px;font-weight:700}
+.candidate-portal-shell{max-width:850px;margin:0 auto;padding:62px 24px 80px}
+.candidate-portal-heading{max-width:620px;margin-bottom:30px}.candidate-portal-heading h1{font-size:clamp(34px,5vw,48px);letter-spacing:-.055em;line-height:1.08;margin:13px 0}.candidate-portal-heading>p:last-child{color:#68748b;font-size:14px;line-height:1.7}
+.candidate-portal-panel{background:#fff;border:1px solid #e7eaf1;border-radius:13px;padding:24px;margin:15px 0;box-shadow:0 8px 28px rgba(25,37,68,.035)}
+.candidate-portal-panel h2{font-size:19px;letter-spacing:-.025em;margin:0 0 8px}.candidate-portal-panel>p{color:#69758c;font-size:13px;line-height:1.7}
+.candidate-portal-form{display:grid;gap:9px;max-width:420px;margin-top:20px}.candidate-portal-form label{font-size:12px;font-weight:700;color:#46516a}.candidate-portal-form input{height:44px;border:1px solid #d8deea;border-radius:8px;padding:0 12px;font:inherit;color:#172033}.candidate-portal-form button,.candidate-portal-document button{height:42px;border:0;border-radius:8px;background:#285be8;color:#fff;padding:0 15px;font-size:12px;font-weight:750}.candidate-portal-form button:disabled,.candidate-portal-document button:disabled{opacity:.55;cursor:not-allowed}
+.candidate-portal-notice{margin-top:15px;padding:13px 15px;border:1px solid #d9e2ff;border-radius:9px;background:#f0f4ff;color:#29447f;font-size:13px;line-height:1.6}
+.candidate-portal-footnote{margin-top:24px;color:#8791a5;font-size:11px;line-height:1.6}
+.candidate-portal-content{display:grid;gap:2px}.candidate-portal-label{display:block;color:#7e8aa2;font-size:9px;font-weight:800;letter-spacing:.15em;margin-bottom:9px}.candidate-portal-profile{display:flex;align-items:center;justify-content:space-between;gap:20px}.candidate-portal-profile h2{font-size:23px;margin:0 0 5px}.candidate-portal-profile p,.candidate-portal-profile-meta{font-size:12px;color:#748097;margin:0}.candidate-portal-profile-meta{text-align:right}
+.candidate-portal-section-heading{display:flex;align-items:center;justify-content:space-between;gap:16px}.candidate-portal-section-heading h2{margin:0}.candidate-portal-section-heading>span{font-size:11px;color:#8490a5}
+.candidate-portal-list{margin-top:17px}.candidate-portal-application,.candidate-portal-document{display:flex;align-items:center;justify-content:space-between;gap:15px;padding:16px 0;border-top:1px solid #edf0f5}.candidate-portal-application h3{font-size:14px;margin:0 0 5px}.candidate-portal-application p,.candidate-portal-document p{font-size:11px;color:#77839a;margin:0 0 5px}.candidate-portal-application small{font-size:10px;color:#9aa3b3}.candidate-portal-status{white-space:nowrap;border-radius:999px;padding:6px 10px;background:#f1f4fa;color:#53617a;font-size:10px;font-weight:750;text-transform:capitalize}.candidate-portal-document strong{font-size:12px}.candidate-portal-document button{height:34px;white-space:nowrap}.candidate-portal-empty{padding:12px 0 0}
+.candidate-portal-secondary{border:1px solid #d9deea;background:#fff;color:#34415a;border-radius:8px;padding:10px 13px;font-size:12px;font-weight:700}
+@media(max-width:620px){.candidate-portal-header{padding:0 18px}.candidate-portal-shell{padding:42px 18px 60px}.candidate-portal-panel{padding:19px}.candidate-portal-profile{align-items:flex-start;flex-direction:column}.candidate-portal-profile-meta{text-align:left}.candidate-portal-application,.candidate-portal-document{align-items:flex-start}.candidate-portal-status{font-size:9px}.candidate-portal-document button{flex:none}}
