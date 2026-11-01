@@ -18,6 +18,8 @@ ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = [
     ROOT / "supabase" / "migrations" / "20261026150000_application_stage_history.sql",
     ROOT / "supabase" / "migrations" / "20261026150100_application_stage_config.sql",
+    ROOT / "supabase" / "migrations" / "20261101120000_application_recruiter_assignment.sql",
+    ROOT / "supabase" / "migrations" / "20261101130000_application_sla_policies.sql",
 ]
 ACTOR = "22222222-2222-4222-8222-222222222222"
 ACTOR_UUID = UUID(ACTOR)
@@ -263,7 +265,13 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
             self.assertEqual(cursor.fetchone(), ("new", "screening", ACTOR_UUID, "CV reviewed"))
 
             # Browser roles have no direct table privileges; RLS is enabled as defence in depth.
-            for table in ("application_stage_history", "application_stage_config"):
+            for table in (
+                "application_stage_history",
+                "application_stage_config",
+                "application_assignments",
+                "application_assignment_history",
+                "application_sla_policies",
+            ):
                 cursor.execute(
                     "select has_table_privilege('anon', %s, 'select'), "
                     "has_table_privilege('authenticated', %s, 'select'), "
