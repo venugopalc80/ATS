@@ -138,3 +138,19 @@ class ApplicationSLADueService:
                     [application_id, organization_id],
                 )
                 return list(cursor.fetchall())
+
+
+    async def refresh_overdue(self, organization_id) -> list[dict]:
+        """Mark expired pending deadlines overdue; safe to invoke from a scheduled worker."""
+        from app.db import get_connection
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "update public.application_sla_deadlines "
+                    "set status='overdue', updated_at=now() "
+                    "where organization_id=%s and status='pending' and due_at < now() "
+                    "returning id, application_id, milestone, due_at",
+                    [organization_id],
+                )
+                return list(cursor.fetchall())
