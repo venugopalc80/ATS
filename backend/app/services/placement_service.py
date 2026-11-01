@@ -13,7 +13,7 @@ ALLOWED_PLACEMENT_TRANSITIONS = {
 }
 
 
-def list_placements(organization_id: UUID, status: str | None = None):
+def list_placements(organization_id: UUID, status: str | None = None, candidate_id: UUID | None = None):
     with get_connection() as c:
         with c.cursor() as cur:
             q = "select * from public.placements where organization_id=%s"
@@ -21,6 +21,9 @@ def list_placements(organization_id: UUID, status: str | None = None):
             if status:
                 q += " and status=%s"
                 args.append(status)
+            if candidate_id:
+                q += " and candidate_id=%s"
+                args.append(candidate_id)
             q += " order by start_date desc"
             cur.execute(q, args)
             return cur.fetchall()
