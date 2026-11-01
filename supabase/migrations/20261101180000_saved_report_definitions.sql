@@ -26,12 +26,7 @@ create policy saved_report_definitions_select
     on public.saved_report_definitions
     for select to authenticated
     using (
-        exists (
-            select 1
-            from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-        )
+        public.is_org_member(organization_id)
         and (is_shared = true or created_by = auth.uid())
     );
 
@@ -41,12 +36,7 @@ create policy saved_report_definitions_insert
     for insert to authenticated
     with check (
         created_by = auth.uid()
-        and exists (
-            select 1
-            from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-        )
+        and public.is_org_member(organization_id)
         and is_shared = false
     );
 
@@ -57,22 +47,12 @@ create policy saved_report_definitions_update_private
     using (
         created_by = auth.uid()
         and is_shared = false
-        and exists (
-            select 1
-            from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-        )
+        and public.is_org_member(organization_id)
     )
     with check (
         created_by = auth.uid()
         and is_shared = false
-        and exists (
-            select 1
-            from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-        )
+        and public.is_org_member(organization_id)
     );
 
 drop policy if exists saved_report_definitions_update_admin on public.saved_report_definitions;
@@ -80,20 +60,10 @@ create policy saved_report_definitions_update_admin
     on public.saved_report_definitions
     for update to authenticated
     using (
-        exists (
-            select 1 from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-              and m.role in ('owner', 'admin')
-        )
+        public.is_org_admin(organization_id)
     )
     with check (
-        exists (
-            select 1 from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-              and m.role in ('owner', 'admin')
-        )
+        public.is_org_admin(organization_id)
     );
 
 drop policy if exists saved_report_definitions_delete_private on public.saved_report_definitions;
@@ -103,11 +73,7 @@ create policy saved_report_definitions_delete_private
     using (
         created_by = auth.uid()
         and is_shared = false
-        and exists (
-            select 1 from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-        )
+        and public.is_org_member(organization_id)
     );
 
 drop policy if exists saved_report_definitions_delete_admin on public.saved_report_definitions;
@@ -115,12 +81,7 @@ create policy saved_report_definitions_delete_admin
     on public.saved_report_definitions
     for delete to authenticated
     using (
-        exists (
-            select 1 from public.organization_members m
-            where m.organization_id = saved_report_definitions.organization_id
-              and m.user_id = auth.uid()
-              and m.role in ('owner', 'admin')
-        )
+        public.is_org_admin(organization_id)
     );
 
 grant select, insert, update, delete on public.saved_report_definitions to authenticated;
