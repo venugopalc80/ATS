@@ -68,6 +68,12 @@ class _FakeCursor:
         self.statements = statements
         self.current = None
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        return False
+
     def execute(self, query, params=None):
         self.statements.append((query, params))
         self.current = self.responses.pop(0)
