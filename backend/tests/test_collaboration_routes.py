@@ -456,6 +456,51 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertNotIn("update public.conversations", cursor.query)
 
 
+    def test_pin_change_locks_conversation_before_checking_membership(self):
+        conversation_id, user_id = uuid4(), uuid4()
+
+        class PinCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.fetchone_rows = [{"id": conversation_id}, {"joined_at": "joined"}]
+                self.rowcount = 1
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = PinCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(collaboration.set_pinned(
+                conversation_id=conversation_id, pinned=True, user_id=user_id
+            ))
+
+        self.assertEqual(result, {"pinned": True})
+        self.assertIn("for update", cursor.queries[0].lower())
+        self.assertIn("left_at is null", cursor.queries[-1].lower())
+        self.assertEqual(cursor.params, [True, conversation_id, user_id])
+
+    def test_pin_change_rejects_archived_conversation_before_membership_query(self):
+        conversation_id, user_id = uuid4(), uuid4()
+
+        class ArchivedPinCursor(FakeCursor):
+            def fetchone(self):
+                return None
+
+        cursor = ArchivedPinCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.set_pinned(
+                    conversation_id=conversation_id, pinned=True, user_id=user_id
+                ))
+
+        self.assertEqual(error.exception.status_code, 404)
+        self.assertIn("archived_at is null", cursor.query)
+
     def test_duplicate_message_send_returns_original_without_bumping_conversation(self):
         from datetime import datetime, timezone
 
