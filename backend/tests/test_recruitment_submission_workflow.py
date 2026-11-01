@@ -302,12 +302,11 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "created_at": NOW,
             "updated_at": NOW,
         }
-        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+        with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=None):
                 with self.assertRaises(HTTPException) as error:
                     await applications.get_application(APPLICATION, USER)
 
-        self.assertEqual(error.exception.status_code, 403)
+        self.assertEqual(error.exception.status_code, 404)
 
     async def test_update_application_does_not_mutate_before_membership_check(self):
         from fastapi import HTTPException
@@ -327,8 +326,7 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "created_at": NOW,
             "updated_at": NOW,
         }
-        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+        with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=None):
                 with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
                     with self.assertRaises(HTTPException) as error:
                         await applications.update_application(
@@ -354,7 +352,7 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "created_at": NOW,
             "updated_at": NOW,
         }
-        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+        with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=row):
             with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
                 with patch.object(applications.service, "transition_application", new_callable=AsyncMock) as transition:
                     with self.assertRaises(HTTPException) as error:
@@ -397,7 +395,7 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "created_at": NOW,
             "updated_at": NOW,
         }
-        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
+        with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=row):
             with patch.object(applications, "assert_org_member"):
                 with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
                     with self.assertRaises(HTTPException) as error:
