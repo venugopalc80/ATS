@@ -557,3 +557,11 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Each deployment record identifies commit `55057f42eb40ea57dda7963b0957bb979cff0f5b`. This supersedes earlier notes that exact-head previews were blocked by the Vercel daily build limit.
 - Preview browser acceptance is still outstanding: non-custom preview domains are SSO-protected, and no authorised authenticated recruiter workflow has been completed.
 - PR #69 remains draft/open/unmerged. No staging or production migrations, database writes, or production deployment were performed.
+
+
+### Read-only duplicate-data assessment for candidate CV import (2026-11-01)
+
+- Ran aggregate-only, read-only SQL checks in ATS-Staging (`riauyrhfnlsxmtgipuxi`) and production (`olsziyaepfesjtkceuzo`); no candidate email addresses, document hashes, or candidate identities were returned.
+- Both environments reported **0 duplicate candidate-email groups within an organisation** using the existing import comparison semantics (`lower(email)`), and **0 duplicate active document-hash groups within an organisation**.
+- This supports the current data being clean for a future unique partial index on active candidate-document hashes, but does not itself authorise or apply a schema change. The production/staging data may change between this check and any migration; repeat the duplicate check in the approved migration window.
+- No SQL writes, migrations, migration-ledger edits, or data changes were executed.
