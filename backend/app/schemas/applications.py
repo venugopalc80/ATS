@@ -44,6 +44,41 @@ class ApplicationTransition(BaseModel):
         return normalized
 
 
+class ApplicationBulkTransition(BaseModel):
+    application_ids: list[UUID] = Field(min_length=1, max_length=100)
+    status: ApplicationStatus
+    reason: str = Field(min_length=1, max_length=1000)
+
+    @field_validator("application_ids")
+    @classmethod
+    def unique_application_ids(cls, value: list[UUID]) -> list[UUID]:
+        if len(value) != len(set(value)):
+            raise ValueError("Application IDs must be unique")
+        return value
+
+    @field_validator("reason")
+    @classmethod
+    def bulk_reason_not_blank(cls, value: str) -> str:
+        normalized = value.strip()
+        if not normalized:
+            raise ValueError("Transition reason cannot be blank")
+        return normalized
+
+
+class ApplicationBulkTransitionItem(BaseModel):
+    application_id: UUID
+    success: bool
+    status: ApplicationStatus | None = None
+    error: str | None = None
+
+
+class ApplicationBulkTransitionOut(BaseModel):
+    requested: int
+    succeeded: int
+    failed: int
+    results: list[ApplicationBulkTransitionItem]
+
+
 class ApplicationOut(BaseModel):
     id: UUID
     organization_id: UUID
