@@ -266,7 +266,7 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
             for table in (
                 "application_stage_history", "application_stage_config",
                 "application_assignments", "application_assignment_history",
-                "application_sla_policies",
+                "application_sla_policies", "application_sla_deadlines",
             ):
                 cursor.execute(
                     "select has_table_privilege('anon', %s, 'select'), "
