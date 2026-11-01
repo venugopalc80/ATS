@@ -18,6 +18,17 @@ service = ApplicationAssignmentService()
 def _db_error(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="Database operation failed")
 
+def _get_application_for_member(application_id: UUID, user_id: UUID):
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "select a.organization_id from public.applications a "
+                "where a.id=%s and exists (select 1 from public.organization_members om "
+                "where om.organization_id=a.organization_id and om.user_id=%s)",
+                [application_id, user_id],
+            )
+            return cursor.fetchone()
+
 
 @router.put("/{application_id}/assignment", response_model=ApplicationAssignmentOut)
 async def set_application_assignment(
@@ -27,13 +38,7 @@ async def set_application_assignment(
 ) -> ApplicationAssignmentOut:
     try:
         # Only organisation owners/admins can allocate work to another recruiter.
-        with get_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "select organization_id from public.applications where id=%s",
-                    [application_id],
-                )
-                application = cursor.fetchone()
+        application = _get_application_for_member(application_id, user_id)
         if application is None:
             raise HTTPException(status_code=404, detail="Application not found")
         assert_org_admin(user_id, application["organization_id"])
@@ -57,7 +62,7 @@ async def get_application_assignment(
     user_id: UUID = Depends(get_current_user_id),
 ) -> ApplicationAssignmentOut:
     try:
-        with __import__("app.db", fromlist=["get_connection"]).get_connection() as connection:
+        with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "select organization_id from public.applications where id=%s",
@@ -92,7 +97,6 @@ async def get_application_assignment_history(
                 application = cursor.fetchone()
         if application is None:
             raise HTTPException(status_code=404, detail="Application not found")
-        from app.auth import assert_org_member
         assert_org_member(user_id, application["organization_id"])
         rows = await service.history(application_id, application["organization_id"])
         return [ApplicationAssignmentHistoryOut.model_validate(row) for row in rows]
