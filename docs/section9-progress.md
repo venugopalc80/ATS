@@ -26,8 +26,8 @@ Progress percentages are engineering estimates of completed feature scope, not a
 ### Idea 47 — Organisation settings
 - Versioned settings table with member-read RLS and browser write restrictions.
 - Validated backend GET/PATCH API; settings updates are owner/admin-only, versioned and audited.
-- Settings UI for brand name, country, currency, timezone, date format and default job preferences.
-- Validation tests authored.
+- Settings UI for brand name, country, currency, timezone, date format and default job preferences. PATCH requests include the version loaded by the editor; the backend compares it under the organisation-row lock and returns HTTP 409 rather than silently overwriting a newer version.
+- Validation tests cover safe defaults, timezone/currency/country validation, explicit patch fields, and stale-version conflict rejection without settings or audit writes.
 
 ### Idea 48 — Help and onboarding
 - Per-user, per-organisation onboarding progress table with owner-only RLS visibility.
