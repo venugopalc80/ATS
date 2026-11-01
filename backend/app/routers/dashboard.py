@@ -16,19 +16,28 @@ VACANCY_MIN_APPLICATIONS = 3
 OFFER_EXPIRY_WINDOW_DAYS = 3
 
 
-def organisation_day_bounds_utc(timezone_name: str, now: datetime | None = None) -> tuple[datetime, datetime]:
-    """Return UTC instants delimiting today in an organisation's IANA timezone."""
+def _organisation_zone(timezone_name: str) -> ZoneInfo:
     try:
-        zone = ZoneInfo(timezone_name)
+        return ZoneInfo(timezone_name)
     except (ZoneInfoNotFoundError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=500, detail="Organisation timezone is misconfigured") from exc
+
+
+def organisation_date_bounds_utc(timezone_name: str, local_date: date) -> tuple[datetime, datetime]:
+    """Return UTC instants delimiting a local calendar date, including DST transitions."""
+    zone = _organisation_zone(timezone_name)
+    local_start = datetime.combine(local_date, time.min, tzinfo=zone)
+    local_end = datetime.combine(local_date + timedelta(days=1), time.min, tzinfo=zone)
+    return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
+
+
+def organisation_day_bounds_utc(timezone_name: str, now: datetime | None = None) -> tuple[datetime, datetime]:
+    """Return UTC instants delimiting today in an organisation's IANA timezone."""
     current = now or datetime.now(timezone.utc)
     if current.tzinfo is None:
         current = current.replace(tzinfo=timezone.utc)
-    local_today = current.astimezone(zone).date()
-    local_start = datetime.combine(local_today, time.min, tzinfo=zone)
-    local_end = datetime.combine(local_today + timedelta(days=1), time.min, tzinfo=zone)
-    return local_start.astimezone(timezone.utc), local_end.astimezone(timezone.utc)
+    local_today = current.astimezone(_organisation_zone(timezone_name)).date()
+    return organisation_date_bounds_utc(timezone_name, local_today)
 
 
 @router.get("")
@@ -54,6 +63,10 @@ async def dashboard(
                     raise HTTPException(status_code=404, detail="Organisation not found")
                 organisation_timezone = organisation_row.get("timezone") or "UTC"
                 today_start_utc, tomorrow_start_utc = organisation_day_bounds_utc(organisation_timezone)
+                local_today = datetime.now(timezone.utc).astimezone(_organisation_zone(organisation_timezone)).date()
+                month_start_utc, _ = organisation_date_bounds_utc(
+                    organisation_timezone, local_today.replace(day=1)
+                )
 
                 cursor.execute(
                     "select count(*)::int as total from public.jobs where organization_id=%s and status='open'",
@@ -82,11 +95,13 @@ async def dashboard(
                 pipeline_params = [organization_id]
                 pipeline_where = "organization_id=%s"
                 if date_from:
+                    range_start_utc, _ = organisation_date_bounds_utc(organisation_timezone, date_from)
                     pipeline_where += " and created_at >= %s"
-                    pipeline_params.append(date_from)
+                    pipeline_params.append(range_start_utc)
                 if date_to:
-                    pipeline_where += " and created_at < (%s::date + interval '1 day')"
-                    pipeline_params.append(date_to)
+                    _, range_end_utc = organisation_date_bounds_utc(organisation_timezone, date_to)
+                    pipeline_where += " and created_at < %s"
+                    pipeline_params.append(range_end_utc)
                 cursor.execute(
                     f"select status,count(*)::int as total from public.applications where {pipeline_where} group by status",
                     pipeline_params,
@@ -96,7 +111,7 @@ async def dashboard(
                 cursor.execute(
                     """select j.id,j.title,coalesce(c.name,'Direct client') as client,j.status,
                               count(a.id)::int as applicants,
-                              (current_date - coalesce(j.opened_at,j.created_at)::date)::int as days_open
+                              (%s::date - (coalesce(j.opened_at,j.created_at) at time zone %s)::date)::int as days_open
                        from public.jobs j
                        left join public.clients c on c.id=j.client_id and c.organization_id=j.organization_id
                        left join public.applications a on a.job_id=j.id and a.organization_id=j.organization_id
@@ -104,7 +119,7 @@ async def dashboard(
                        group by j.id,j.title,c.name,j.status,j.created_at,j.opened_at
                        order by case when j.status='on_hold' then 0 else 1 end,
                                 coalesce(j.opened_at,j.created_at) asc limit 10""",
-                    [organization_id],
+                    [local_today, organisation_timezone, organization_id],
                 )
                 job_rows = list(cursor.fetchall())
                 jobs = []
@@ -168,23 +183,31 @@ async def dashboard(
                 )
                 expiring_offers = list(cursor.fetchall())
 
+                activity_where = "ae.organization_id=%s"
+                activity_params = [organization_id]
+                if date_from:
+                    activity_start_utc, _ = organisation_date_bounds_utc(organisation_timezone, date_from)
+                    activity_where += " and ae.created_at >= %s"
+                    activity_params.append(activity_start_utc)
+                if date_to:
+                    _, activity_end_utc = organisation_date_bounds_utc(organisation_timezone, date_to)
+                    activity_where += " and ae.created_at < %s"
+                    activity_params.append(activity_end_utc)
                 cursor.execute(
-                    """select ae.id,ae.action,ae.entity_type,ae.entity_id,ae.metadata,ae.created_at,
-                              ae.actor_user_id,p.full_name as actor_name
-                       from public.audit_events ae
-                       left join public.profiles p on p.id=ae.actor_user_id
-                       where ae.organization_id=%s
-                         and (%s::date is null or ae.created_at >= %s::date)
-                         and (%s::date is null or ae.created_at < (%s::date + interval '1 day'))
-                       order by ae.created_at desc limit 10""",
-                    [organization_id, date_from, date_from, date_to, date_to],
+                    f"""select ae.id,ae.action,ae.entity_type,ae.entity_id,ae.metadata,ae.created_at,
+                               ae.actor_user_id,p.full_name as actor_name
+                        from public.audit_events ae
+                        left join public.profiles p on p.id=ae.actor_user_id
+                        where {activity_where}
+                        order by ae.created_at desc limit 10""",
+                    activity_params,
                 )
                 activity = list(cursor.fetchall())
 
                 cursor.execute(
                     """select count(*)::int as total from public.placements
-                       where organization_id=%s and created_at >= date_trunc('month', now())""",
-                    [organization_id],
+                       where organization_id=%s and created_at >= %s""",
+                    [organization_id, month_start_utc],
                 )
                 placements_this_month = cursor.fetchone()["total"]
 
