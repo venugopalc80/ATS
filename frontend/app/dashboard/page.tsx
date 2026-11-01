@@ -85,7 +85,7 @@ function formatDate(value: string | null | undefined, timeZone?: string) {
 }
 
 function friendlyActivityTitle(action: string, entityType: string) {
-  const key = action.trim().toLowerCase().replace(/[\\s-]+/g, "_");
+  const key = action.trim().toLowerCase().replace(/[\s-]+/g, "_");
   const entity = entityType.trim().toLowerCase();
 
   if (key === "insert" && ["candidate", "candidates"].includes(entity)) return "Candidate profile created";
