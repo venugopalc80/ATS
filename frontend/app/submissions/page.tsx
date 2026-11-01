@@ -58,6 +58,9 @@ export default function SubmissionsPage() {
   const [selectedCandidate, setSelectedCandidate] = useState("");
   const [source, setSource] = useState("Direct");
   const [saving, setSaving] = useState(false);
+  const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<ApplicationStatus | "">("");
+  const [bulkSaving, setBulkSaving] = useState(false);
 
   const jobMap = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
   const candidateMap = useMemo(() => new Map(candidates.map((candidate) => [candidate.id, candidate])), [candidates]);
@@ -175,6 +178,57 @@ export default function SubmissionsPage() {
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update application.");
+    }
+  }
+
+  async function runBulkTransition() {
+    if (!selectedApplicationIds.length || !bulkStatus || bulkSaving) return;
+    const reason = window.prompt("Why are these applications moving to " + stageLabel(bulkStatus) + "?");
+    if (reason === null) return;
+    const normalizedReason = reason.trim();
+    if (!normalizedReason || normalizedReason.length > 1000) {
+      setMessage("Enter a reason between 1 and 1000 characters to record this bulk stage change.");
+      return;
+    }
+    setBulkSaving(true);
+    try {
+      const response = await apiFetch(API_BASE + "/api/applications/bulk-transition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          application_ids: selectedApplicationIds,
+          status: bulkStatus,
+          reason: normalizedReason,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail ?? "Unable to update selected applications.");
+      }
+      const result: {
+        requested: number;
+        succeeded: number;
+        failed: number;
+        results: Array<{ application_id: string; success: boolean; status?: ApplicationStatus | null; error?: string | null }>;
+      } = await response.json();
+      const successful = new Map(
+        result.results.filter((item) => item.success && item.status).map((item) => [item.application_id, item.status as ApplicationStatus]),
+      );
+      setApplications((current) => current.map((item) => {
+        const nextStatus = successful.get(item.id);
+        return nextStatus ? { ...item, status: nextStatus } : item;
+      }));
+      setSelectedApplicationIds(result.results.filter((item) => !item.success).map((item) => item.application_id));
+      setMessage(
+        result.failed
+          ? result.succeeded + " application(s) moved; " + result.failed + " failed. Failed records remain selected so you can review them."
+          : result.succeeded + " application(s) moved successfully.",
+      );
+      setBulkStatus("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update selected applications.");
+    } finally {
+      setBulkSaving(false);
     }
   }
 
@@ -333,14 +387,41 @@ export default function SubmissionsPage() {
 
           {viewMode === "table" && <div className="card">
             <div className="card-head"><span className="card-title">Applications</span><span className="muted-small">{loading ? "Loading..." : "Live data · " + filtered.length + " records"}</span></div>
+            {selectedApplicationIds.length > 0 && <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "12px 0" }}>
+              <strong>{selectedApplicationIds.length} selected</strong>
+              <select className="filter" aria-label="Bulk move selected applications to stage" value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as ApplicationStatus | "")}>
+                <option value="">Move selected to stage...</option>
+                {stages.filter((stage) => stage.enabled).map((stage) => <option key={stage.stage_key} value={stage.stage_key}>{stage.label}</option>)}
+              </select>
+              <button className="btn primary" disabled={!bulkStatus || bulkSaving} onClick={() => void runBulkTransition()}>{bulkSaving ? "Updating..." : "Apply to selected"}</button>
+              <button className="btn" disabled={bulkSaving} onClick={() => setSelectedApplicationIds([])}>Clear selection</button>
+              <span className="muted-small">Up to 100 applications per batch. Invalid transitions are reported individually.</span>
+            </div>}
             <div style={{ overflowX: "auto" }}><table className="table applicant-table">
-              <thead><tr><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
+              <thead><tr><th><input type="checkbox" aria-label="Select all applications on this page" checked={pageApplications.length > 0 && pageApplications.every((item) => selectedApplicationIds.includes(item.id))} onChange={(event) => {
+                if (event.target.checked) {
+                  const next = Array.from(new Set([...selectedApplicationIds, ...pageApplications.map((item) => item.id)]));
+                  if (next.length > 100) { setMessage("You can select up to 100 applications per batch."); return; }
+                  setSelectedApplicationIds(next);
+                } else {
+                  const pageIds = new Set(pageApplications.map((item) => item.id));
+                  setSelectedApplicationIds(selectedApplicationIds.filter((id) => !pageIds.has(id)));
+                }
+              }} /></th><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={10}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={10}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
+                {loading ? <tr><td colSpan={11}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={11}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
                     const candidate = candidateMap.get(application.candidate_id);
                     const job = jobMap.get(application.job_id);
                     return (
                       <tr key={application.id}>
+                        <td><input type="checkbox" aria-label={"Select " + candidateName(candidate)} checked={selectedApplicationIds.includes(application.id)} onChange={(event) => {
+                          if (event.target.checked) {
+                            if (selectedApplicationIds.length >= 100) { setMessage("You can select up to 100 applications per batch."); return; }
+                            setSelectedApplicationIds((current) => current.includes(application.id) ? current : [...current, application.id]);
+                          } else {
+                            setSelectedApplicationIds((current) => current.filter((id) => id !== application.id));
+                          }
+                        }} /></td>
                         <td><Link className="link" href={"/submissions/" + application.id}>{application.id.slice(0, 8).toUpperCase()}</Link></td>
                         <td><Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link></td>
                         <td>{candidate?.email ?? "—"}</td><td>{candidate?.phone ?? "—"}</td><td>{[candidate?.city, candidate?.region].filter(Boolean).join(", ") || "—"}</td><td>{application.source || "Direct"}</td>
