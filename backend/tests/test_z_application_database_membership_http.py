@@ -158,11 +158,11 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
         }
 
     def test_real_application_lookup_and_membership_block_cross_tenant_read_and_transition(self):
-        # The route performs a real application SELECT and then a real membership
-        # query. No application lookup or transition service method is mocked.
+        # The route uses a real application lookup with an organisation-membership
+        # EXISTS predicate. No application lookup or transition service method is mocked.
         self.current_user["id"] = str(ACTOR)
         response = self.client.get(f"/api/applications/{APPLICATION}")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         self.assertNotIn("confidential recruiter assessment", response.text)
 
         response = self.client.post(
