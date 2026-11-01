@@ -44,6 +44,68 @@ def _application_scope(organization_id: UUID, date_from: date | None, date_to: d
     return " and ".join(clauses), params
 
 
+def _forecast_backtest(history: list[dict], training_months: int = 6) -> dict:
+    """Backtest the six-month arithmetic-mean baseline against later complete months."""
+    if not history or not any(int(row["approved_requisitions"] or 0) > 0 for row in history):
+        return {
+            "status": "no_historical_approved_requisitions",
+            "training_window_months": training_months,
+            "evaluation_months": 0,
+            "positive_actual_months": 0,
+            "mean_absolute_error": None,
+            "weighted_absolute_percentage_error": None,
+            "mean_absolute_percentage_error": None,
+            "sample_warning": True,
+            "monthly_results": [],
+        }
+
+    monthly_results = []
+    for index in range(training_months, len(history)):
+        training = history[index - training_months:index]
+        actual = int(history[index]["approved_headcount"] or 0)
+        predicted = sum(int(row["approved_headcount"] or 0) for row in training) / training_months
+        error = actual - predicted
+        monthly_results.append({
+            "month": history[index]["month"],
+            "predicted_headcount": round(predicted, 1),
+            "actual_headcount": actual,
+            "error_headcount": round(error, 1),
+            "absolute_error_headcount": round(abs(error), 1),
+        })
+
+    evaluation_months = len(monthly_results)
+    positive_actual_months = sum(1 for row in monthly_results if row["actual_headcount"] > 0)
+    absolute_error_total = sum(row["absolute_error_headcount"] for row in monthly_results)
+    actual_total = sum(row["actual_headcount"] for row in monthly_results)
+    mae = absolute_error_total / evaluation_months if evaluation_months else None
+    wape = absolute_error_total / actual_total if actual_total > 0 else None
+    nonzero_actual_errors = [
+        row["absolute_error_headcount"] / row["actual_headcount"]
+        for row in monthly_results if row["actual_headcount"] > 0
+    ]
+    mape = sum(nonzero_actual_errors) / len(nonzero_actual_errors) if nonzero_actual_errors else None
+
+    if evaluation_months < 3:
+        status = "insufficient_evaluation_months"
+    elif actual_total == 0:
+        status = "no_actual_demand_in_evaluation_window"
+    else:
+        status = "available"
+
+    return {
+        "status": status,
+        "training_window_months": training_months,
+        "evaluation_months": evaluation_months,
+        "positive_actual_months": positive_actual_months,
+        "mean_absolute_error": round(mae, 2) if mae is not None else None,
+        "weighted_absolute_percentage_error": round(wape, 4) if wape is not None else None,
+        "mean_absolute_percentage_error": round(mape, 4) if mape is not None else None,
+        "mape_excludes_zero_actual_months": True,
+        "sample_warning": evaluation_months < 6 or positive_actual_months < 3,
+        "monthly_results": monthly_results,
+    }
+
+
 @router.get("/kpis")
 async def analytics_kpis(
     organization_id: UUID,
@@ -763,6 +825,76 @@ async def analytics_forecast(
         }
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Analytics data is temporarily unavailable") from exc
+
+
+@router.get("/forecast/accuracy")
+async def analytics_forecast_accuracy(
+    organization_id: UUID,
+    recruiter_id: UUID | None = Query(default=None),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Compare rolling six-month demand baselines with actual approved headcount in later months."""
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """with months as (
+                           select generate_series(
+                               date_trunc('month', current_date) - interval '18 months',
+                               date_trunc('month', current_date) - interval '1 month',
+                               interval '1 month'
+                           )::date as month_start
+                       ),
+                       approved_demand as (
+                           select date_trunc('month', jr.approved_at)::date as month_start,
+                                  sum(jr.headcount)::int as approved_headcount,
+                                  count(*)::int as approved_requisitions
+                           from public.job_requisitions jr
+                           left join public.jobs j
+                             on j.id=jr.job_id and j.organization_id=jr.organization_id
+                           where jr.organization_id=%s
+                             and jr.status in ('approved','converted')
+                             and jr.approved_at >= date_trunc('month', current_date) - interval '18 months'
+                             and jr.approved_at < date_trunc('month', current_date)
+                             and (%s::uuid is null or coalesce(jr.recruiter_id,j.recruiter_id)=%s::uuid)
+                           group by date_trunc('month', jr.approved_at)::date
+                       )
+                       select m.month_start,
+                              coalesce(d.approved_headcount,0)::int as approved_headcount,
+                              coalesce(d.approved_requisitions,0)::int as approved_requisitions
+                       from months m
+                       left join approved_demand d using (month_start)
+                       order by m.month_start""",
+                    [organization_id, recruiter_id, recruiter_id],
+                )
+                history = [
+                    {
+                        "month": row["month_start"].isoformat(),
+                        "approved_headcount": int(row["approved_headcount"] or 0),
+                        "approved_requisitions": int(row["approved_requisitions"] or 0),
+                    }
+                    for row in cursor.fetchall()
+                ]
+        return {
+            "organization_id": str(organization_id),
+            "recruiter_id": str(recruiter_id) if recruiter_id else None,
+            "history_months": len(history),
+            "methodology": (
+                "For each evaluation month, predict approved requisition headcount using the arithmetic mean "
+                "of the preceding six complete months, including zero-activity months. Compare with actual "
+                "approved headcount for up to the last twelve complete months."
+            ),
+            "limitations": [
+                "This evaluates approved requisition headcount, not hires, placements or revenue.",
+                "MAPE excludes evaluation months with zero actual headcount; WAPE uses total actual headcount.",
+                "At least three evaluation months and non-zero evaluation demand are required for an available accuracy status.",
+                "Results are historical backtest metrics, not a guarantee of future forecast accuracy.",
+            ],
+            "validation": _forecast_backtest(history),
+        }
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Forecast validation data is temporarily unavailable") from exc
 
 
 @router.get("/export")

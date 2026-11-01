@@ -24,6 +24,7 @@ type Source = { source: string; applications: number; qualified_applications: nu
 type Sources = { sources: Source[]; limitations: string[] };
 type CampaignChannel = { campaign_id: string; campaign_name: string; campaign_status: string; budget_amount: number | null; budget_currency: string | null; channel_id: string; channel_key: string; source_label: string | null; spend_amount: number | null; spend_currency: string | null; applications: number; hires: number; applications_with_accepted_offer: number; cost_per_application: number | null; cost_per_hire: number | null; sample_warning: boolean; financial_roi: number | null; financial_roi_status: string };
 type CampaignROI = { campaign_channels: CampaignChannel[]; limitations: string[] };
+type ForecastAccuracy = { validation: { status: string; training_window_months: number; evaluation_months: number; positive_actual_months: number; mean_absolute_error: number | null; weighted_absolute_percentage_error: number | null; mean_absolute_percentage_error: number | null; sample_warning: boolean; monthly_results: Array<{ month: string; predicted_headcount: number; actual_headcount: number; error_headcount: number }> } };
 type Forecast = {
   history_months: number;
   history: Array<{ month: string; approved_headcount: number; approved_requisitions: number }>;
@@ -55,6 +56,7 @@ export default function AnalyticsPage() {
   const [workload, setWorkload] = useState<Workload | null>(null);
   const [sources, setSources] = useState<Sources | null>(null);
   const [forecast, setForecast] = useState<Forecast | null>(null);
+  const [forecastAccuracy, setForecastAccuracy] = useState<ForecastAccuracy | null>(null);
   const [campaignROI, setCampaignROI] = useState<CampaignROI | null>(null);
   const [loading, setLoading] = useState(true);
   const [reportType, setReportType] = useState("kpis");
@@ -91,6 +93,7 @@ export default function AnalyticsPage() {
         "/api/analytics/workload?organization_id=" + encodeURIComponent(organizationId),
         "/api/analytics/sources?" + params.toString(),
         "/api/analytics/forecast?organization_id=" + encodeURIComponent(organizationId),
+        "/api/analytics/forecast/accuracy?organization_id=" + encodeURIComponent(organizationId),
         "/api/analytics/campaign-roi?" + params.toString(),
       ];
       const responses = await Promise.all(paths.map((path) => apiFetch(API_BASE + path)));
@@ -101,12 +104,13 @@ export default function AnalyticsPage() {
         if (failed.status === 503) throw new Error("Analytics data is temporarily unavailable. Please retry.");
         throw new Error("Analytics could not be loaded (HTTP " + failed.status + ").");
       }
-      const [k, f, w, s, forecastData, campaignData] = await Promise.all(responses.map((response) => response.json()));
+      const [k, f, w, s, forecastData, forecastAccuracyData, campaignData] = await Promise.all(responses.map((response) => response.json()));
       setKpis(k);
       setFunnel(f);
       setWorkload(w);
       setSources(s);
       setForecast(forecastData);
+      setForecastAccuracy(forecastAccuracyData);
       setCampaignROI(campaignData);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load analytics.");
@@ -245,6 +249,24 @@ export default function AnalyticsPage() {
               })}
             </div>
             <details className="analytics-details"><summary>How this forecast is calculated</summary><p>{forecast.methodology.baseline}</p><p>{forecast.methodology.trend}</p><p>{forecast.methodology.confidence}</p><p>Excluded: {forecast.methodology.exclusions.join(", ")}.</p></details>
+          </section>}
+
+          {forecastAccuracy && <section className="card analytics-forecast-card">
+            <div className="card-head">
+              <div><div className="card-title">Forecast backtest</div><div className="muted-small">Historical rolling validation · six-month baseline against approved requisition headcount</div></div>
+              <span className={"badge " + (forecastAccuracy.validation.status === "available" ? "blue" : "amber")}>{nice(forecastAccuracy.validation.status)}</span>
+            </div>
+            {forecastAccuracy.validation.status === "available" ? <>
+              {forecastAccuracy.validation.sample_warning && <div className="notice">Limited evaluation sample. Treat accuracy measures cautiously.</div>}
+              <div className="analytics-forecast-summary">
+                <div><div className="metric-title">Mean absolute error</div><div className="metric-value">{number(forecastAccuracy.validation.mean_absolute_error, 2)}</div><div className="muted-small">Average headcount error per month</div></div>
+                <div><div className="metric-title">Weighted absolute % error</div><div className="metric-value">{percent(forecastAccuracy.validation.weighted_absolute_percentage_error)}</div><div className="muted-small">Total absolute error ÷ total actual headcount</div></div>
+                <div><div className="metric-title">Mean absolute % error</div><div className="metric-value">{percent(forecastAccuracy.validation.mean_absolute_percentage_error)}</div><div className="muted-small">Zero-actual months excluded</div></div>
+              </div>
+              <div className="analytics-table-wrap"><table className="table"><thead><tr><th>Month</th><th>Predicted</th><th>Actual</th><th>Error</th></tr></thead><tbody>
+                {forecastAccuracy.validation.monthly_results.map((item) => <tr key={item.month}><td>{new Intl.DateTimeFormat(undefined, { month: "short", year: "numeric" }).format(new Date(item.month + "T12:00:00"))}</td><td>{number(item.predicted_headcount, 1)}</td><td>{number(item.actual_headcount)}</td><td>{number(item.error_headcount, 1)}</td></tr>)}
+              </tbody></table></div>
+            </> : <div className="analytics-empty">There is not enough historical approved requisition activity to validate the baseline yet. The status is explicit rather than presenting a misleading accuracy score.</div>}
           </section>}
           <div className="analytics-two-col">
             <section className="card">

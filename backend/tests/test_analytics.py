@@ -7,7 +7,7 @@ from uuid import UUID
 from fastapi import HTTPException
 
 from app.routers import analytics as analytics_router
-from app.routers.analytics import _application_scope, _validate_dates
+from app.routers.analytics import _application_scope, _validate_dates, _forecast_backtest
 
 
 ORG = UUID("11111111-1111-4111-8111-111111111111")
@@ -43,6 +43,33 @@ class AnalyticsFilterTests(unittest.TestCase):
         with self.assertRaises(HTTPException) as context:
             _validate_dates(date(2026, 10, 22), date(2026, 10, 1))
         self.assertEqual(context.exception.status_code, 422)
+
+    def test_forecast_backtest_calculates_rolling_six_month_errors(self):
+        values = [1, 2, 1, 2, 2, 3, 2, 3, 2, 4, 3, 5, 4, 4, 5, 6, 4, 7]
+        history = [
+            {"month": f"2025-{index + 1:02d}-01", "approved_headcount": value,
+             "approved_requisitions": 1 if value else 0}
+            for index, value in enumerate(values)
+        ]
+        result = _forecast_backtest(history)
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["training_window_months"], 6)
+        self.assertEqual(result["evaluation_months"], 12)
+        self.assertEqual(result["positive_actual_months"], 12)
+        self.assertIsNotNone(result["mean_absolute_error"])
+        self.assertIsNotNone(result["weighted_absolute_percentage_error"])
+        self.assertEqual(len(result["monthly_results"]), 12)
+
+    def test_forecast_backtest_does_not_claim_accuracy_without_history(self):
+        history = [
+            {"month": f"2025-{index + 1:02d}-01", "approved_headcount": 0,
+             "approved_requisitions": 0}
+            for index in range(18)
+        ]
+        result = _forecast_backtest(history)
+        self.assertEqual(result["status"], "no_historical_approved_requisitions")
+        self.assertIsNone(result["mean_absolute_error"])
+        self.assertIsNone(result["weighted_absolute_percentage_error"])
 
     def test_missing_date_bounds_are_allowed(self):
         _validate_dates(None, None)
@@ -95,6 +122,13 @@ class FakeAnalyticsCursor:
         raise AssertionError(f"Unexpected fetchone query: {self.sql}")
 
     def fetchall(self):
+        if "interval '18 months'" in self.sql:
+            values = [1, 2, 1, 2, 2, 3, 2, 3, 2, 4, 3, 5, 4, 4, 5, 6, 4, 7]
+            return [
+                {"month_start": date(2025 + (index // 12), (index % 12) + 1, 1),
+                 "approved_headcount": value, "approved_requisitions": 1 if value else 0}
+                for index, value in enumerate(values)
+            ]
         if "approved_headcount" in self.sql and "months as" in self.sql:
             if self.empty_forecast_history:
                 return [
@@ -317,6 +351,18 @@ class AnalyticsEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result["sources"][1]["offer_acceptance_rate"])
         self.assertIn("coalesce(nullif(btrim(a.source), ''), 'Unknown')", self.cursor.queries[0][0])
 
+
+    async def test_forecast_accuracy_is_tenant_scoped_and_returns_backtest(self):
+        result = await analytics_router.analytics_forecast_accuracy(
+            organization_id=ORG,
+            recruiter_id=RECRUITER,
+            user_id=UUID("22222222-2222-4222-8222-222222222222"),
+        )
+        self.assertEqual(result["validation"]["status"], "available")
+        self.assertEqual(result["validation"]["evaluation_months"], 12)
+        self.assertIn("interval '18 months'", self.cursor.queries[0][0])
+        self.assertEqual(self.cursor.queries[0][1], [ORG, RECRUITER, RECRUITER])
+        self.membership.assert_called_once()
 
     async def test_forecast_uses_six_month_baseline_and_exposes_pending_demand(self):
         result = await analytics_router.analytics_forecast(
