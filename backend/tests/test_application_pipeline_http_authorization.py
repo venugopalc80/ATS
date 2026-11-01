@@ -118,5 +118,68 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
         update_stage.assert_not_awaited()
 
 
+    def test_bulk_transition_reports_success_and_per_application_failures(self):
+        first_id = UUID("77777777-7777-4777-8777-777777777771")
+        second_id = UUID("77777777-7777-4777-8777-777777777772")
+        other_tenant_id = UUID("77777777-7777-4777-8777-777777777773")
+        first_row = application_row()
+        first_row["id"] = first_id
+        second_row = application_row()
+        second_row["id"] = second_id
+        other_row = application_row(OTHER_ORG)
+        other_row["id"] = other_tenant_id
+        updated_row = dict(first_row)
+        updated_row["status"] = "screening"
+
+        with patch.object(
+            applications.service, "get_application", new_callable=AsyncMock,
+            side_effect=[first_row, second_row, other_row],
+        ):
+            with patch(
+                "app.routers.applications.assert_org_member",
+                side_effect=[None, None, HTTPException(status_code=403, detail="Not an organisation member")],
+            ):
+                with patch.object(
+                    applications.service, "transition_application", new_callable=AsyncMock,
+                    side_effect=[updated_row, ValueError("Invalid application stage transition")],
+                ) as transition:
+                    response = self.client.post(
+                        "/api/applications/bulk-transition",
+                        json={
+                            "application_ids": [str(first_id), str(second_id), str(other_tenant_id)],
+                            "status": "screening",
+                            "reason": "Batch CV review",
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual((payload["requested"], payload["succeeded"], payload["failed"]), (3, 1, 2))
+        self.assertEqual(payload["results"][0]["status"], "screening")
+        self.assertTrue(payload["results"][0]["success"])
+        self.assertEqual(payload["results"][1]["error"], "Invalid application stage transition")
+        self.assertEqual(payload["results"][2]["error"], "Application not found")
+        self.assertEqual(transition.await_count, 2)
+
+    def test_bulk_transition_rejects_duplicate_application_ids(self):
+        response = self.client.post(
+            "/api/applications/bulk-transition",
+            json={
+                "application_ids": [str(APPLICATION), str(APPLICATION)],
+                "status": "screening",
+                "reason": "Batch CV review",
+            },
+        )
+        self.assertEqual(response.status_code, 422)
+
+    def test_bulk_transition_rejects_more_than_one_hundred_applications(self):
+        ids = [str(UUID(int=index + 1)) for index in range(101)]
+        response = self.client.post(
+            "/api/applications/bulk-transition",
+            json={"application_ids": ids, "status": "screening", "reason": "Batch CV review"},
+        )
+        self.assertEqual(response.status_code, 422)
+
+
 if __name__ == "__main__":
     unittest.main()
