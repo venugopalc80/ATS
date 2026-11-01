@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { API_BASE, apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
+import SavedReports, { type SavedReport, type SavedReportType } from "@/components/SavedReports";
 
 type Metric = { value: number | null; status?: string; numerator?: number; denominator?: number; complete_records?: number; complete_requisitions?: number; definition?: string };
 type Kpis = { metrics: Record<string, Metric & { median_days_open?: number | null; open_more_than_30_days?: number; missing_opened_at?: number }>; filters: { date_from: string | null; date_to: string | null } };
@@ -59,6 +60,12 @@ export default function AnalyticsPage() {
   const [reportType, setReportType] = useState("kpis");
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState("");
+
+  function applySavedReport(report: SavedReport) {
+    setReportType(report.report_type);
+    setDateFrom(report.filters?.date_from || "");
+    setDateTo(report.filters?.date_to || "");
+  }
 
   const load = useCallback(async () => {
     const organizationId = getActiveOrganizationId();
@@ -214,6 +221,7 @@ export default function AnalyticsPage() {
               <button className="btn primary" onClick={() => void load()} disabled={loading}>Apply filters</button>
             </div>
           </section>
+          <SavedReports reportType={reportType as SavedReportType} dateFrom={dateFrom} dateTo={dateTo} onApply={applySavedReport} />
           {error && <div className="dashboard-error" role="alert"><div><strong>Analytics unavailable</strong><p>{error}</p></div><button className="btn" onClick={() => void load()}>Try again</button></div>}
           {loading && !kpis ? <div className="analytics-kpi-grid">{Array.from({ length: 7 }).map((_, index) => <div className="card" key={index}><span className="dashboard-skeleton" /><div className="dashboard-loading-lines"><span /><span /></div></div>)}</div> : null}
           {kpis && <section className="analytics-kpi-grid" aria-label="Recruitment KPIs">

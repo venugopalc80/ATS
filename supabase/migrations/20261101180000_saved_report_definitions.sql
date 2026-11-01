@@ -5,7 +5,7 @@ create table if not exists public.saved_report_definitions (
     name text not null check (length(btrim(name)) between 1 and 100),
     description text check (description is null or length(description) <= 500),
     report_type text not null check (
-        report_type in ('kpis', 'funnel', 'workload', 'sources', 'forecast', 'campaign-roi')
+        report_type in ('kpis', 'funnel', 'workload', 'sources', 'forecast', 'campaign_roi')
     ),
     filters jsonb not null default '{}'::jsonb check (jsonb_typeof(filters) = 'object'),
     is_shared boolean not null default false,
@@ -27,7 +27,7 @@ create policy saved_report_definitions_select
     for select to authenticated
     using (
         public.is_org_member(organization_id)
-        and (is_shared = true or created_by = auth.uid())
+        and (is_shared = true or created_by = auth.uid() or public.is_org_admin(organization_id))
     );
 
 drop policy if exists saved_report_definitions_insert on public.saved_report_definitions;

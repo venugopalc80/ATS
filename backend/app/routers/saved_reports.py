@@ -11,7 +11,7 @@ from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_conn
 
 router = APIRouter(prefix="/api/analytics/reports", tags=["saved analytics reports"])
 
-ReportType = Literal["kpis", "funnel", "workload", "sources", "forecast", "campaign-roi"]
+ReportType = Literal["kpis", "funnel", "workload", "sources", "forecast", "campaign_roi"]
 
 
 class ReportFilters(BaseModel):
@@ -93,6 +93,7 @@ async def list_saved_reports(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, organization_id)
+    is_admin = get_org_role(user_id, organization_id) in {"owner", "admin"}
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -100,9 +101,9 @@ async def list_saved_reports(
                     """select id, organization_id, created_by, name, description,
                               report_type, filters, is_shared, created_at, updated_at
                        from public.saved_report_definitions
-                       where organization_id=%s and (is_shared=true or created_by=%s)
+                       where organization_id=%s and (is_shared=true or created_by=%s or %s=true)
                        order by updated_at desc, created_at desc""",
-                    [organization_id, user_id],
+                    [organization_id, user_id, is_admin],
                 )
                 return [_public_report(row) for row in cursor.fetchall()]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -146,6 +147,7 @@ async def get_saved_report(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, organization_id)
+    is_admin = get_org_role(user_id, organization_id) in {"owner", "admin"}
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -154,8 +156,8 @@ async def get_saved_report(
                               report_type, filters, is_shared, created_at, updated_at
                        from public.saved_report_definitions
                        where id=%s and organization_id=%s
-                         and (is_shared=true or created_by=%s)""",
-                    [report_id, organization_id, user_id],
+                         and (is_shared=true or created_by=%s or %s=true)""",
+                    [report_id, organization_id, user_id, is_admin],
                 )
                 row = cursor.fetchone()
                 if row is None:
@@ -175,7 +177,11 @@ async def update_saved_report(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, organization_id)
+    is_admin = get_org_role(user_id, organization_id) in {"owner", "admin"}
     changes = payload.model_dump(exclude_unset=True)
+    for required_field in ("name", "report_type", "filters", "is_shared"):
+        if required_field in changes and changes[required_field] is None:
+            raise HTTPException(status_code=422, detail=f"{required_field} cannot be null")
     if not changes:
         raise HTTPException(status_code=422, detail="Provide at least one field to update")
     try:
@@ -185,8 +191,8 @@ async def update_saved_report(
                     """select id, created_by, name, description, report_type, filters, is_shared
                        from public.saved_report_definitions
                        where id=%s and organization_id=%s
-                         and (is_shared=true or created_by=%s)""",
-                    [report_id, organization_id, user_id],
+                         and (is_shared=true or created_by=%s or %s=true)""",
+                    [report_id, organization_id, user_id, is_admin],
                 )
                 current = cursor.fetchone()
                 if current is None:
@@ -194,8 +200,7 @@ async def update_saved_report(
 
                 is_owner = current["created_by"] == user_id
                 if not is_owner:
-                    role = get_org_role(user_id, organization_id)
-                    if role not in {"owner", "admin"}:
+                    if not is_admin:
                         raise HTTPException(status_code=403, detail="Only the report owner or an organisation admin can edit this report")
                 if "is_shared" in changes:
                     assert_org_admin(user_id, organization_id)
@@ -234,21 +239,21 @@ async def delete_saved_report(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, organization_id)
+    is_admin = get_org_role(user_id, organization_id) in {"owner", "admin"}
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """select created_by from public.saved_report_definitions
                        where id=%s and organization_id=%s
-                         and (is_shared=true or created_by=%s)""",
-                    [report_id, organization_id, user_id],
+                         and (is_shared=true or created_by=%s or %s=true)""",
+                    [report_id, organization_id, user_id, is_admin],
                 )
                 current = cursor.fetchone()
                 if current is None:
                     raise HTTPException(status_code=404, detail="Saved report not found")
                 if current["created_by"] != user_id:
-                    role = get_org_role(user_id, organization_id)
-                    if role not in {"owner", "admin"}:
+                    if not is_admin:
                         raise HTTPException(status_code=403, detail="Only the report owner or an organisation admin can delete this report")
                 cursor.execute(
                     "delete from public.saved_report_definitions where id=%s and organization_id=%s",

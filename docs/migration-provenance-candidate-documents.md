@@ -70,3 +70,13 @@ A new forward-only migration, `supabase/migrations/20261101180000_saved_report_d
 The migration uses the existing `is_org_member` and `is_org_admin` helpers. Private reports are visible to their creator; shared reports are visible to organisation members. Only organisation admins can enable or change sharing. The backend independently checks membership and report ownership/admin rights.
 
 **Important:** this migration is committed to the feature branch only. It has not been executed against staging. Before applying it, reconcile the existing migration history and validate the migration against a clean isolated database and a reviewed staging schema snapshot.
+
+
+## Saved report implementation notes (2026-11-01)
+
+- Added tenant-scoped saved report CRUD API and a dedicated forward-only migration for `saved_report_definitions`.
+- Supported report types match the CSV export contract, including `campaign_roi`.
+- Private reports are visible to their creator. Organisation admins can view/manage tenant reports; only admins can change sharing state. Organisation members can see shared reports.
+- Saved filter JSON is a typed allowlist of date range, job and recruiter IDs. Unsupported date/job filters for workload and forecast are rejected at save/update time.
+- Added a Saved Reports panel to Analytics to save a private report setup, apply a saved setup and delete a saved report.
+- The migration remains unexecuted in staging pending migration provenance reconciliation and isolated-database validation.

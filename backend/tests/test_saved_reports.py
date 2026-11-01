@@ -79,7 +79,7 @@ class SavedReportTests(unittest.IsolatedAsyncioTestCase):
         self.connection_patch = patch.object(reports, "get_connection", fake_connection)
         self.member_patch = patch.object(reports, "assert_org_member")
         self.admin_patch = patch.object(reports, "assert_org_admin")
-        self.role_patch = patch.object(reports, "get_org_role", return_value="admin")
+        self.role_patch = patch.object(reports, "get_org_role", return_value="recruiter")
         self.connection_patch.start()
         self.member = self.member_patch.start()
         self.admin = self.admin_patch.start()
@@ -95,9 +95,16 @@ class SavedReportTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["id"], str(REPORT))
         sql, params = self.cursor.queries[0]
-        self.assertIn("is_shared=true or created_by=%s", sql)
-        self.assertEqual(params, [ORG, OWNER])
+        self.assertIn("is_shared=true or created_by=%s or %s=true", sql)
+        self.assertEqual(params, [ORG, OWNER, False])
         self.member.assert_called_once_with(OWNER, ORG)
+
+    async def test_admin_list_includes_private_reports_from_other_members(self):
+        self.cursor.many = [report_row()]
+        self.role.return_value = "admin"
+        result = await reports.list_saved_reports(ORG, OTHER)
+        self.assertEqual(len(result), 1)
+        self.assertEqual(self.cursor.queries[0][1], [ORG, OTHER, True])
 
     async def test_non_member_is_rejected_before_database_query(self):
         self.member.side_effect = HTTPException(status_code=403, detail="Not a member")
@@ -151,6 +158,27 @@ class SavedReportTests(unittest.IsolatedAsyncioTestCase):
             await reports.create_saved_report(ORG, payload, OWNER)
         self.assertEqual(context.exception.status_code, 422)
 
+    async def test_campaign_roi_report_type_uses_export_contract(self):
+        self.cursor.one = report_row(report_type="campaign_roi")
+        payload = reports.SavedReportCreate(name="Campaign", report_type="campaign_roi")
+        result = await reports.create_saved_report(ORG, payload, OWNER)
+        self.assertEqual(result["report_type"], "campaign_roi")
+
+    async def test_null_required_patch_fields_are_rejected(self):
+        payload = reports.SavedReportUpdate(report_type=None)
+        with self.assertRaises(HTTPException) as context:
+            await reports.update_saved_report(REPORT, ORG, payload, OWNER)
+        self.assertEqual(context.exception.status_code, 422)
+        self.assertEqual(self.cursor.queries, [])
+
+    async def test_admin_can_update_another_users_private_report(self):
+        self.cursor.one = report_row()
+        self.role.return_value = "admin"
+        payload = reports.SavedReportUpdate(name="Admin edit")
+        await reports.update_saved_report(REPORT, ORG, payload, OTHER)
+        self.assertEqual(len(self.cursor.queries), 2)
+        self.assertEqual(self.cursor.queries[0][1], [REPORT, ORG, OTHER, True])
+
     async def test_reversed_date_range_is_rejected(self):
         payload = reports.SavedReportCreate(
             name="Funnel",
@@ -166,7 +194,7 @@ class SavedReportTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(HTTPException) as context:
             await reports.get_saved_report(REPORT, ORG, OTHER)
         self.assertEqual(context.exception.status_code, 404)
-        self.assertIn("is_shared=true or created_by=%s", self.cursor.queries[0][0])
+        self.assertIn("is_shared=true or created_by=%s or %s=true", self.cursor.queries[0][0])
 
     async def test_owner_can_update_private_report(self):
         self.cursor.one = report_row()
