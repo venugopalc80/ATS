@@ -40,6 +40,8 @@ values
  ('offer.salary.manage','offers','Create and update salary and compensation fields'),
  ('placement.read','placements','View placement records'),
  ('placement.manage','placements','Create and update placement records'),
+ ('placement.fee.read','placements','View placement fee and commission fields'),
+ ('placement.fee.manage','placements','Create and update placement fee and commission fields'),
  ('job.read','jobs','View job records'),
  ('job.manage','jobs','Create and update job records'),
  ('job.delete','jobs','Delete job records'),
