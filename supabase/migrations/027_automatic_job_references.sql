@@ -53,18 +53,13 @@ begin
     if new.job_code is null or btrim(new.job_code) = '' then
       new.job_code := public.next_job_reference(new.organization_id);
     end if;
-  elsif old.job_code is not null and new.job_code is distinct from old.job_code then
+  elsif new.job_code is distinct from old.job_code then
     raise exception 'Job reference numbers are immutable'
       using errcode = '23514';
   end if;
   return new;
 end;
 $$;
-
-drop trigger if exists jobs_assign_reference on public.jobs;
-create trigger jobs_assign_reference
-before insert or update of job_code on public.jobs
-for each row execute function public.assign_job_reference();
 
 -- Backfill only missing references; do not alter any existing client/system code.
 update public.jobs
@@ -73,6 +68,13 @@ update public.jobs
 
 -- Ensure the next generated number is above any already-issued reference using
 -- this organisation's configured prefix and the standard numeric suffix.
+-- Install the trigger after backfilling so even a previously-null reference
+-- cannot subsequently be assigned or changed through direct table updates.
+drop trigger if exists jobs_assign_reference on public.jobs;
+create trigger jobs_assign_reference
+before insert or update of job_code on public.jobs
+for each row execute function public.assign_job_reference();
+
 update public.organizations o
    set job_reference_next_number = greatest(
      o.job_reference_next_number,
