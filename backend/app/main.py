@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers.jobs import router as jobs_router
 from app.routers.candidates import router as candidates_router
 from app.routers.applications import router as applications_router
+from app.routers.application_assignments import router as application_assignments_router
 from app.routers.me import router as me_router
 from app.routers.clients import router as clients_router
 from app.routers.dashboard import router as dashboard_router
@@ -35,6 +36,7 @@ app.add_middleware(
 app.include_router(jobs_router)
 app.include_router(candidates_router)
 app.include_router(applications_router)
+app.include_router(application_assignments_router)
 app.include_router(me_router)
 app.include_router(clients_router)
 app.include_router(dashboard_router)
