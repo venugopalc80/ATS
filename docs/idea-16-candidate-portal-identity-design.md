@@ -1,6 +1,6 @@
 # Idea 16 — Candidate Portal identity and API design
 
-Status: design baseline for implementation review  
+Status: initial backend and frontend implementation on feature branch; not production-ready  
 Branch: `feat/idea-16-candidate-portal-foundation`  
 Scope: identity ownership and candidate-safe API boundary only. This document does not authorise a database migration, deployment, or production change.
 
@@ -57,8 +57,8 @@ Initial read-only endpoints:
 - `GET /me`: allowlisted profile fields only.
 - `GET /applications`: only applications belonging to the mapped candidate; return a candidate-safe status and limited job details.
 - `GET /applications/{application_id}`: verify both application ID and mapped candidate ID in the same query.
-- `GET /documents`: only non-deleted documents belonging to the mapped candidate.
-- `POST /documents/{document_id}/download`: verify ownership in the same query before creating a short-lived signed URL.
+- `GET /documents`: implemented; returns only non-deleted document metadata belonging to the mapped candidate, excluding storage coordinates and file hashes.
+- `POST /documents/{document_id}/download`: implemented; verifies document ID, organisation ID, candidate ID and non-deleted state before creating a 60-second signed URL.
 - `GET /communications`: only candidate-visible messages for the mapped candidate; never return internal notes, recruiter-only events, delivery provider metadata or other recipients.
 
 Do not return recruiter notes, internal comments, internal message visibility, AI ranking rationale, recruiter-only scores, private interview feedback, raw CV extraction text, storage paths, provider metadata, or other candidates' data.
@@ -107,13 +107,13 @@ After the read-only boundary is tested:
 
 ## 9. Delivery sequence
 
-1. Review this identity model against current Supabase Auth configuration and candidate data constraints.
-2. Add pure unit tests for email normalisation, verified-user requirements, duplicate-match handling and safe response allowlists.
-3. Implement the mapping migration and backend resolver on this feature branch only.
-4. Implement read-only candidate APIs and API-level ownership tests.
-5. Implement the portal UI using only the candidate-safe APIs.
-6. Run full backend tests, frontend typecheck/build, tenant-isolation tests and security review.
-7. Reconcile staging migration history before any staging migration. Production remains untouched until a separately approved release.
+1. Review this identity model against current Supabase Auth configuration and candidate data constraints. Initial source review completed; further production configuration review remains.
+2. Add pure unit tests for email normalisation, verified-user requirements, duplicate-match handling and safe response allowlists. Initial verified-email and document allowlist tests are implemented.
+3. Implement the mapping migration and backend resolver on this feature branch only. Implemented in the branch; migration not applied.
+4. Implement read-only candidate APIs and API-level ownership tests. Profile, application and document APIs are implemented; deeper API/database tenant-isolation tests remain.
+5. Implement the portal UI using only the candidate-safe APIs. Initial magic-link sign-in, application tracker and document download UI are implemented.
+6. Run full backend tests, frontend typecheck/build, tenant-isolation tests and security review. Backend tests and frontend typecheck passed on the latest checked workflow; production build is still running.
+7. Reconcile staging migration history before any staging migration. Not yet resolved; no staging or production migration has been applied. Production remains untouched until a separately approved release.
 
 ## 10. Explicit non-goals for this increment
 
@@ -122,3 +122,13 @@ After the read-only boundary is tested:
 - No outbound email/SMS provider integration.
 - No direct browser database writes.
 - No changes to recruiter permissions or existing production data.
+
+
+## 11. Current implementation status and known deferrals
+
+- Candidate portal route: `/candidate-portal`; the public careers listing and job detail page link to it with the organisation reference.
+- Authentication: Supabase email magic link; the candidate portal route is excluded from recruiter organisation-membership gating and performs its own session checks.
+- Linking: requires a Supabase-confirmed email and exactly one candidate record with at least one application in the selected organisation. Ambiguous or missing matches do not disclose candidate existence.
+- Candidate communications are deferred until the Idea 14 communication schema is integrated. The separate Idea 14 PR remains unmerged, and staging migration history is not reconciled.
+- Candidate profile editing, application withdrawal, uploads, account unlink/recovery administration, rate limiting and formal privacy request workflows are not implemented in this increment.
+- This branch is a review preview only. Do not merge or apply its migration until the migration ordering, staging schema and security review are resolved.
