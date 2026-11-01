@@ -68,10 +68,13 @@ const terminalStages = [
   { key: "withdrawn", label: "Withdrawn" },
 ];
 
-function localDate(daysAgo = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+function organisationDate(daysAgo = 0, timeZone = "UTC") {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value ?? 0);
+  const date = new Date(Date.UTC(part("year"), part("month") - 1, part("day") - daysAgo));
+  return [date.getUTCFullYear(), String(date.getUTCMonth() + 1).padStart(2, "0"), String(date.getUTCDate()).padStart(2, "0")].join("-");
 }
 
 function formatDate(value: string | null | undefined, timeZone?: string) {
@@ -90,8 +93,9 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [dateFrom, setDateFrom] = useState(localDate(30));
-  const [dateTo, setDateTo] = useState(localDate());
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [dateRangeInitialised, setDateRangeInitialised] = useState(false);
   const [search, setSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -117,14 +121,20 @@ export default function Dashboard() {
         if (response.status === 503) throw new Error("Dashboard data is temporarily unavailable. Please retry.");
         throw new Error("We couldn't load the dashboard (HTTP " + response.status + ").");
       }
-      setData(await response.json());
+      const dashboardData = await response.json() as DashboardData;
+      setData(dashboardData);
+      if (!dateRangeInitialised) {
+        setDateFrom(organisationDate(30, dashboardData.timezone));
+        setDateTo(organisationDate(0, dashboardData.timezone));
+        setDateRangeInitialised(true);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load dashboard data.");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, dateRangeInitialised]);
 
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
@@ -209,7 +219,7 @@ export default function Dashboard() {
           <div className="dashboard-filters">
             <label>From <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} /></label>
             <label>To <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} /></label>
-            <button className="btn" onClick={() => { setDateFrom(localDate(30)); setDateTo(localDate()); }}>Last 30 days</button>
+            <button className="btn" onClick={() => { setDateFrom(organisationDate(30, data?.timezone)); setDateTo(organisationDate(0, data?.timezone)); }}>Last 30 days</button>
             <button className="btn" onClick={() => void loadDashboard()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
           </div>
 
