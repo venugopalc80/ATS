@@ -52,19 +52,25 @@ export default function CollaborationPage() {
     return response.status === 204 ? null : response.json();
   }, []);
 
+  const refreshSequence = useRef(0);
   const refresh = useCallback(async () => {
     if (!organizationId) { setLoading(false); setError("Choose an organisation before opening collaboration."); return; }
+    const sequence = ++refreshSequence.current;
     try {
-      setError("");
       const [chatData, contactData] = await Promise.all([
         request("/api/collaboration/conversations?organization_id=" + encodeURIComponent(organizationId)),
         request("/api/collaboration/contacts?organization_id=" + encodeURIComponent(organizationId)),
       ]);
+      if (sequence !== refreshSequence.current) return;
+      setError("");
       setConversations(chatData);
       setContacts(contactData);
       setActiveId((current) => current && chatData.some((c: Conversation) => c.id === current) ? current : (chatData[0]?.id ?? ""));
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not load collaboration."); }
-    finally { setLoading(false); }
+    } catch (e) {
+      if (sequence === refreshSequence.current) setError(e instanceof Error ? e.message : "Could not load collaboration.");
+    } finally {
+      if (sequence === refreshSequence.current) setLoading(false);
+    }
   }, [organizationId, request]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -136,20 +142,32 @@ export default function CollaborationPage() {
   }, [activeId, loadMessages]);
 
   // Poll the active thread until server-side realtime delivery is introduced.
+  const pollInFlight = useRef(false);
   useEffect(() => {
     if (!activeId || !organizationId) return;
-    const timer = window.setInterval(() => {
-      void loadMessages(activeId);
-      void request("/api/collaboration/conversations?organization_id=" + encodeURIComponent(organizationId))
-        .then((data: Conversation[]) => {
-          setConversations(data);
-          setActiveId((current) =>
-            current && data.some((conversation) => conversation.id === current)
-              ? current
-              : (data[0]?.id ?? "")
-          );
-        })
-        .catch(() => undefined);
+    const conversationId = activeId;
+    const timer = window.setInterval(async () => {
+      if (pollInFlight.current) return;
+      pollInFlight.current = true;
+      try {
+        await Promise.all([
+          loadMessages(conversationId),
+          request("/api/collaboration/conversations?organization_id=" + encodeURIComponent(organizationId))
+            .then((data: Conversation[]) => {
+              if (activeConversationRef.current !== conversationId) return;
+              setConversations(data);
+              setActiveId((current) =>
+                current && data.some((conversation) => conversation.id === current)
+                  ? current
+                  : (data[0]?.id ?? "")
+              );
+            }),
+        ]);
+      } catch {
+        // A transient polling failure should not replace the current thread with stale data.
+      } finally {
+        pollInFlight.current = false;
+      }
     }, 8000);
     return () => window.clearInterval(timer);
   }, [activeId, organizationId, loadMessages, request]);
