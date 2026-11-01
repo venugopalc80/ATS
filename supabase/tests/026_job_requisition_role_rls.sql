@@ -1,4 +1,4 @@
--- Disposable PostgreSQL integration test for migrations 024-026.
+-- Disposable PostgreSQL integration test for migrations 024-028.
 -- This harness creates a minimal Supabase-compatible auth/RLS environment.
 \set ON_ERROR_STOP on
 
@@ -14,7 +14,7 @@ as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$
 grant usage on schema auth to authenticated, anon;
 grant execute on function auth.uid() to authenticated, anon;
 
-create table public.organizations (id uuid primary key, updated_at timestamptz not null default now());
+create table public.organizations (id uuid primary key, name text not null, updated_at timestamptz not null default now());
 create table public.profiles (id uuid primary key);
 create table public.organization_members (
  organization_id uuid not null references public.organizations(id),
@@ -42,9 +42,9 @@ grant usage on schema public to authenticated, anon;
 grant select on public.organization_members, public.clients to authenticated;
 grant execute on function public.is_org_member(uuid) to authenticated;
 
-insert into public.organizations values
- ('10000000-0000-0000-0000-000000000001'),
- ('10000000-0000-0000-0000-000000000002');
+insert into public.organizations (id, name) values
+ ('10000000-0000-0000-0000-000000000001', 'AQERITH Recruitment'),
+ ('10000000-0000-0000-0000-000000000002', 'Other Agency');
 insert into public.profiles values
  ('20000000-0000-0000-0000-000000000001'), -- recruiter
  ('20000000-0000-0000-0000-000000000002'), -- hiring manager
@@ -69,6 +69,7 @@ insert into public.clients values
 \i supabase/migrations/025_job_requisition_fk_indexes.sql
 \i supabase/migrations/026_job_requisition_role_rls.sql
 \i supabase/migrations/027_automatic_job_references.sql
+\i supabase/migrations/028_organisation_job_reference_settings.sql
 
 -- Seed rows as the database owner; tests below run as authenticated.
 insert into public.job_requisitions
@@ -212,10 +213,10 @@ begin
   select job_code into first_code from public.jobs where title='First job';
   select job_code into second_code from public.jobs where title='Second job';
   select job_code into other_code from public.jobs where title='Other tenant job';
-  if first_code <> 'JOB-001' or second_code <> 'JOB-002' then
+  if first_code <> 'AQE-001' or second_code <> 'AQE-002' then
     raise exception 'unexpected sequential job references: %, %', first_code, second_code;
   end if;
-  if other_code <> 'JOB-001' then
+  if other_code <> 'OTH-001' then
     raise exception 'job references should be scoped to each organisation: %', other_code;
   end if;
   begin
@@ -226,4 +227,4 @@ begin
 end;
 $job_reference_test$;
 
-select 'migration 024-027 RLS and job-reference checks passed' as result;
+select 'migration 024-028 RLS and job-reference checks passed' as result;
