@@ -24,9 +24,9 @@ The source SQL was recovered from earlier, still-unmerged feature pull requests.
 | Data dependency | Candidate source | Status at review | Recovered migration files |
 |---|---|---|---|
 | Recruiter tasks | [PR #58](https://github.com/venugopalc80/ATS/pull/58) | Open, unmerged | `017_recruiter_tasks.sql`, `018_recruiter_tasks_policy_hardening.sql`, `019_recruiter_tasks_indexes.sql`, `020_recruiter_tasks_grant_hardening.sql`, `021_recruiter_tasks_minimum_grants.sql`, `022_recruiter_task_candidate_delete.sql`, `023_recruiter_tasks_column_grants.sql`, `024_recruiter_tasks_tenant_integrity.sql` |
-| Job requisitions | [PR #59](https://github.com/venugopalc80/ATS/pull/59) | Open, unmerged | `024_job_requisitions.sql`, `025_job_requisition_fk_indexes.sql`, `026_job_requisition_role_rls.sql`, `027_automatic_job_references.sql` |
+| Job requisitions | [PR #59](https://github.com/venugopalc80/ATS/pull/59) | Open, unmerged | `024_job_requisitions.sql`, `025_job_requisition_fk_indexes.sql`, `026_job_requisition_role_rls.sql`, `027_automatic_job_references.sql`, `028_organisation_job_reference_settings.sql` |
 | Application stage history | [PR #69](https://github.com/venugopalc80/ATS/pull/69) | Open, unmerged | `20261026150000_application_stage_history.sql`; follow-up stage configuration `20261101173800_application_stage_config.sql` |
-| Recruitment campaigns and channels | [PR #72](https://github.com/venugopalc80/ATS/pull/72) | Draft/open, unmerged | `20261022130000_search_sourcing_features.sql`, `20261022133000_sourcing_link_integrity.sql`, `20261022142000_campaign_channel_spend_currency.sql`, `20261022144000_sourcing_api_only_access.sql` |
+| Recruitment campaigns and channels | [PR #72](https://github.com/venugopalc80/ATS/pull/72) | Draft/open, unmerged | `20261022130000_search_sourcing_features.sql`, `20261022133000_sourcing_link_integrity.sql`, `20261022140000_search_indexes.sql`, `20261022141000_sourcing_browser_grant_hardening.sql`, `20261022142000_campaign_channel_spend_currency.sql`, `20261022143000_talent_pool_processing_basis.sql`, `20261022144000_sourcing_api_only_access.sql` |
 
 These are recovered candidate source files, not confirmation that each file was applied to staging or production. Review the complete migration sequences, including follow-ups, before deciding which SQL becomes canonical.
 
@@ -78,7 +78,14 @@ The six tables exist in staging and have RLS enabled. The catalogue inspection r
 
 ## Current migration ledger
 
-A read-only query of `supabase_migrations.schema_migrations` returned timestamped version identifiers. The ledger contains identifiers only; it does not preserve the SQL text needed to prove which historical definitions produced the current objects. The recovered candidate migrations above do not all have matching version identifiers in the inspected ledger.
+A read-only query of `supabase_migrations.schema_migrations` returned **70 applied versions**, from `20261013110516` through `20261101171326`. The ledger contains identifiers only; it does not preserve the SQL text needed to prove which historical definitions produced the current objects. A targeted name comparison established the following:
+
+- PR #58: migrations `017` through `023` have matching ledger entries; `024_recruiter_tasks_tenant_integrity.sql` does not.
+- PR #59: `job_requisitions` and `job_requisition_fk_indexes` have matching ledger entries; role-aware RLS (`026`), automatic job references (`027`) and organisation job-reference settings (`028`) do not.
+- PR #69: neither `20261026150000_application_stage_history.sql` nor `20261101173800_application_stage_config.sql` has a matching ledger entry. The latter is newer than the current ledger head.
+- PR #72: all seven sourcing/campaign migration concepts have matching ledger entries by migration name: search/sourcing features, sourcing link integrity, search indexes, browser-grant hardening, campaign spend currency, talent-pool processing basis and API-only access. Their source filenames use different timestamps from the staging ledger versions, so the matching name is evidence of an applied migration record, not proof that the source SQL bytes are identical.
+
+The ledger therefore narrows the missing chain to specific follow-ups, but still cannot reconstruct historical SQL. The recovered candidate migrations above are not all represented in the inspected ledger, and a clean database build remains unproven.
 
 Do not insert or edit migration-ledger rows manually. Obtain the authoritative migration history or a reviewed schema dump for every target environment, then reconcile it with the repository.
 
