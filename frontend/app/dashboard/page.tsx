@@ -124,7 +124,7 @@ export default function Dashboard() {
       const dashboardData = await response.json() as DashboardData;
       setData(dashboardData);
       if (!dateRangeInitialised) {
-        setDateFrom(organisationDate(30, dashboardData.timezone));
+        setDateFrom(organisationDate(29, dashboardData.timezone));
         setDateTo(organisationDate(0, dashboardData.timezone));
         setDateRangeInitialised(true);
       }
@@ -219,7 +219,7 @@ export default function Dashboard() {
           <div className="dashboard-filters">
             <label>From <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} /></label>
             <label>To <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} /></label>
-            <button className="btn" onClick={() => { setDateFrom(organisationDate(30, data?.timezone)); setDateTo(organisationDate(0, data?.timezone)); }}>Last 30 days</button>
+            <button className="btn" onClick={() => { setDateFrom(organisationDate(29, data?.timezone)); setDateTo(organisationDate(0, data?.timezone)); }}>Last 30 days</button>
             <button className="btn" onClick={() => void loadDashboard()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
           </div>
 
