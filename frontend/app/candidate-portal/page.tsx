@@ -37,7 +37,11 @@ type CandidateDocument = {
 };
 
 export default function CandidatePortalPage() {
-  const [organizationId, setOrganizationId] = useState(process.env.NEXT_PUBLIC_ORGANIZATION_ID || "");
+  const [organizationId] = useState(() => {
+    if (typeof window === "undefined") return process.env.NEXT_PUBLIC_ORGANIZATION_ID || "";
+    return new URLSearchParams(window.location.search).get("organization_id")
+      || process.env.NEXT_PUBLIC_ORGANIZATION_ID || "";
+  });
   const [email, setEmail] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -93,10 +97,6 @@ export default function CandidatePortalPage() {
     setNotice("");
   }, [organizationId]);
 
-  useEffect(() => {
-    const requestedOrganization = new URLSearchParams(window.location.search).get("organization_id");
-    if (requestedOrganization) setOrganizationId(requestedOrganization);
-  }, []);
 
   useEffect(() => {
     let active = true;
