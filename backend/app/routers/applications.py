@@ -139,7 +139,7 @@ async def bulk_transition_applications(
 ) -> ApplicationBulkTransitionOut:
     """Transition up to 100 applications independently and report partial failures."""
     results = []
-    for application_id in payload.application_ids:
+    for index, application_id in enumerate(payload.application_ids):
         try:
             existing = await service.get_application(application_id)
             # Use the same not-found response for absent and cross-tenant records.
@@ -180,8 +180,24 @@ async def bulk_transition_applications(
                 "status": None,
                 "error": str(exc),
             })
-        except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
-            raise db_unavailable(exc) from exc
+        except (DatabaseConfigurationError, DatabaseConnectionError):
+            # Earlier items may already have committed. Preserve those outcomes and
+            # explicitly mark the current and remaining items as not processed
+            # instead of returning a 503 that hides partial completion.
+            results.append({
+                "application_id": application_id,
+                "success": False,
+                "status": None,
+                "error": "Database unavailable; this application was not processed.",
+            })
+            for pending_id in payload.application_ids[index + 1:]:
+                results.append({
+                    "application_id": pending_id,
+                    "success": False,
+                    "status": None,
+                    "error": "Not processed because the database became unavailable.",
+                })
+            break
 
     succeeded = sum(1 for item in results if item["success"])
     return ApplicationBulkTransitionOut(
