@@ -203,7 +203,7 @@ values ('10000000-0000-0000-0000-000000000001', 'First job'),
        ('10000000-0000-0000-0000-000000000001', 'Second job'),
        ('10000000-0000-0000-0000-000000000002', 'Other tenant job');
 
-do $
+do $job_reference_test$
 declare
   first_code text;
   second_code text;
@@ -224,6 +224,6 @@ begin
   exception when check_violation then null;
   end;
 end;
-$;
+$job_reference_test$;
 
 select 'migration 024-027 RLS and job-reference checks passed' as result;
