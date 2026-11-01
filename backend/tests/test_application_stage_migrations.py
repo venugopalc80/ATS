@@ -17,6 +17,9 @@ import psycopg
 ROOT = Path(__file__).resolve().parents[2]
 MIGRATIONS = [
     ROOT / "supabase" / "migrations" / "20261026150000_application_stage_history.sql",
+    ROOT / "supabase" / "migrations" / "20261101120000_application_recruiter_assignment.sql",
+    ROOT / "supabase" / "migrations" / "20261101130000_application_sla_policies.sql",
+    ROOT / "supabase" / "migrations" / "20261101140000_application_sla_deadlines.sql",
     ROOT / "supabase" / "migrations" / "20261101173800_application_stage_config.sql",
 ]
 ACTOR = "22222222-2222-4222-8222-222222222222"
@@ -263,7 +266,11 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
             self.assertEqual(cursor.fetchone(), ("new", "screening", ACTOR_UUID, "CV reviewed"))
 
             # Browser roles have no direct table privileges; RLS is enabled as defence in depth.
-            for table in ("application_stage_history", "application_stage_config"):
+            for table in (
+                "application_stage_history", "application_stage_config",
+                "application_assignments", "application_assignment_history",
+                "application_sla_policies", "application_sla_deadlines",
+            ):
                 cursor.execute(
                     "select has_table_privilege('anon', %s, 'select'), "
                     "has_table_privilege('authenticated', %s, 'select'), "
@@ -312,6 +319,44 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 cursor.fetchone(),
                 ("screening", "interview", ACTOR_UUID, "PostgreSQL service integration test"),
             )
+            cursor.execute(
+                "insert into public.application_sla_policies (organization_id, updated_by) "
+                "values (%s, %s)",
+                (ORG, ACTOR),
+            )
+        self.connection.commit()
+
+        from app.services.application_sla_service import ApplicationSLADueService
+
+        previous_database_url = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
+        try:
+            due_service = ApplicationSLADueService()
+            deadlines = asyncio.run(
+                due_service.recalculate_initial_deadlines(
+                    UUID("99999999-9999-4999-8999-999999999999"),
+                    UUID(ORG),
+                )
+            )
+            self.assertEqual(
+                {row["milestone"] for row in deadlines},
+                {"initial_review", "first_recruiter_action"},
+            )
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    "update public.application_sla_deadlines "
+                    "set due_at=now()-interval '1 minute', status='pending' "
+                    "where application_id=%s",
+                    ("99999999-9999-4999-8999-999999999999",),
+                )
+            self.connection.commit()
+            overdue = asyncio.run(due_service.refresh_overdue(UUID(ORG)))
+            self.assertEqual(len(overdue), 2)
+        finally:
+            if previous_database_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_database_url
 
 
 if __name__ == "__main__":
