@@ -55,7 +55,7 @@ class RecruiterTaskTenantMigrationTests(unittest.TestCase):
                     [cls.bad_task, cls.org_b, cls.candidate_a],
                 )
 
-        with cls.assertRaises(DatabaseConnectionError):
+        with unittest.TestCase().assertRaises(DatabaseConnectionError):
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(cls.sql)
@@ -68,7 +68,7 @@ class RecruiterTaskTenantMigrationTests(unittest.TestCase):
                     [cls.bad_task, cls.org_b, cls.job_a],
                 )
 
-        with cls.assertRaises(DatabaseConnectionError):
+        with unittest.TestCase().assertRaises(DatabaseConnectionError):
             with get_connection() as conn:
                 with conn.cursor() as cur:
                     cur.execute(cls.sql)
