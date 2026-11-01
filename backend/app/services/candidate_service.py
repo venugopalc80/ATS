@@ -20,6 +20,7 @@ class CandidateService:
         organization_id: UUID,
         status: str | None = None,
         search: str | None = None,
+        include_contact_search: bool = True,
     ) -> list[dict[str, Any]]:
         query = f"""
             select {CANDIDATE_COLUMNS}
@@ -27,37 +28,46 @@ class CandidateService:
             where organization_id = %s
         """
         params: list[Any] = [organization_id]
-
         if status:
             query += " and status = %s"
             params.append(status)
-
         if search:
-            query += """
+            contact_clause = " or coalesce(email, '') ilike %s" if include_contact_search else ""
+            query += f"""
                 and (
                     first_name ilike %s
                     or coalesce(last_name, '') ilike %s
-                    or coalesce(email, '') ilike %s
+                    {contact_clause}
                     or coalesce(current_title, '') ilike %s
                     or coalesce(city, '') ilike %s
                 )
             """
             term = f"%{search}%"
-            params.extend([term, term, term, term, term])
-
+            params.extend([term, term])
+            if include_contact_search:
+                params.append(term)
+            params.extend([term, term])
         query += " order by created_at desc"
-
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
+
+    async def get_candidate_organization_id(self, candidate_id: UUID) -> UUID | None:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select organization_id from public.candidates where id = %s",
+                    [candidate_id],
+                )
+                row = cursor.fetchone()
+                return UUID(str(row["organization_id"])) if row else None
 
     async def create_candidate(self, payload: CandidateCreate) -> dict[str, Any]:
         data = payload.model_dump(mode="python")
         columns = list(data.keys())
         values = [data[column] for column in columns]
         placeholders = ", ".join(["%s"] * len(columns))
-
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -77,11 +87,7 @@ class CandidateService:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    f"""
-                    select {CANDIDATE_COLUMNS}
-                    from public.candidates
-                    where id = %s
-                    """,
+                    f"select {CANDIDATE_COLUMNS} from public.candidates where id = %s",
                     [candidate_id],
                 )
                 return cursor.fetchone()
@@ -92,10 +98,8 @@ class CandidateService:
         data = payload.model_dump(mode="python", exclude_unset=True)
         if not data:
             return await self.get_candidate(candidate_id)
-
         assignments = ", ".join(f"{column} = %s" for column in data)
         values = list(data.values()) + [candidate_id]
-
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
