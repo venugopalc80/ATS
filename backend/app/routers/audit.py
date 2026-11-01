@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import assert_org_admin, assert_org_member, get_current_user_id
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id, require_mfa
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
@@ -54,6 +54,7 @@ async def security_events(
     until: datetime | None = None,
     limit: int = Query(default=50, ge=1, le=200),
     user_id: UUID = Depends(get_current_user_id),
+    _mfa_claims: dict = Depends(require_mfa),
 ):
     assert_org_admin(user_id, organization_id)
     validate_security_event_window(since, until)
