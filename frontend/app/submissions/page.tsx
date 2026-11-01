@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DragEvent, useEffect, useMemo, useState } from "react";
+import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
 
@@ -226,7 +226,7 @@ export default function SubmissionsPage() {
     }
   }
 
-  async function saveSlaPolicy(event: React.FormEvent<HTMLFormElement>) {
+  async function saveSlaPolicy(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!slaPolicy || savingSlaPolicy) return;
     setSavingSlaPolicy(true);
