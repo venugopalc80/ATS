@@ -12,6 +12,7 @@ type Job = {
   id?: string;
   organization_id?: string;
   title: string;
+  job_code?: string | null;
   client?: string;
   client_id?: string | null;
   location?: string | null;
@@ -190,7 +191,7 @@ export default function JobsPage() {
   }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
-    const matchesQuery = (job.id ?? "") === query || (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = (job.id ?? "") === query || (job.job_code ?? "") + " " + job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
@@ -410,11 +411,12 @@ export default function JobsPage() {
           <div className="card">
             <div className="card-head"><span className="card-title">Requisitions</span><span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "Demo mode"}</span></div>
             <table className="table">
-              <thead><tr><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Distribution</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Reference</th><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Distribution</th><th>Actions</th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={8}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={8}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
+                {loading ? <tr><td colSpan={9}>Loading jobs...</td></tr> : filtered.length === 0 ? <tr><td colSpan={9}>No jobs yet. Create your first one.</td></tr> : filtered.map((job) => (
                   <tr key={job.id ?? job.title}>
-                    <td><strong>{job.title}</strong></td>
+                    <td><strong>{job.job_code ?? "Pending reference"}</strong></td>
+                    <td>{job.title}</td>
                     <td>{job.client ?? "Unassigned"}</td>
                     <td>{job.location ?? "Not specified"}</td>
                     <td>{job.employment_type ?? "-"}</td>
