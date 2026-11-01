@@ -328,27 +328,35 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
 
         from app.services.application_sla_service import ApplicationSLADueService
 
-        due_service = ApplicationSLADueService()
-        deadlines = asyncio.run(
-            due_service.recalculate_initial_deadlines(
-                UUID("99999999-9999-4999-8999-999999999999"),
-                UUID(ORG),
+        previous_database_url = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = os.environ["TEST_DATABASE_URL"]
+        try:
+            due_service = ApplicationSLADueService()
+            deadlines = asyncio.run(
+                due_service.recalculate_initial_deadlines(
+                    UUID("99999999-9999-4999-8999-999999999999"),
+                    UUID(ORG),
+                )
             )
-        )
-        self.assertEqual(
-            {row["milestone"] for row in deadlines},
-            {"initial_review", "first_recruiter_action"},
-        )
-        with self.connection.cursor() as cursor:
-            cursor.execute(
-                "update public.application_sla_deadlines "
-                "set due_at=now()-interval '1 minute', status='pending' "
-                "where application_id=%s",
-                ("99999999-9999-4999-8999-999999999999",),
+            self.assertEqual(
+                {row["milestone"] for row in deadlines},
+                {"initial_review", "first_recruiter_action"},
             )
-        self.connection.commit()
-        overdue = asyncio.run(due_service.refresh_overdue(UUID(ORG)))
-        self.assertEqual(len(overdue), 2)
+            with self.connection.cursor() as cursor:
+                cursor.execute(
+                    "update public.application_sla_deadlines "
+                    "set due_at=now()-interval '1 minute', status='pending' "
+                    "where application_id=%s",
+                    ("99999999-9999-4999-8999-999999999999",),
+                )
+            self.connection.commit()
+            overdue = asyncio.run(due_service.refresh_overdue(UUID(ORG)))
+            self.assertEqual(len(overdue), 2)
+        finally:
+            if previous_database_url is None:
+                os.environ.pop("DATABASE_URL", None)
+            else:
+                os.environ["DATABASE_URL"] = previous_database_url
 
 
 if __name__ == "__main__":
