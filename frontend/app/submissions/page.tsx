@@ -24,6 +24,7 @@ type Application = {
 
 type Recruiter = { id: string; full_name?: string | null; email?: string | null };
 type ApplicationAssignment = { application_id: string; recruiter_id: string | null };
+type ApplicationSLADeadline = { id: string; application_id: string; milestone: string; due_at: string; status: "pending" | "overdue" | "completed" | "paused"; };
 type ApplicationSLAPolicy = {
   organization_id: string;
   initial_review_minutes: number;
@@ -74,6 +75,7 @@ export default function SubmissionsPage() {
   const [canManageAssignments, setCanManageAssignments] = useState(false);
   const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);
   const [slaPolicy, setSlaPolicy] = useState<ApplicationSLAPolicy | null>(null);
+  const [slaDeadlines, setSlaDeadlines] = useState<ApplicationSLADeadline[]>([]);
   const [savingSlaPolicy, setSavingSlaPolicy] = useState(false);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
