@@ -43,6 +43,7 @@ values
  ('job.read','jobs','View job records'),
  ('job.manage','jobs','Create and update job records'),
  ('job.delete','jobs','Delete job records'),
+ ('dashboard.read','dashboard','View organisation dashboard metrics'),
  ('client.read','clients','View client records'),
  ('client.manage','clients','Create and update client records'),
  ('client.delete','clients','Delete client records'),
