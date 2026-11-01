@@ -193,6 +193,7 @@ async def dashboard(
                     _, activity_end_utc = organisation_date_bounds_utc(organisation_timezone, date_to)
                     activity_where += " and ae.created_at < %s"
                     activity_params.append(activity_end_utc)
+
                 cursor.execute(
                     """select id,title,task_type,priority,due_at,candidate_id,job_id
                        from public.recruiter_tasks
