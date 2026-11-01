@@ -381,3 +381,12 @@ This update records exact-head GitHub Actions evidence checked on 2026-11-01. It
 - No production merge, deployment, database write or production migration was performed in this refresh.
 - Idea 04 staging migration reconciliation remains blocked on a supported schema-only backup/export and authenticated Supabase CLI migration-repair route. Do not directly edit the Supabase migration ledger or apply the dependent stage-config migration out of order.
 - No verified delivery percentage is claimed. The canonical 49-row register and production release evidence are still incomplete.
+
+
+### CI result update — Idea 08 workflow automation
+
+- Exact-head run [#41338158346](https://github.com/venugopalc80/ATS/actions/runs/41338158346) completed successfully on commit `9f5c293bd46cb09423fba4b13455016c128d9ca0`.
+- Backend unit tests passed.
+- Frontend TypeScript typecheck passed.
+- Frontend production build passed.
+- This closes the two CI failures identified on the previous Idea 08 head. It does not change the feature's foundation-only scope or its outstanding execution-engine requirements.
