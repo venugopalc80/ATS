@@ -176,7 +176,7 @@ $$;
 
 drop trigger if exists scorecard_template_immutable on public.scorecard_templates;
 create trigger scorecard_template_immutable
-before update on public.scorecard_templates
+before update or delete on public.scorecard_templates
 for each row execute function public.prevent_published_scorecard_template_mutation();
 
 create or replace function public.prevent_published_scorecard_child_mutation()
