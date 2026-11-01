@@ -36,6 +36,41 @@ def get_current_user_id(
         raise HTTPException(status_code=401, detail="Invalid authentication token") from exc
 
 
+def is_mfa_verified(claims: dict) -> bool:
+    """Return true only for a cryptographically verified Supabase AAL2 claim."""
+    return claims.get("aal", "aal1") == "aal2"
+
+
+def get_current_auth_claims(
+    credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
+    user_id: UUID = Depends(get_current_user_id),
+) -> dict:
+    """Return verified JWT claims after the existing live user check succeeds."""
+    if credentials is None:
+        raise HTTPException(status_code=401, detail="Authentication required")
+    try:
+        response = _auth_client().auth.get_claims(credentials.credentials)
+        claims = getattr(response, "claims", None)
+        if not isinstance(claims, dict):
+            raise HTTPException(status_code=401, detail="Invalid authentication claims")
+        if claims.get("sub") != str(user_id) or claims.get("role") != "authenticated":
+            raise HTTPException(status_code=401, detail="Invalid authentication claims")
+        return claims
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=401, detail="Invalid authentication token") from exc
+
+
+def require_mfa(claims: dict = Depends(get_current_auth_claims)) -> dict:
+    """Dependency for sensitive routes that require a verified second factor."""
+    if not is_mfa_verified(claims):
+        raise HTTPException(
+            status_code=403,
+            detail={"code": "mfa_required", "message": "Complete multi-factor authentication to continue"},
+        )
+    return claims
+
 def get_org_role(user_id: UUID, organization_id: UUID) -> str:
     try:
         with get_connection() as connection:
