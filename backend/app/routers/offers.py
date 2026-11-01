@@ -29,11 +29,11 @@ def _require_offer_write(user_id: UUID, organization_id: UUID, payload) -> None:
         require_permission(user_id, organization_id, "offer.salary.manage")
 
 @router.get("", response_model=list[OfferOut])
-def get_offers(organization_id: UUID, status_filter: str | None = Query(None, alias="status"), user_id: UUID = Depends(get_current_user_id)):
+def get_offers(organization_id: UUID, status_filter: str | None = Query(None, alias="status"), candidate_id: UUID | None = Query(None), user_id: UUID = Depends(get_current_user_id)):
     require_permission(user_id, organization_id, "offer.read")
     include_salary = _include_salary(user_id, organization_id)
     try:
-        return [_offer_output(row, include_salary) for row in list_offers(organization_id, status_filter)]
+        return [_offer_output(row, include_salary) for row in list_offers(organization_id, status_filter, candidate_id)]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(503, "Database operation failed") from exc
 
