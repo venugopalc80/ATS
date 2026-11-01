@@ -52,7 +52,7 @@ def connection_for(cursor):
     yield Connection(cursor)
 
 
-class CandidatePortalTenantBoundaryTests:
+class TestCandidatePortalTenantBoundary:
     def test_profile_rejects_account_not_linked_in_requested_tenant(self):
         user_id, organization_id = uuid4(), uuid4()
         link_cursor = Cursor(row=None)
