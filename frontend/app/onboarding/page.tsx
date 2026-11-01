@@ -9,6 +9,7 @@ export default function OnboardingPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [country, setCountry] = useState("GB");
+  const [timezone, setTimezone] = useState("Europe/London");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState("");
 
@@ -21,7 +22,7 @@ export default function OnboardingPage() {
       const response = await apiFetch(API_BASE + "/api/me/organizations", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, country_code: country }),
+        body: JSON.stringify({ name, country_code: country, timezone }),
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
@@ -54,6 +55,7 @@ export default function OnboardingPage() {
         <form onSubmit={submit} className="auth-form">
           <label>Organisation name<input required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Recruitment" /></label>
           <label>Primary country code<input required maxLength={2} pattern="[A-Za-z]{2}" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} placeholder="GB" /><small className="muted-small">Use the ISO 3166-1 alpha-2 code for your primary country, e.g. GB, US, DE, AE.</small></label>
+          <label>Organisation timezone<input required list="aqerith-timezones" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Europe/London" /><datalist id="aqerith-timezones"><option value="Europe/London" /><option value="America/New_York" /><option value="America/Chicago" /><option value="America/Denver" /><option value="America/Los_Angeles" /><option value="Asia/Kolkata" /><option value="Asia/Singapore" /><option value="Australia/Sydney" /><option value="Australia/Perth" /><option value="Pacific/Auckland" /><option value="UTC" /></datalist><small className="muted-small">Enter an IANA timezone, such as Europe/London, Asia/Kolkata or America/New_York. Used for organisation-wide dates.</small></label>
           <button className="btn primary auth-submit" disabled={busy}>{busy ? "Creating..." : "Create workspace"}</button>
         </form>
         {message && <div className="notice">{message}</div>}

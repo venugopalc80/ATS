@@ -44,6 +44,7 @@ type Activity = {
   actor_name: string | null;
 };
 type DashboardData = {
+  timezone: string;
   metrics: MetricSet;
   pipeline: Pipeline;
   jobs: Job[];
@@ -67,21 +68,56 @@ const terminalStages = [
   { key: "withdrawn", label: "Withdrawn" },
 ];
 
-function localDate(daysAgo = 0) {
-  const date = new Date();
-  date.setDate(date.getDate() - daysAgo);
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+function organisationDate(daysAgo = 0, timeZone = "UTC") {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone, year: "numeric", month: "2-digit", day: "2-digit",
+  }).formatToParts(new Date());
+  const part = (type: string) => Number(parts.find((item) => item.type === type)?.value ?? 0);
+  const date = new Date(Date.UTC(part("year"), part("month") - 1, part("day") - daysAgo));
+  return [date.getUTCFullYear(), String(date.getUTCMonth() + 1).padStart(2, "0"), String(date.getUTCDate()).padStart(2, "0")].join("-");
 }
 
-function formatDate(value: string | null | undefined) {
+function formatDate(value: string | null | undefined, timeZone?: string) {
   if (!value) return "No due date";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Date unavailable";
-  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short" }).format(date);
+  return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", ...(timeZone ? { timeZone } : {}) }).format(date);
 }
 
-function friendlyAction(action: string) {
-  return action.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+function friendlyActivityTitle(action: string, entityType: string) {
+  const key = action.trim().toLowerCase().replace(/[\s-]+/g, "_");
+  const entity = entityType.trim().toLowerCase();
+
+  if (key === "insert" && ["candidate", "candidates"].includes(entity)) return "Candidate profile created";
+  if (key.includes("candidate") && key.includes("cv") && key.includes("bulk") && key.includes("import")) return "Candidate CVs imported";
+  if (key.includes("bulk") && key.includes("import") && ["candidate", "candidates"].includes(entity)) return "Candidate CVs imported";
+  if (key === "insert" && ["job", "jobs"].includes(entity)) return "Requisition created";
+  if (key === "insert" && ["interview", "interviews"].includes(entity)) return "Interview scheduled";
+  if (key === "insert" && ["offer", "offers"].includes(entity)) return "Offer created";
+  if (key === "insert" && ["placement", "placements"].includes(entity)) return "Placement created";
+
+  return action.replaceAll("_", " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+}
+
+function friendlyEntityType(entityType: string) {
+  const key = entityType.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    candidate: "Candidate",
+    candidates: "Candidate",
+    job: "Requisition",
+    jobs: "Requisition",
+    interview: "Interview",
+    interviews: "Interview",
+    offer: "Offer",
+    offers: "Offer",
+    placement: "Placement",
+    placements: "Placement",
+    application: "Application",
+    applications: "Application",
+    submission: "Submission",
+    submissions: "Submission",
+  };
+  return labels[key] ?? "Recruitment record";
 }
 
 export default function Dashboard() {
@@ -89,8 +125,9 @@ export default function Dashboard() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [dateFrom, setDateFrom] = useState(localDate(30));
-  const [dateTo, setDateTo] = useState(localDate());
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
+  const [dateRangeInitialised, setDateRangeInitialised] = useState(false);
   const [search, setSearch] = useState("");
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
@@ -116,14 +153,20 @@ export default function Dashboard() {
         if (response.status === 503) throw new Error("Dashboard data is temporarily unavailable. Please retry.");
         throw new Error("We couldn't load the dashboard (HTTP " + response.status + ").");
       }
-      setData(await response.json());
+      const dashboardData = await response.json() as DashboardData;
+      setData(dashboardData);
+      if (!dateRangeInitialised) {
+        setDateFrom(organisationDate(29, dashboardData.timezone));
+        setDateTo(organisationDate(0, dashboardData.timezone));
+        setDateRangeInitialised(true);
+      }
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Unable to load dashboard data.");
       setData(null);
     } finally {
       setLoading(false);
     }
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, dateRangeInitialised]);
 
   useEffect(() => { void loadDashboard(); }, [loadDashboard]);
 
@@ -160,7 +203,7 @@ export default function Dashboard() {
           </Link>
         ))}
         <div className="nav-label">Administration</div>
-        <div className="nav-item"><span aria-hidden="true">⚙</span><span>Settings</span></div>
+        <Link href="/settings" className="nav-item"><span aria-hidden="true">⚙</span><span>Settings</span></Link>
         <div className="nav-item"><span aria-hidden="true">?</span><span>Help &amp; support</span></div>
       </aside>
 
@@ -208,7 +251,7 @@ export default function Dashboard() {
           <div className="dashboard-filters">
             <label>From <input type="date" value={dateFrom} max={dateTo || undefined} onChange={(event) => setDateFrom(event.target.value)} /></label>
             <label>To <input type="date" value={dateTo} min={dateFrom || undefined} onChange={(event) => setDateTo(event.target.value)} /></label>
-            <button className="btn" onClick={() => { setDateFrom(localDate(30)); setDateTo(localDate()); }}>Last 30 days</button>
+            <button className="btn" onClick={() => { setDateFrom(organisationDate(29, data?.timezone)); setDateTo(organisationDate(0, data?.timezone)); }}>Last 30 days</button>
             <button className="btn" onClick={() => void loadDashboard()} disabled={loading}>{loading ? "Refreshing…" : "Refresh"}</button>
           </div>
 
@@ -222,9 +265,9 @@ export default function Dashboard() {
           <div className="metrics dashboard-metrics">
             {[
               { title: "Open jobs", value: data?.metrics.open_jobs, icon: "▣", href: "/jobs?status=open", detail: "Currently open vacancies" },
-              { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates", detail: "Accessible candidate records" },
-              { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews", detail: "Scheduled for today" },
-              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements", detail: (data?.metrics.placements_this_month ?? 0) + " created this month" },
+              { title: "Active candidates", value: data?.metrics.active_candidates, icon: "♙", href: "/candidates?status=active", detail: "Active candidate records" },
+              { title: "Interviews today", value: data?.metrics.interviews_today, icon: "◷", href: "/interviews?today=1", detail: "Scheduled for today" },
+              { title: "Active placements", value: data?.metrics.placements_active, icon: "◈", href: "/placements?status=active", detail: data ? data.metrics.placements_this_month + " created this month" : "Monthly count unavailable" },
             ].map((metric) => (
               <Link key={metric.title} href={metric.href} className="card dashboard-metric-card" aria-label={metric.title + ", view records"}>
                 <div className="dashboard-metric-top"><span className="dashboard-metric-icon" aria-hidden="true">{metric.icon}</span><span className="metric-title">{metric.title}</span></div>
@@ -236,8 +279,10 @@ export default function Dashboard() {
 
           <div className="dashboard-section-grid">
             <section className="card dashboard-priorities" id="priorities">
-              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{data?.priorities.length ?? 0} items</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.priorities.length ? (
+              <div className="card-head"><span className="card-title">Today's priorities</span><span className="badge blue">{error ? "Unavailable" : (data?.priorities.length ?? 0) + " items"}</span></div>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Priorities unavailable</strong><p>We could not confirm whether any items need attention. Retry to load the latest data.</p></div>
+              ) : !data?.priorities.length ? (
                 <div className="dashboard-empty"><strong>You're all caught up</strong><p>No outstanding priority items were found for the current data.</p></div>
               ) : (
                 <div className="dashboard-priority-list">
@@ -245,7 +290,7 @@ export default function Dashboard() {
                     <Link key={item.type + item.id} href={item.href} className="dashboard-priority-row">
                       <span className={"dashboard-priority-icon priority-" + item.type} aria-hidden="true">!</span>
                       <span className="dashboard-priority-copy"><strong>{item.title}</strong><span>{item.description}</span></span>
-                      <span className="dashboard-priority-date">{formatDate(item.due_at)}</span>
+                      <span className="dashboard-priority-date">{formatDate(item.due_at, data?.timezone)}</span>
                       <span aria-hidden="true">→</span>
                     </Link>
                   ))}
@@ -263,29 +308,37 @@ export default function Dashboard() {
           </div>
 
           <section className="card dashboard-pipeline-section">
-            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">Application counts for the selected date range · {totalPipeline} total</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
-            <div className="pipeline dashboard-pipeline">
-              {stages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
-                  <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong><span>{stage.label}</span>
-                </Link>
-              ))}
-            </div>
-            <div className="dashboard-terminal-stages">
-              <span className="muted-small">Terminal outcomes</span>
-              {terminalStages.map((stage) => (
-                <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
-                  {stage.label} <strong>{loading ? "—" : (data?.pipeline[stage.key] ?? 0)}</strong>
-                </Link>
-              ))}
-            </div>
+            <div className="card-head"><div><span className="card-title">Hiring pipeline</span><p className="muted-small">{error ? "Pipeline data unavailable" : "Application counts for the selected date range · " + totalPipeline + " total"}</p></div><Link href="/submissions" className="link">View submissions →</Link></div>
+            {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+              <div className="dashboard-empty" role="status"><strong>Hiring pipeline unavailable</strong><p>Application counts could not be loaded. Retry before interpreting hiring progress.</p></div>
+            ) : Object.keys(data?.pipeline ?? {}).length === 0 ? (
+              <div className="dashboard-empty"><strong>No pipeline activity in this date range</strong><p>Try a wider date range or review submissions.</p></div>
+            ) : <>
+              <div className="pipeline dashboard-pipeline">
+                {stages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="stage dashboard-stage">
+                    <strong>{data?.pipeline[stage.key] ?? 0}</strong><span>{stage.label}</span>
+                  </Link>
+                ))}
+              </div>
+              <div className="dashboard-terminal-stages">
+                <span className="muted-small">Terminal outcomes</span>
+                {terminalStages.map((stage) => (
+                  <Link key={stage.key} href={"/submissions?status=" + stage.key} className="dashboard-terminal-link">
+                    {stage.label} <strong>{data?.pipeline[stage.key] ?? 0}</strong>
+                  </Link>
+                ))}
+              </div>
+            </>}
           </section>
 
           <div className="dashboard-section-grid dashboard-lower-grid">
             <section className="card">
               <div className="card-head"><span className="card-title">Vacancy health</span><Link href="/jobs" className="link">All vacancies →</Link></div>
-              <p className="muted-small">Rules: flag open roles older than {data?.rules.vacancy_target_days ?? 30} days or with fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.jobs.length ? (
+              <p className="muted-small">Needs attention when a role is on hold, has been open for more than {data?.rules.vacancy_target_days ?? 30} days, or has fewer than {data?.rules.vacancy_min_applications ?? 3} applications.</p>
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Vacancy health unavailable</strong><p>We could not load vacancy records. Retry before making staffing decisions.</p></div>
+              ) : !data?.jobs.length ? (
                 <div className="dashboard-empty"><strong>No vacancies to display</strong><p>Create a requisition to start tracking vacancy health.</p><Link href="/jobs" className="btn">View jobs</Link></div>
               ) : (
                 <div className="dashboard-vacancy-list">
@@ -302,13 +355,15 @@ export default function Dashboard() {
 
             <section className="card">
               <div className="card-head"><span className="card-title">Recent activity</span><span className="muted-small">Latest recorded events</span></div>
-              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : !data?.activity.length ? (
+              {loading ? <div className="dashboard-loading-lines"><span /><span /><span /></div> : error ? (
+                <div className="dashboard-empty"><strong>Recent activity unavailable</strong><p>Activity could not be loaded, so this view may not reflect the latest changes.</p></div>
+              ) : !data?.activity.length ? (
                 <div className="dashboard-empty"><strong>No activity yet</strong><p>Recruitment events will appear here when recorded.</p></div>
               ) : (
                 <div className="activity dashboard-activity">
                   {data.activity.map((item) => {
                     const target = ["job", "jobs"].includes(item.entity_type) ? "/jobs?job_id=" + item.entity_id : ["candidate", "candidates"].includes(item.entity_type) ? "/candidates/" + item.entity_id : ["interview", "interviews"].includes(item.entity_type) ? "/interviews/" + item.entity_id : ["placement", "placements"].includes(item.entity_type) ? "/placements/" + item.entity_id : ["offer", "offers"].includes(item.entity_type) ? "/offers/" + item.entity_id : "/submissions/" + item.entity_id;
-                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
+                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyActivityTitle(item.action, item.entity_type)}</strong><div>{friendlyEntityType(item.entity_type)}</div><div className="activity-time">{formatDate(item.created_at, data?.timezone)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
                   })}
                 </div>
               )}

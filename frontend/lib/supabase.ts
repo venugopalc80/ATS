@@ -6,13 +6,19 @@ type SupabaseClient = ReturnType<typeof createClient>;
  * This avoids requiring public Supabase environment variables during
  * Next.js build-time prerendering of routes that do not use auth.
  */
+let browserClient: SupabaseClient | null = null;
+
 export function getSupabaseClient(): SupabaseClient {
+  if (browserClient) return browserClient;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
   if (!url || !key) {
     throw new Error("Supabase is not configured. Set NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY.");
   }
-  return createClient(url, key);
+
+  browserClient = createClient(url, key);
+  return browserClient;
 }
 
 /** Backwards-compatible lazy proxy for existing imports of { supabase }. */
