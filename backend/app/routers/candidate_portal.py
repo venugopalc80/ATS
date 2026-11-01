@@ -51,6 +51,11 @@ async def link_candidate_account(
                     """select id
                        from public.candidates
                        where organization_id=%s and lower(email)=lower(%s)
+                         and exists (
+                           select 1 from public.applications a
+                           where a.organization_id=candidates.organization_id
+                             and a.candidate_id=candidates.id
+                         )
                        limit 2""",
                     [organization_id, email],
                 )
@@ -76,10 +81,15 @@ async def link_candidate_account(
                     cursor.execute(
                         """insert into public.audit_events
                            (organization_id, actor_user_id, action, entity_type, entity_id, metadata)
-                           values (%s,%s,'candidate_portal_account_linked',
+                           values (%s,
+                                   (select p.id from public.profiles p where p.id=%s),
+                                   'candidate_portal_account_linked',
                                    'candidate_portal_account',%s,
-                                   jsonb_build_object('candidate_id',%s::text))""",
-                        [organization_id, user_id, inserted["id"], candidate_id],
+                                   jsonb_build_object(
+                                     'candidate_id',%s::text,
+                                     'candidate_portal_user_id',%s::text
+                                   ))""",
+                        [organization_id, user_id, inserted["id"], candidate_id, user_id],
                     )
                 else:
                     cursor.execute(
