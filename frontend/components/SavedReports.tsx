@@ -111,7 +111,7 @@ export default function SavedReports({ reportType, dateFrom, dateTo, onApply }: 
   }
 
   return (
-    <section className="card analytics-saved-reports">
+    <section className="card analytics-saved-reports" aria-label="Saved reports">
       <div className="card-head">
         <div>
           <div className="card-title">Saved reports</div>
@@ -134,7 +134,7 @@ export default function SavedReports({ reportType, dateFrom, dateTo, onApply }: 
       {error && <div className="notice mt-3" role="alert">{error}</div>}
       {message && <div className="notice mt-3" role="status">{message}</div>}
       {loading ? <p className="muted-small mt-3">Loading saved reports…</p> : reports.length ? (
-        <div className="analytics-saved-report-list">
+        <div className="analytics-saved-report-list" aria-live="polite">
           {reports.map((report) => (
             <div className="analytics-saved-report-row" key={report.id}>
               <div>
