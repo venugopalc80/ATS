@@ -24,6 +24,31 @@ type Application = {
 
 type Recruiter = { id: string; full_name?: string | null; email?: string | null };
 type ApplicationAssignment = { application_id: string; recruiter_id: string | null; assigned_at: string | null };
+type ApplicationSLAPolicy = {
+  organization_id: string;
+  initial_review_minutes: number;
+  first_recruiter_action_minutes: number;
+  candidate_follow_up_minutes: number;
+  post_interview_update_minutes: number;
+  timezone: string;
+  business_days_only: boolean;
+  business_hours_start: string;
+  business_hours_end: string;
+  working_days: number[];
+  enabled: boolean;
+};
+const DEFAULT_SLA_POLICY = {
+  initial_review_minutes: 1440,
+  first_recruiter_action_minutes: 2880,
+  candidate_follow_up_minutes: 2880,
+  post_interview_update_minutes: 1440,
+  timezone: "UTC",
+  business_days_only: true,
+  business_hours_start: "09:00",
+  business_hours_end: "17:00",
+  working_days: [1, 2, 3, 4, 5],
+  enabled: true,
+};
 
 type ApplicationStageConfig = {
   organization_id: string;
@@ -47,7 +72,7 @@ export default function SubmissionsPage() {
   const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string | null>>({});
   const [canManageAssignments, setCanManageAssignments] = useState(false);
-  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);
+  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);\n  const [slaPolicy, setSlaPolicy] = useState<ApplicationSLAPolicy | null>(null);\n  const [savingSlaPolicy, setSavingSlaPolicy] = useState(false);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -115,6 +140,10 @@ export default function SubmissionsPage() {
         const me = await meResponse.json();
         const membership = (me.organizations ?? []).find((item: { id: string; role: string }) => item.id === organizationId);
         setCanManageAssignments(membership?.role === "owner" || membership?.role === "admin");
+        setSlaPolicy({ organization_id: organizationId, ...DEFAULT_SLA_POLICY });
+        const slaResponse = await apiFetch(API_BASE + "/api/applications/sla-policy?organization_id=" + org);
+        if (slaResponse.ok) setSlaPolicy(await slaResponse.json());
+        else if (slaResponse.status !== 404) throw new Error("Unable to load the organisation SLA policy.");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to load submissions.");
       } finally {
@@ -194,6 +223,29 @@ export default function SubmissionsPage() {
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update application.");
+    }
+  }
+
+  async function saveSlaPolicy(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!slaPolicy || savingSlaPolicy) return;
+    setSavingSlaPolicy(true);
+    try {
+      const response = await apiFetch(API_BASE + "/api/applications/sla-policy", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(slaPolicy),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail ?? "Unable to save SLA policy.");
+      }
+      setSlaPolicy(await response.json());
+      setMessage("Recruitment SLA policy saved.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to save SLA policy.");
+    } finally {
+      setSavingSlaPolicy(false);
     }
   }
 
@@ -335,6 +387,21 @@ export default function SubmissionsPage() {
           </div>
           <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{stages.map((item) => <option key={item.stage_key} value={item.stage_key}>{item.label}</option>)}</select><select className="filter" aria-label="Filter application source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(1); }}><option value="all">All sources</option>{sourceOptions.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} application{filtered.length === 1 ? "" : "s"}</span></div></div>
           {message && <div className="notice">{message}</div>}
+          {canManageAssignments && slaPolicy && <form className="card" style={{ marginBottom: 16 }} onSubmit={(event) => void saveSlaPolicy(event)}>
+            <div className="card-head"><span className="card-title">Recruitment SLA policy</span><label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={slaPolicy.enabled} onChange={(event) => setSlaPolicy({ ...slaPolicy, enabled: event.target.checked })} /> Enabled</label></div>
+            <p className="muted-small">Configure internal response targets for your recruitment team. These are operational targets, not legal deadlines.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+              <label>Initial review (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.initial_review_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, initial_review_minutes: Number(event.target.value) })} /></label>
+              <label>First recruiter action (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.first_recruiter_action_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, first_recruiter_action_minutes: Number(event.target.value) })} /></label>
+              <label>Candidate follow-up (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.candidate_follow_up_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, candidate_follow_up_minutes: Number(event.target.value) })} /></label>
+              <label>Post-interview update (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.post_interview_update_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, post_interview_update_minutes: Number(event.target.value) })} /></label>
+              <label>Time zone<input required maxLength={100} value={slaPolicy.timezone} onChange={(event) => setSlaPolicy({ ...slaPolicy, timezone: event.target.value })} placeholder="Europe/London" /></label>
+              <label>Business day handling<select value={slaPolicy.business_days_only ? "true" : "false"} onChange={(event) => setSlaPolicy({ ...slaPolicy, business_days_only: event.target.value === "true" })}><option value="true">Working days only</option><option value="false">All calendar days</option></select></label>
+              <label>Business hours start<input type="time" required value={slaPolicy.business_hours_start} onChange={(event) => setSlaPolicy({ ...slaPolicy, business_hours_start: event.target.value })} /></label>
+              <label>Business hours end<input type="time" required value={slaPolicy.business_hours_end} onChange={(event) => setSlaPolicy({ ...slaPolicy, business_hours_end: event.target.value })} /></label>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}><button className="btn primary" disabled={savingSlaPolicy}>{savingSlaPolicy ? "Saving..." : "Save SLA policy"}</button></div>
+          </form>}
 
           {showCreate && (
             <div className="modal-backdrop">
