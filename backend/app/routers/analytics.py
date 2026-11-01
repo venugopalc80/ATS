@@ -60,29 +60,30 @@ def _forecast_backtest(history: list[dict], training_months: int = 6) -> dict:
         }
 
     monthly_results = []
+    absolute_errors = []
+    nonzero_actual_errors = []
     for index in range(training_months, len(history)):
         training = history[index - training_months:index]
         actual = int(history[index]["approved_headcount"] or 0)
         predicted = sum(int(row["approved_headcount"] or 0) for row in training) / training_months
         error = actual - predicted
+        absolute_error = abs(error)
+        absolute_errors.append(absolute_error)
+        if actual > 0:
+            nonzero_actual_errors.append(absolute_error / actual)
         monthly_results.append({
             "month": history[index]["month"],
             "predicted_headcount": round(predicted, 1),
             "actual_headcount": actual,
             "error_headcount": round(error, 1),
-            "absolute_error_headcount": round(abs(error), 1),
+            "absolute_error_headcount": round(absolute_error, 1),
         })
 
     evaluation_months = len(monthly_results)
     positive_actual_months = sum(1 for row in monthly_results if row["actual_headcount"] > 0)
-    absolute_error_total = sum(row["absolute_error_headcount"] for row in monthly_results)
     actual_total = sum(row["actual_headcount"] for row in monthly_results)
-    mae = absolute_error_total / evaluation_months if evaluation_months else None
-    wape = absolute_error_total / actual_total if actual_total > 0 else None
-    nonzero_actual_errors = [
-        row["absolute_error_headcount"] / row["actual_headcount"]
-        for row in monthly_results if row["actual_headcount"] > 0
-    ]
+    mae = sum(absolute_errors) / evaluation_months if evaluation_months else None
+    wape = sum(absolute_errors) / actual_total if actual_total > 0 else None
     mape = sum(nonzero_actual_errors) / len(nonzero_actual_errors) if nonzero_actual_errors else None
 
     if evaluation_months < 3:
@@ -104,7 +105,6 @@ def _forecast_backtest(history: list[dict], training_months: int = 6) -> dict:
         "sample_warning": evaluation_months < 6 or positive_actual_months < 3,
         "monthly_results": monthly_results,
     }
-
 
 @router.get("/kpis")
 async def analytics_kpis(

@@ -60,6 +60,31 @@ class AnalyticsFilterTests(unittest.TestCase):
         self.assertIsNotNone(result["weighted_absolute_percentage_error"])
         self.assertEqual(len(result["monthly_results"]), 12)
 
+    def test_forecast_backtest_excludes_zero_actual_months_from_mape(self):
+        values = [1, 1, 1, 1, 1, 1, 0, 0, 2, 0, 3, 0, 4, 0, 5, 0, 6, 0]
+        history = [
+            {"month": f"2025-{index + 1:02d}-01", "approved_headcount": value,
+             "approved_requisitions": 1 if value else 0}
+            for index, value in enumerate(values)
+        ]
+        result = _forecast_backtest(history)
+        self.assertEqual(result["status"], "available")
+        self.assertEqual(result["positive_actual_months"], 5)
+        self.assertTrue(result["mape_excludes_zero_actual_months"])
+        self.assertIsNotNone(result["mean_absolute_percentage_error"])
+
+    def test_forecast_backtest_reports_zero_evaluation_demand_as_unavailable(self):
+        values = [1, 1, 1, 1, 1, 1] + [0] * 12
+        history = [
+            {"month": f"2025-{index + 1:02d}-01", "approved_headcount": value,
+             "approved_requisitions": 1 if value else 0}
+            for index, value in enumerate(values)
+        ]
+        result = _forecast_backtest(history)
+        self.assertEqual(result["status"], "no_actual_demand_in_evaluation_window")
+        self.assertIsNone(result["weighted_absolute_percentage_error"])
+        self.assertIsNone(result["mean_absolute_percentage_error"])
+
     def test_forecast_backtest_does_not_claim_accuracy_without_history(self):
         history = [
             {"month": f"2025-{index + 1:02d}-01", "approved_headcount": 0,
