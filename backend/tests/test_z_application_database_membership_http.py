@@ -157,7 +157,7 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
             "updated_at": NOW,
         }
 
-    def test_real_application_lookup_and_membership_block_cross_tenant_read_and_transition(self):
+    def test_real_application_membership_scoped_lookup_hides_cross_tenant_read_and_transition(self):
         # The route uses a real application lookup with an organisation-membership
         # EXISTS predicate. No application lookup or transition service method is mocked.
         self.current_user["id"] = str(ACTOR)
@@ -169,7 +169,7 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
             f"/api/applications/{APPLICATION}/transition",
             json={"status": "screening", "reason": "CV reviewed"},
         )
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
 
         import psycopg
 
