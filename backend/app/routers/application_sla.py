@@ -116,3 +116,15 @@ async def list_application_sla_deadlines(
         return [ApplicationSLADeadlineOut.model_validate(row) for row in rows]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _database_error(exc) from exc
+
+
+@router.post("/sla-deadlines/refresh-overdue", response_model=list[dict])
+async def refresh_overdue_application_sla_deadlines(
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[dict]:
+    assert_org_admin(user_id, organization_id)
+    try:
+        return await deadline_service.refresh_overdue(organization_id)
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
