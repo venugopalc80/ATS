@@ -2,8 +2,8 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.auth import assert_org_admin, get_current_user_id
-from app.db import DatabaseConfigurationError, DatabaseConnectionError
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id
+from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.schemas.application_assignments import (
     ApplicationAssignmentHistoryOut,
     ApplicationAssignmentOut,
@@ -27,7 +27,7 @@ async def set_application_assignment(
 ) -> ApplicationAssignmentOut:
     try:
         # Only organisation owners/admins can allocate work to another recruiter.
-        with __import__("app.db", fromlist=["get_connection"]).get_connection() as connection:
+        with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     "select organization_id from public.applications where id=%s",
@@ -66,7 +66,6 @@ async def get_application_assignment(
                 application = cursor.fetchone()
         if application is None:
             raise HTTPException(status_code=404, detail="Application not found")
-        from app.auth import assert_org_member
         assert_org_member(user_id, application["organization_id"])
         row = await service.get(application_id, application["organization_id"])
         if row is None:
