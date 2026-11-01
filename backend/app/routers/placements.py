@@ -8,10 +8,10 @@ from app.services.placement_service import create_placement, get_placement, list
 router = APIRouter(prefix="/api/placements", tags=["placements"])
 
 @router.get("", response_model=list[PlacementOut])
-def get_placements(organization_id: UUID, status_filter: str | None = Query(None, alias="status"), user_id: UUID = Depends(get_current_user_id)):
+def get_placements(organization_id: UUID, status_filter: str | None = Query(None, alias="status"), candidate_id: UUID | None = Query(None), user_id: UUID = Depends(get_current_user_id)):
     require_permission(user_id, organization_id, "placement.read")
     try:
-        return [PlacementOut.model_validate(row) for row in list_placements(organization_id, status_filter)]
+        return [PlacementOut.model_validate(row) for row in list_placements(organization_id, status_filter, candidate_id)]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(503, "Database operation failed") from exc
 
