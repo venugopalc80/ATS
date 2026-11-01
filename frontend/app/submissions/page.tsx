@@ -61,6 +61,7 @@ export default function SubmissionsPage() {
   const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
   const [bulkStatus, setBulkStatus] = useState<ApplicationStatus | "">("");
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkFailures, setBulkFailures] = useState<Array<{ application_id: string; error: string }>>([]);
 
   const jobMap = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
   const candidateMap = useMemo(() => new Map(candidates.map((candidate) => [candidate.id, candidate])), [candidates]);
@@ -191,6 +192,7 @@ export default function SubmissionsPage() {
       return;
     }
     setBulkSaving(true);
+    setBulkFailures([]);
     try {
       const response = await apiFetch(API_BASE + "/api/applications/bulk-transition", {
         method: "POST",
@@ -218,7 +220,14 @@ export default function SubmissionsPage() {
         const nextStatus = successful.get(item.id);
         return nextStatus ? { ...item, status: nextStatus } : item;
       }));
-      setSelectedApplicationIds(result.results.filter((item) => !item.success).map((item) => item.application_id));
+      const failures = result.results
+        .filter((item) => !item.success)
+        .map((item) => ({
+          application_id: item.application_id,
+          error: item.error ?? "The application could not be moved.",
+        }));
+      setBulkFailures(failures);
+      setSelectedApplicationIds(failures.map((item) => item.application_id));
       setMessage(
         result.failed
           ? result.succeeded + " application(s) moved; " + result.failed + " failed. Failed records remain selected so you can review them."
@@ -394,8 +403,22 @@ export default function SubmissionsPage() {
                 {stages.filter((stage) => stage.enabled).map((stage) => <option key={stage.stage_key} value={stage.stage_key}>{stage.label}</option>)}
               </select>
               <button className="btn primary" disabled={!bulkStatus || bulkSaving} onClick={() => void runBulkTransition()}>{bulkSaving ? "Updating..." : "Apply to selected"}</button>
-              <button className="btn" disabled={bulkSaving} onClick={() => setSelectedApplicationIds([])}>Clear selection</button>
+              <button className="btn" disabled={bulkSaving} onClick={() => { setSelectedApplicationIds([]); setBulkFailures([]); }}>Clear selection</button>
               <span className="muted-small">Up to 100 applications per batch. Invalid transitions are reported individually.</span>
+            </div>}
+            {bulkFailures.length > 0 && <div role="alert" aria-live="polite" style={{ margin: "8px 0 14px", padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}>
+              <strong>{bulkFailures.length} application(s) need attention</strong>
+              <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                {bulkFailures.map((failure) => {
+                  const failedApplication = applications.find((item) => item.id === failure.application_id);
+                  const failedCandidate = failedApplication ? candidateMap.get(failedApplication.candidate_id) : undefined;
+                  const failedJob = failedApplication ? jobMap.get(failedApplication.job_id) : undefined;
+                  const label = failedCandidate ? candidateName(failedCandidate) : failure.application_id.slice(0, 8).toUpperCase();
+                  return <li key={failure.application_id}>
+                    <strong>{label}</strong>{failedJob?.title ? " · " + failedJob.title : ""}: {failure.error}
+                  </li>;
+                })}
+              </ul>
             </div>}
             <div style={{ overflowX: "auto" }}><table className="table applicant-table">
               <thead><tr><th><input type="checkbox" aria-label="Select all applications on this page" checked={pageApplications.length > 0 && pageApplications.every((item) => selectedApplicationIds.includes(item.id))} onChange={(event) => {
