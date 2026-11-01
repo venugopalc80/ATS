@@ -37,6 +37,8 @@ class OrganizationSettings(BaseModel):
 class OrganizationSettingsPatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    expected_version: int = Field(ge=0)
+
     brand_name: str | None = Field(default=None, min_length=2, max_length=100)
     default_country_code: str | None = Field(default=None, pattern=r"^[A-Z]{2}$")
     default_currency: str | None = Field(default=None, pattern=r"^[A-Z]{3}$")
@@ -98,7 +100,7 @@ async def update_organization_settings(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_admin(user_id, organization_id)
-    patch = payload.model_dump(exclude_unset=True)
+    patch = payload.model_dump(exclude_unset=True, exclude={"expected_version"})
     if not patch:
         raise HTTPException(status_code=400, detail="Provide at least one setting to update")
 
@@ -118,12 +120,23 @@ async def update_organization_settings(
                     [organization_id],
                 )
                 current = cursor.fetchone()
+                current_version = int(current["version"]) if current is not None else 0
+                if payload.expected_version != current_version:
+                    raise HTTPException(
+                        status_code=409,
+                        detail=(
+                            f"Settings changed since you loaded them (expected version "
+                            f"{payload.expected_version}, current version {current_version}). "
+                            "Reload the latest settings before saving."
+                        ),
+                    )
+
                 if current is None:
                     current_settings = OrganizationSettings().model_dump()
                     next_version = 1
                 else:
                     current_settings = OrganizationSettings.model_validate(current["settings"]).model_dump()
-                    next_version = int(current["version"]) + 1
+                    next_version = current_version + 1
 
                 current_settings.update(patch)
                 try:
