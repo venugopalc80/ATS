@@ -5,12 +5,14 @@ on:
     branches: [main]
     paths:
       - "backend/**"
+      - "frontend/**"
       - "supabase/migrations/**"
       - ".github/workflows/section8-tests.yml"
   push:
     branches: ["feat/section8-security-privacy-resilience"]
     paths:
       - "backend/**"
+      - "frontend/**"
       - "supabase/migrations/**"
       - ".github/workflows/section8-tests.yml"
 
@@ -32,3 +34,20 @@ jobs:
           cache-dependency-path: backend/requirements.txt
       - run: pip install -r requirements.txt pytest
       - run: PYTHONPATH=. pytest -q tests/test_privacy_models.py tests/test_audit_validation.py tests/test_auth_security.py tests/test_documents_validation.py tests/test_dashboard.py tests/test_recruitment_submission_workflow.py
+
+  frontend-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v5
+        with:
+          node-version: "20"
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm install
+      - name: Typecheck
+        working-directory: frontend
+        run: npm run typecheck
+      - name: Production build
+        working-directory: frontend
+        run: npm run build
