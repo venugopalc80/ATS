@@ -24,6 +24,19 @@ def fake_connection(cursor):
     return connection
 
 
+class JobReferenceSchemaTests(unittest.TestCase):
+    def test_job_reference_is_not_client_assignable_or_editable(self):
+        from app.schemas.jobs import JobCreate, JobUpdate
+        payload = JobCreate(
+            organization_id=ORG,
+            title="Platform Engineer",
+            job_code="MANUAL-123",
+        )
+        self.assertNotIn("job_code", payload.model_dump())
+        update = JobUpdate(job_code="CHANGED-123")
+        self.assertNotIn("job_code", update.model_dump(exclude_unset=True))
+
+
 class JobStatusTransitionTests(unittest.IsolatedAsyncioTestCase):
     async def test_open_job_cannot_transition_back_to_draft(self):
         existing = {"id": JOB, "organization_id": ORG, "status": "open"}
