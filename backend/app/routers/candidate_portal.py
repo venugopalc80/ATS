@@ -189,3 +189,82 @@ async def get_candidate_portal_application(
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(status_code=503, detail="Candidate portal is temporarily unavailable") from exc
+
+
+def _candidate_document_payload(row) -> dict:
+    """Return metadata safe for the candidate; never expose private storage coordinates."""
+    return {
+        "id": row["id"],
+        "application_id": row.get("application_id"),
+        "document_type": row["document_type"],
+        "original_filename": row["original_filename"],
+        "content_type": row["content_type"],
+        "file_size_bytes": row["file_size_bytes"],
+        "created_at": row["created_at"],
+    }
+
+
+@router.get("/documents")
+async def list_candidate_portal_documents(
+    organization_id: UUID = Query(...),
+    user=Depends(get_current_user),
+):
+    user_id = UUID(str(user.id))
+    candidate_id = _require_link(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select id, application_id, document_type, original_filename,
+                              content_type, file_size_bytes, created_at
+                       from public.candidate_documents
+                       where organization_id=%s and candidate_id=%s and deleted_at is null
+                       order by created_at desc""",
+                    [organization_id, candidate_id],
+                )
+                return {"documents": [_candidate_document_payload(row) for row in cursor.fetchall()]}
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Candidate portal is temporarily unavailable") from exc
+
+
+@router.post("/documents/{document_id}/download")
+async def create_candidate_document_download(
+    document_id: UUID,
+    organization_id: UUID = Query(...),
+    user=Depends(get_current_user),
+):
+    user_id = UUID(str(user.id))
+    candidate_id = _require_link(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    """select storage_bucket, storage_path, original_filename
+                       from public.candidate_documents
+                       where id=%s and organization_id=%s and candidate_id=%s
+                         and deleted_at is null""",
+                    [document_id, organization_id, candidate_id],
+                )
+                document = cursor.fetchone()
+                if document is None:
+                    raise HTTPException(status_code=404, detail="Document not found")
+
+        from app.routers.documents import storage_client
+
+        result = storage_client().storage.from_(document["storage_bucket"]).create_signed_url(
+            document["storage_path"], 60, options={"download": True}
+        )
+        signed_url = result.get("signedURL") or result.get("signedUrl")
+        if not signed_url:
+            raise HTTPException(status_code=503, detail="Unable to create secure download link")
+        return {
+            "url": signed_url,
+            "filename": document["original_filename"],
+            "expires_in": 60,
+        }
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(status_code=503, detail="Candidate portal is temporarily unavailable") from exc
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail="Document service is temporarily unavailable") from exc
