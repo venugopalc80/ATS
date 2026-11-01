@@ -64,7 +64,7 @@ def _validate_filters(report_type: str, filters: ReportFilters) -> None:
 
 
 def _filters_json(filters: ReportFilters) -> str:
-    return json.dumps(filters.dict(exclude_none=True), default=str)
+    return json.dumps(filters.model_dump(exclude_none=True), default=str)
 
 
 def _public_report(row: dict) -> dict:
@@ -175,7 +175,7 @@ async def update_saved_report(
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_member(user_id, organization_id)
-    changes = payload.dict(exclude_unset=True)
+    changes = payload.model_dump(exclude_unset=True)
     if not changes:
         raise HTTPException(status_code=422, detail="Provide at least one field to update")
     try:

@@ -37,6 +37,12 @@ class FakeCursor:
         self.one = None
         self.many = []
 
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_args):
+        return False
+
     def execute(self, sql, params=None):
         self.queries.append((sql, params))
 
