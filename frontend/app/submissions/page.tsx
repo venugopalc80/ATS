@@ -22,6 +22,9 @@ type Application = {
   created_at: string;
 };
 
+type Recruiter = { id: string; full_name?: string | null; email?: string | null };
+type ApplicationAssignment = { application_id: string; recruiter_id: string | null; assigned_at: string | null };
+
 type ApplicationStageConfig = {
   organization_id: string;
   stage_key: ApplicationStatus;
@@ -41,6 +44,10 @@ export default function SubmissionsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [stages, setStages] = useState<ApplicationStageConfig[]>([]);
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string | null>>({});
+  const [canManageAssignments, setCanManageAssignments] = useState(false);
+  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -88,17 +95,26 @@ export default function SubmissionsPage() {
       }
       try {
         const org = encodeURIComponent(organizationId);
-        const [apps, jobResponse, candidateResponse, stageResponse] = await Promise.all([
+        const [apps, jobResponse, candidateResponse, stageResponse, recruiterResponse, assignmentResponse, meResponse] = await Promise.all([
           apiFetch(API_BASE + "/api/applications?organization_id=" + org),
           apiFetch(API_BASE + "/api/jobs?organization_id=" + org),
           apiFetch(API_BASE + "/api/candidates?organization_id=" + org),
           apiFetch(API_BASE + "/api/applications/stages?organization_id=" + org),
+          apiFetch(API_BASE + "/api/applications/recruiters?organization_id=" + org),
+          apiFetch(API_BASE + "/api/applications/assignments?organization_id=" + org),
+          apiFetch(API_BASE + "/api/me"),
         ]);
-        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok || !stageResponse.ok) throw new Error("Unable to load recruitment pipeline and stage configuration.");
+        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok || !stageResponse.ok || !recruiterResponse.ok || !assignmentResponse.ok || !meResponse.ok) throw new Error("Unable to load recruitment pipeline, recruiter directory and assignment data.");
         setApplications(await apps.json());
         setJobs(await jobResponse.json());
         setCandidates(await candidateResponse.json());
         setStages(await stageResponse.json());
+        setRecruiters(await recruiterResponse.json());
+        const assignmentRows: ApplicationAssignment[] = await assignmentResponse.json();
+        setAssignments(Object.fromEntries(assignmentRows.map((item) => [item.application_id, item.recruiter_id])));
+        const me = await meResponse.json();
+        const membership = (me.organizations ?? []).find((item: { id: string; role: string }) => item.id === organizationId);
+        setCanManageAssignments(membership?.role === "owner" || membership?.role === "admin");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to load submissions.");
       } finally {
@@ -178,6 +194,37 @@ export default function SubmissionsPage() {
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update application.");
+    }
+  }
+
+  async function changeAssignment(application: Application, recruiterId: string) {
+    const currentRecruiterId = assignments[application.id] ?? null;
+    const nextRecruiterId = recruiterId || null;
+    if (currentRecruiterId === nextRecruiterId || savingAssignmentId) return;
+    const reason = window.prompt(nextRecruiterId ? "Why is this application being assigned or reassigned?" : "Why is this application being unassigned?");
+    if (reason === null) return;
+    if (!reason.trim() || reason.trim().length > 1000) {
+      setMessage("Enter an assignment reason between 1 and 1000 characters.");
+      return;
+    }
+    setSavingAssignmentId(application.id);
+    try {
+      const response = await apiFetch(API_BASE + "/api/applications/" + application.id + "/assignment", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recruiter_id: nextRecruiterId, reason: reason.trim() }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail ?? "Unable to update recruiter assignment.");
+      }
+      const updated: ApplicationAssignment = await response.json();
+      setAssignments((current) => ({ ...current, [application.id]: updated.recruiter_id }));
+      setMessage(nextRecruiterId ? "Recruiter assignment updated." : "Application unassigned.");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update recruiter assignment.");
+    } finally {
+      setSavingAssignmentId(null);
     }
   }
 
@@ -407,9 +454,9 @@ export default function SubmissionsPage() {
                   const pageIds = new Set(pageApplications.map((item) => item.id));
                   setSelectedApplicationIds(selectedApplicationIds.filter((id) => !pageIds.has(id)));
                 }
-              }} /></th><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
+              }} /></th><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th>{canManageAssignments && <th>Assigned recruiter</th>}<th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={11}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={11}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
+                {loading ? <tr><td colSpan={canManageAssignments ? 12 : 11}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={canManageAssignments ? 12 : 11}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
                     const candidate = candidateMap.get(application.candidate_id);
                     const job = jobMap.get(application.job_id);
                     return (
@@ -426,7 +473,7 @@ export default function SubmissionsPage() {
                         <td><Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link></td>
                         <td>{candidate?.email ?? "—"}</td><td>{candidate?.phone ?? "—"}</td><td>{[candidate?.city, candidate?.region].filter(Boolean).join(", ") || "—"}</td><td>{application.source || "Direct"}</td>
                         <td><select className="filter" aria-label={"Status for " + candidateName(candidate)} value={application.status} onChange={(event) => void changeStatus(application, event.target.value as ApplicationStatus)}><option value={application.status}>{application.status.replaceAll("_", " ")}</option>{(stageMap.get(application.status)?.allowed_next_stages ?? []).filter((next) => stageMap.get(next)?.enabled).map((next) => <option key={next} value={next}>{stageLabel(next)}</option>)}</select></td>
-                        <td>{job?.title ?? "Unknown job"}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td><td>{new Date(application.created_at).toLocaleDateString()}</td>
+                        <td>{job?.title ?? "Unknown job"}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td>{canManageAssignments && <td><select className="filter" aria-label={"Assigned recruiter for " + candidateName(candidate)} value={assignments[application.id] ?? ""} disabled={savingAssignmentId === application.id} onChange={(event) => void changeAssignment(application, event.target.value)}><option value="">Unassigned</option>{recruiters.map((recruiter) => <option key={recruiter.id} value={recruiter.id}>{recruiter.full_name || recruiter.email || recruiter.id.slice(0, 8)}</option>)}</select></td>}<td>{new Date(application.created_at).toLocaleDateString()}</td>
                       </tr>
                     );
                   })}
