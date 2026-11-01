@@ -36,6 +36,14 @@
 - [ ] Verify no requisition rows or unrelated tables were changed by the migration.
 - [ ] Re-run the staging security/performance advisors and compare with the captured baseline.
 
+## Preview smoke checks
+
+- [x] Feature-branch frontend preview for code commit `4a198a20d562b6b9791acfb2ed61d5239ee2ac1a` reached READY: https://aqerith-f667rzdm2-the-pixel-muses.vercel.app
+- [x] `/requisitions` returns HTTP 200 and serves the requisitions page bundle; the page correctly remains behind the AQERITH access/session check.
+- [x] ATS-Staging API preview health endpoint returns HTTP 200: https://ats-staging-95l0vwjdc-the-pixel-muses.vercel.app/
+- [ ] Complete authenticated browser acceptance with authorised staging test accounts. Anonymous HTML/health checks do not prove signed-in workflows or tenant isolation.
+- [ ] Verify a fresh preview for the latest branch head after its deployment completes.
+
 ## Authenticated API and RLS role matrix
 
 Use test accounts in a dedicated staging organisation and a second organisation. Do not use real candidate or customer data.
