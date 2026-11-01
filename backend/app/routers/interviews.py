@@ -9,10 +9,10 @@ router = APIRouter(prefix="/api/interviews", tags=["interviews"])
 service = InterviewService()
 
 @router.get("", response_model=list[InterviewOut])
-async def list_interviews(organization_id: UUID, status: str | None = Query(default=None), user_id: UUID = Depends(get_current_user_id)):
+async def list_interviews(organization_id: UUID, status: str | None = Query(default=None), candidate_id: UUID | None = Query(default=None), user_id: UUID = Depends(get_current_user_id)):
     require_permission(user_id, organization_id, "interview.read")
     try:
-        return [InterviewOut.model_validate(x) for x in await service.list_interviews(organization_id, status)]
+        return [InterviewOut.model_validate(x) for x in await service.list_interviews(organization_id, status, candidate_id)]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise HTTPException(503, "Database operation failed") from exc
 
