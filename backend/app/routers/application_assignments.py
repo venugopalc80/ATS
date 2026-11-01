@@ -82,13 +82,7 @@ async def get_application_assignment_history(
     user_id: UUID = Depends(get_current_user_id),
 ) -> list[ApplicationAssignmentHistoryOut]:
     try:
-        with get_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute(
-                    "select organization_id from public.applications where id=%s",
-                    [application_id],
-                )
-                application = cursor.fetchone()
+        application = _get_application_for_member(application_id, user_id)
         if application is None:
             raise HTTPException(status_code=404, detail="Application not found")
         assert_org_member(user_id, application["organization_id"])
