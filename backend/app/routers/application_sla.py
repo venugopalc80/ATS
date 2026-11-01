@@ -4,7 +4,8 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
-from app.schemas.application_sla import ApplicationSLAPolicyOut, ApplicationSLAPolicyUpdate
+from app.schemas.application_sla import ApplicationSLADeadlineOut, ApplicationSLAPolicyOut, ApplicationSLAPolicyUpdate
+from app.services.application_sla_service import ApplicationSLADueService
 
 router = APIRouter(prefix="/api/applications", tags=["application SLA"])
 COLUMNS = (
@@ -71,5 +72,47 @@ async def update_sla_policy(
         return ApplicationSLAPolicyOut.model_validate(row)
     except HTTPException:
         raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+
+
+deadline_service = ApplicationSLADueService()
+
+
+@router.post("/{application_id}/sla-deadlines/recalculate", response_model=list[ApplicationSLADeadlineOut])
+async def recalculate_application_sla_deadlines(
+    application_id: UUID,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[ApplicationSLADeadlineOut]:
+    assert_org_member(user_id, organization_id)
+    try:
+        rows = await deadline_service.recalculate_initial_deadlines(
+            application_id, organization_id
+        )
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail="Application or enabled SLA policy not found",
+            )
+        return [ApplicationSLADeadlineOut.model_validate(row) for row in rows]
+    except HTTPException:
+        raise
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+
+@router.get("/{application_id}/sla-deadlines", response_model=list[ApplicationSLADeadlineOut])
+async def list_application_sla_deadlines(
+    application_id: UUID,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[ApplicationSLADeadlineOut]:
+    assert_org_member(user_id, organization_id)
+    try:
+        rows = await deadline_service.list_deadlines(application_id, organization_id)
+        return [ApplicationSLADeadlineOut.model_validate(row) for row in rows]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _database_error(exc) from exc
