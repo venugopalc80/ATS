@@ -256,9 +256,22 @@ async def mark_read(conversation_id: UUID, user_id: UUID = Depends(get_current_u
 async def set_pinned(conversation_id: UUID, pinned: bool = Query(...), user_id: UUID = Depends(get_current_user_id)):
     with get_connection() as connection:
         with connection.cursor() as cursor:
+            # Serialize pin changes with leave/removal so a departed member cannot
+            # race the membership check and mutate their inactive membership row.
+            cursor.execute("""
+              select id from public.conversations
+              where id=%s and archived_at is null
+              for update
+            """, [conversation_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Conversation not found")
             _member(cursor, conversation_id, user_id)
-            cursor.execute("update public.conversation_members set is_pinned=%s where conversation_id=%s and user_id=%s",
-                           [pinned,conversation_id,user_id])
+            cursor.execute("""
+              update public.conversation_members set is_pinned=%s
+              where conversation_id=%s and user_id=%s and left_at is null
+            """, [pinned,conversation_id,user_id])
+            if cursor.rowcount == 0:
+                raise HTTPException(status_code=404, detail="Conversation not found")
             return {"pinned": pinned}
 
 
