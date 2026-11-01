@@ -43,7 +43,7 @@ class FakeCursor:
             return {"total": 8}
         if "from public.interviews where" in self.sql:
             return {"total": 1}
-        if "from public.placements where" in self.sql and "date_trunc('month'" in self.sql:
+        if "from public.placements where" in self.sql and "created_at >= %s" in self.sql:
             return {"total": 3}
         if "from public.placements where" in self.sql:
             return {"total": 4}
@@ -137,6 +137,16 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(result["pipeline"]["new"], 2)
         self.assertEqual(result["pipeline"]["rejected"], 1)
         self.assertEqual(result["date_range"], {"from": "2026-10-01", "to": "2026-10-13"})
+        pipeline_query = next((sql, params) for sql, params in cursor.queries if "group by status" in sql)
+        self.assertEqual(pipeline_query[1][1], datetime(2026, 9, 30, 23, tzinfo=timezone.utc))
+        self.assertEqual(pipeline_query[1][2], datetime(2026, 10, 13, 23, tzinfo=timezone.utc))
+        vacancy_query = next((sql, params) for sql, params in cursor.queries if "left join public.applications" in sql)
+        self.assertIn("at time zone %s", vacancy_query[0])
+        self.assertEqual(vacancy_query[1][0], date(2026, 10, 13))
+        self.assertEqual(vacancy_query[1][1], "Europe/London")
+        month_query = next((sql, params) for sql, params in cursor.queries if "from public.placements" in sql and "created_at >= %s" in sql)
+        self.assertEqual(month_query[1][0], ORG)
+        self.assertEqual(month_query[1][1], datetime(2026, 9, 30, 23, tzinfo=timezone.utc))
         self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews?interview_id={INTERVIEW}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers?offer_id={OFFER}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "vacancy_health" and item["href"] == f"/jobs?job_id={JOB}" for item in result["priorities"]))
@@ -163,6 +173,12 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual((end - start).total_seconds(), 23 * 3600)
         start, end = helper("Europe/London", datetime(2026, 10, 25, 12, tzinfo=timezone.utc))
         self.assertEqual((end - start).total_seconds(), 25 * 3600)
+
+    def test_arbitrary_organisation_date_bounds_cover_local_calendar_day(self):
+        start, end = dashboard_router.organisation_date_bounds_utc("Europe/London", date(2026, 3, 29))
+        self.assertEqual(start, datetime(2026, 3, 29, 0, tzinfo=timezone.utc))
+        self.assertEqual(end, datetime(2026, 3, 29, 23, tzinfo=timezone.utc))
+        self.assertEqual((end - start).total_seconds(), 23 * 3600)
 
     def test_invalid_organisation_timezone_is_rejected(self):
         with self.assertRaises(HTTPException) as error:
