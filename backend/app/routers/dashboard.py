@@ -3,7 +3,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import get_current_user_id, require_permission
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/dashboard", tags=["dashboard"])
@@ -22,7 +22,7 @@ async def dashboard(
     date_to: date | None = Query(default=None),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "dashboard.read")
     if date_from and date_to and date_from > date_to:
         raise HTTPException(status_code=422, detail="date_from must be on or before date_to")
 
