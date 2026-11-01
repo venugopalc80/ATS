@@ -34,7 +34,7 @@ async def latest_notes(
     candidate_ids: list[UUID] = Query(..., min_length=1, max_length=50),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "candidate.notes.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
