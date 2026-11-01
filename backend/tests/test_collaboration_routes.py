@@ -149,6 +149,55 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertEqual(result[0]["id"], str(message_id))
 
 
+    def test_conversation_events_are_scoped_from_member_join_date(self):
+        from datetime import datetime, timezone
+
+        conversation_id, user_id, event_id, actor_id = uuid4(), uuid4(), uuid4(), uuid4()
+        joined_at = datetime(2026, 10, 1, tzinfo=timezone.utc)
+        created_at = datetime(2026, 10, 2, tzinfo=timezone.utc)
+
+        class EventsCursor(FakeCursor):
+            def __init__(self):
+                super().__init__(rows=[{
+                    "id": event_id, "event_type": "member_added",
+                    "actor_user_id": actor_id, "target_user_id": user_id,
+                    "metadata": {}, "created_at": created_at,
+                    "actor_name": "Team Owner", "target_name": "Recruiter",
+                }])
+                self.fetchone_rows = [{"joined_at": joined_at}]
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = EventsCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(collaboration.list_conversation_events(
+                conversation_id=conversation_id, before=None, limit=25, user_id=user_id
+            ))
+
+        self.assertEqual(result[0]["id"], str(event_id))
+        self.assertEqual(result[0]["actor_name"], "Team Owner")
+        self.assertIn("e.created_at >= %s", cursor.query)
+        self.assertEqual(cursor.params, [conversation_id, joined_at, None, None, 25])
+
+    def test_non_member_cannot_read_conversation_events(self):
+        conversation_id, user_id = uuid4(), uuid4()
+
+        class NonMemberEventsCursor(FakeCursor):
+            def fetchone(self):
+                return None
+
+        cursor = NonMemberEventsCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.list_conversation_events(
+                    conversation_id=conversation_id, before=None, limit=50, user_id=user_id
+                ))
+
+        self.assertEqual(error.exception.status_code, 404)
+        self.assertIn("cm.user_id=%s", cursor.query)
+
+
     def test_add_members_response_only_includes_members_actually_added(self):
         organization_id = uuid4()
         conversation_id = uuid4()
