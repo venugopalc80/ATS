@@ -52,6 +52,7 @@ class CandidatePortalDocumentTests(unittest.TestCase):
         self.assertNotIn("storage_bucket", payload)
         self.assertNotIn("sha256", payload)
         self.assertNotIn("candidate_id", payload)
+        self.assertNotIn("application_id", payload)
         self.assertNotIn("organization_id", payload)
 
 
