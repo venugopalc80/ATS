@@ -10,7 +10,7 @@ create table if not exists public.organization_permissions (
     description text not null,
     created_at timestamptz not null default now(),
     constraint organization_permissions_key_format
-        check (permission_key ~ '^[a-z][a-z0-9_]*(\\.[a-z][a-z0-9_]*)+$')
+        check (permission_key ~ '^[a-z][a-z0-9_]*([.][a-z][a-z0-9_]*)+$')
 );
 
 insert into public.organization_permissions (permission_key, module, description)
