@@ -133,3 +133,10 @@ The Supabase security advisor was reviewed read-only. The six analytics dependen
 The advisor also reported 13 other public tables with RLS enabled but no policies, a callable `SECURITY DEFINER` membership helper in the exposed public schema, the `vector` extension in `public`, and leaked-password protection disabled. These are wider platform security follow-ups, not changes made as part of Section 6. Review the [Supabase security advisor guidance](https://supabase.com/docs/guides/database/database-linter) before remediation; do not add broad policies merely to clear the warning.
 
 A read-only index inventory confirmed existing organisation-scoped access paths for stage history (`organization_id, application_id, created_at DESC`), requisitions, recruiter tasks, campaign channels and campaign memberships. The performance advisor reports unindexed foreign keys and unused indexes across the wider database; its output should be reviewed with query plans and production workload before adding or dropping indexes. No DDL or data writes were made.
+
+
+## Staging data and performance validation snapshot (2026-11-01)
+
+A read-only `pg_stat_user_tables` inspection returned `n_live_tup = 0` for all ten inspected analytics source tables: `applications`, `jobs`, `application_stage_history`, `job_requisitions`, `recruiter_tasks`, `recruitment_campaigns`, `campaign_channels`, `campaign_memberships`, `offers` and `interviews`. The same snapshot showed no `last_analyze` or `last_autoanalyze` timestamps for these tables.
+
+This means staging currently cannot provide representative data for forecast-vs-actual reconciliation, source/campaign conversion validation or realistic query-performance benchmarking. Index presence has been inventoried, but empty-table planner estimates must not be treated as evidence of production-scale performance. Before release, load synthetic fixtures into an isolated database with representative tenant and history volume, run the analytics integration tests and inspect `EXPLAIN (ANALYZE, BUFFERS)` there. Do not seed staging with fabricated recruitment data merely to make dashboard metrics look populated.
