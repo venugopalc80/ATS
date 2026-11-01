@@ -268,10 +268,12 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "created_at": NOW,
             "updated_at": NOW,
         }
-        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
-                with self.assertRaises(HTTPException) as error:
-                    await applications.get_application(APPLICATION, USER)
+        with patch.object(applications.service, "get_application_organization_id", new_callable=AsyncMock, return_value=ORG):
+            with patch.object(applications, "require_permission", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+                with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row) as get_application:
+                    with self.assertRaises(HTTPException) as error:
+                        await applications.get_application(APPLICATION, USER)
+        get_application.assert_not_awaited()
 
         self.assertEqual(error.exception.status_code, 403)
 
@@ -293,8 +295,8 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "created_at": NOW,
             "updated_at": NOW,
         }
-        with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+        with patch.object(applications.service, "get_application_organization_id", new_callable=AsyncMock, return_value=ORG):
+            with patch.object(applications, "require_permission", side_effect=HTTPException(status_code=403, detail="Forbidden")):
                 with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
                     with self.assertRaises(HTTPException) as error:
                         await applications.update_application(
