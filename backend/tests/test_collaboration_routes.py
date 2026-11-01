@@ -626,5 +626,72 @@ class CollaborationRouteScopeTests(unittest.TestCase):
         self.assertFalse(any("update public.conversations" in query.lower() for query in cursor.queries))
 
 
+    def test_activity_route_uses_composite_cursor_and_member_join_boundary(self):
+        from datetime import datetime, timezone
+
+        conversation_id, user_id, anchor_id = uuid4(), uuid4(), uuid4()
+        joined_at = datetime(2026, 1, 1, tzinfo=timezone.utc)
+        anchor_time = datetime(2026, 2, 1, 12, 0, tzinfo=timezone.utc)
+        event_id = uuid4()
+
+        class ActivityCursor(FakeCursor):
+            def __init__(self):
+                super().__init__(rows=[{
+                    "id": event_id, "event_type": "member_added",
+                    "actor_user_id": user_id, "actor_name": "Recruiter",
+                    "target_user_id": None, "target_name": None,
+                    "metadata": {}, "created_at": anchor_time,
+                }])
+                self.fetchone_rows = [{"joined_at": joined_at}, {"created_at": anchor_time}]
+                self.queries = []
+
+            def execute(self, query, params=None):
+                super().execute(query, params)
+                self.queries.append(query)
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = ActivityCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            result = asyncio.run(collaboration.list_conversation_events(
+                conversation_id=conversation_id,
+                before=None,
+                before_event_id=anchor_id,
+                limit=25,
+                user_id=user_id,
+            ))
+
+        self.assertIn("(e.created_at,e.id) < (%s,%s)", cursor.query)
+        self.assertIn("e.created_at >= %s", cursor.query)
+        self.assertEqual(cursor.params, [conversation_id, joined_at, anchor_time, anchor_id, 25])
+        self.assertEqual(result[0]["id"], str(event_id))
+
+    def test_activity_route_rejects_cursor_outside_visible_conversation_history(self):
+        conversation_id, user_id, foreign_event_id = uuid4(), uuid4(), uuid4()
+
+        class InvalidActivityCursor(FakeCursor):
+            def __init__(self):
+                super().__init__()
+                self.fetchone_rows = [{"joined_at": "joined"}, None]
+
+            def fetchone(self):
+                return self.fetchone_rows.pop(0)
+
+        cursor = InvalidActivityCursor()
+        with patch.object(collaboration, "get_connection", return_value=FakeConnection(cursor)):
+            with self.assertRaises(HTTPException) as error:
+                asyncio.run(collaboration.list_conversation_events(
+                    conversation_id=conversation_id,
+                    before=None,
+                    before_event_id=foreign_event_id,
+                    limit=25,
+                    user_id=user_id,
+                ))
+
+        self.assertEqual(error.exception.status_code, 404)
+        self.assertIn("conversation_events", cursor.query)
+        self.assertEqual(cursor.params, [foreign_event_id, conversation_id, "joined"])
+
 if __name__ == "__main__":
     unittest.main()
