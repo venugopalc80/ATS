@@ -180,5 +180,63 @@ class OfferCompensationPermissionTests(unittest.TestCase):
         self.assertIsNone(result.bonus_amount)
 
 
+class PlacementFeePermissionTests(unittest.TestCase):
+    def setUp(self):
+        from datetime import date, datetime, timezone
+        self.user_id = uuid4()
+        self.organization_id = uuid4()
+        self.row = {
+            "organization_id": self.organization_id,
+            "application_id": uuid4(),
+            "offer_id": None,
+            "job_id": uuid4(),
+            "candidate_id": uuid4(),
+            "client_id": None,
+            "status": "active",
+            "start_date": date(2026, 1, 1),
+            "end_date": None,
+            "fee_amount": 12000,
+            "fee_currency": "GBP",
+            "fee_type": "fixed",
+            "fee_percentage": None,
+            "notes": None,
+            "id": uuid4(),
+            "created_by": self.user_id,
+            "created_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+            "updated_at": datetime(2026, 1, 1, tzinfo=timezone.utc),
+        }
+
+    def test_placement_fee_fields_redacted_without_fee_read_permission(self):
+        from app.routers.placements import _placement_output
+        def permission(_user, _org, key):
+            if key == "placement.fee.read":
+                raise HTTPException(403, "denied")
+        with patch("app.routers.placements.require_permission", side_effect=permission):
+            result = _placement_output(self.row, self.user_id, self.organization_id)
+        self.assertIsNone(result.fee_amount)
+        self.assertIsNone(result.fee_currency)
+        self.assertIsNone(result.fee_type)
+        self.assertIsNone(result.fee_percentage)
+
+    def test_placement_fee_write_requires_separate_permission(self):
+        from types import SimpleNamespace
+        from app.routers.placements import _require_placement_write
+        payload = SimpleNamespace(model_fields_set={"fee_amount"})
+        with patch("app.routers.placements.require_permission") as permission:
+            _require_placement_write(self.user_id, self.organization_id, payload)
+        self.assertEqual(
+            [call.args[2] for call in permission.call_args_list],
+            ["placement.manage", "placement.fee.manage"],
+        )
+
+    def test_placement_non_fee_update_does_not_require_fee_permission(self):
+        from types import SimpleNamespace
+        from app.routers.placements import _require_placement_write
+        payload = SimpleNamespace(model_fields_set={"status"})
+        with patch("app.routers.placements.require_permission") as permission:
+            _require_placement_write(self.user_id, self.organization_id, payload)
+        permission.assert_called_once_with(self.user_id, self.organization_id, "placement.manage")
+
+
 if __name__ == "__main__":
     unittest.main()
