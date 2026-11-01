@@ -158,6 +158,57 @@ class CandidatePortalDocumentOwnershipTests(unittest.TestCase):
         storage_client.assert_not_called()
 
 
+class CandidatePortalAccountLinkTests(unittest.TestCase):
+    def test_unverified_user_is_rejected_before_database_access(self):
+        user = SimpleNamespace(
+            id=uuid4(),
+            email="candidate@example.com",
+            email_confirmed_at=None,
+            confirmed_at=None,
+        )
+        with patch.object(candidate_portal, "get_connection") as get_connection:
+            with self.assertRaises(HTTPException) as raised:
+                asyncio.run(candidate_portal.link_candidate_account(
+                    organization_id=uuid4(),
+                    user=user,
+                ))
+        self.assertEqual(raised.exception.status_code, 403)
+        get_connection.assert_not_called()
+
+    def test_ambiguous_candidate_matches_return_generic_response_without_linking(self):
+        class AmbiguousCursor(_FakeCursor):
+            def fetchall(self):
+                return self.current
+
+        class AmbiguousConnection(_FakeConnection):
+            def __init__(self, rows, statements):
+                self.cursor_value = AmbiguousCursor([rows], statements)
+
+        for match_count in (0, 2):
+            with self.subTest(match_count=match_count):
+                organization_id, user_id = uuid4(), uuid4()
+                matches = [{"id": uuid4()} for _ in range(match_count)]
+                statements = []
+
+                @contextmanager
+                def connection_factory():
+                    yield AmbiguousConnection(matches, statements)
+
+                user = SimpleNamespace(
+                    id=user_id,
+                    email="candidate@example.com",
+                    email_confirmed_at="2026-10-01T10:00:00Z",
+                )
+                with patch.object(candidate_portal, "get_connection", side_effect=connection_factory):
+                    response = asyncio.run(candidate_portal.link_candidate_account(
+                        organization_id=organization_id,
+                        user=user,
+                    ))
+
+                self.assertEqual(response.status_code, 202)
+                self.assertIn("If your verified email matches", response.body.decode())
+                self.assertEqual(len(statements), 1)
+                self.assertIn("limit 2", statements[0][0].lower())
 
 
 if __name__ == "__main__":
