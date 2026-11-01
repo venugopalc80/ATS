@@ -125,7 +125,7 @@ export default function SubmissionsPage() {
       }
       try {
         const org = encodeURIComponent(organizationId);
-        const [apps, jobResponse, candidateResponse, stageResponse, recruiterResponse, assignmentResponse, meResponse] = await Promise.all([
+        const [apps, jobResponse, candidateResponse, stageResponse, recruiterResponse, assignmentResponse, meResponse, slaDeadlineResponse] = await Promise.all([
           apiFetch(API_BASE + "/api/applications?organization_id=" + org),
           apiFetch(API_BASE + "/api/jobs?organization_id=" + org),
           apiFetch(API_BASE + "/api/candidates?organization_id=" + org),
@@ -133,13 +133,15 @@ export default function SubmissionsPage() {
           apiFetch(API_BASE + "/api/applications/recruiters?organization_id=" + org),
           apiFetch(API_BASE + "/api/applications/assignments?organization_id=" + org),
           apiFetch(API_BASE + "/api/me"),
+          apiFetch(API_BASE + "/api/applications/sla-deadlines?organization_id=" + org),
         ]);
-        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok || !stageResponse.ok || !recruiterResponse.ok || !assignmentResponse.ok || !meResponse.ok) throw new Error("Unable to load recruitment pipeline, assignment and recruiter data.");
+        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok || !stageResponse.ok || !recruiterResponse.ok || !assignmentResponse.ok || !meResponse.ok || !slaDeadlineResponse.ok) throw new Error("Unable to load recruitment pipeline, assignment and recruiter data.");
         setApplications(await apps.json());
         setJobs(await jobResponse.json());
         setCandidates(await candidateResponse.json());
         setStages(await stageResponse.json());
         setRecruiters(await recruiterResponse.json());
+        setSlaDeadlines(await slaDeadlineResponse.json());
         const assignmentRows: ApplicationAssignment[] = await assignmentResponse.json();
         setAssignments(Object.fromEntries(assignmentRows.map((item) => [item.application_id, item.recruiter_id])));
         const me = await meResponse.json();
@@ -379,6 +381,7 @@ export default function SubmissionsPage() {
             <div className="card"><div className="metric-title">In screening</div><div className="metric-value">{screeningCount}</div><div className="metric-foot">Active review</div></div>
             <div className="card"><div className="metric-title">Interviews</div><div className="metric-value">{interviewCount}</div><div className="metric-foot">Interview stage</div></div>
             <div className="card"><div className="metric-title">All applications</div><div className="metric-value">{applications.length}</div><div className="metric-foot">Across all stages</div></div>
+            <div className="card"><div className="metric-title">Overdue SLAs</div><div className="metric-value">{slaDeadlines.filter((item) => item.status === "overdue").length}</div><div className="metric-foot">Requires recruiter attention</div></div>
           </div>
           <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{stages.map((item) => <option key={item.stage_key} value={item.stage_key}>{item.label}</option>)}</select><select className="filter" aria-label="Filter application source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(1); }}><option value="all">All sources</option>{sourceOptions.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} application{filtered.length === 1 ? "" : "s"}</span></div></div>
           {message && <div className="notice">{message}</div>}
