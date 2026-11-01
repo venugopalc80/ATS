@@ -140,3 +140,16 @@ A read-only index inventory confirmed existing organisation-scoped access paths 
 A read-only `pg_stat_user_tables` inspection returned `n_live_tup = 0` for all ten inspected analytics source tables: `applications`, `jobs`, `application_stage_history`, `job_requisitions`, `recruiter_tasks`, `recruitment_campaigns`, `campaign_channels`, `campaign_memberships`, `offers` and `interviews`. The same snapshot showed no `last_analyze` or `last_autoanalyze` timestamps for these tables.
 
 This means staging currently cannot provide representative data for forecast-vs-actual reconciliation, source/campaign conversion validation or realistic query-performance benchmarking. Index presence has been inventoried, but empty-table planner estimates must not be treated as evidence of production-scale performance. Before release, load synthetic fixtures into an isolated database with representative tenant and history volume, run the analytics integration tests and inspect `EXPLAIN (ANALYZE, BUFFERS)` there. Do not seed staging with fabricated recruitment data merely to make dashboard metrics look populated.
+
+
+## Forecast backtest metric contract (2026-11-01)
+
+The new `GET /api/analytics/forecast/accuracy` endpoint validates the six-month approved-headcount baseline using a rolling-origin backtest over up to 18 complete months. Each evaluation month is predicted from the arithmetic mean of the preceding six complete months, including zero-activity months. The actual is approved requisition headcount in the evaluation month.
+
+- **MAE:** mean absolute headcount error across evaluation months.
+- **WAPE:** total absolute headcount error divided by total actual headcount; unavailable when evaluation actual headcount sums to zero.
+- **MAPE:** mean absolute percentage error over positive-actual months only; zero-actual months are excluded and this is explicitly returned in the response.
+- Accuracy status remains unavailable with fewer than three evaluation months, no historical approved requisitions, or no actual approved demand in the evaluation window.
+- A sample warning is raised when fewer than six evaluation months or fewer than three evaluation months have positive actual headcount.
+
+This backtest measures approved requisition demand, not hires, placements or revenue. It is historical validation, not a guarantee of future accuracy. Staging currently has no live-tuple estimates for the source tables, so the endpoint will correctly report unavailable until genuine approved requisition history exists; deterministic algorithm tests use synthetic data in CI.
