@@ -43,7 +43,7 @@ Progress percentages are engineering estimates of completed feature scope, not a
 - The unapproved support queue omits customer-written case subjects; regression coverage verifies subject data is absent before access approval.
 - Basic case metadata and customer-written case content use separate scopes. The case-detail endpoint requires explicit `case_content` approval; `case_metadata` alone cannot reveal subject/description. The scope allowlist was expanded on staging and verified in PostgreSQL.
 - Customer support and restricted platform operations UIs.
-- Regression coverage verifies platform operators cannot read case details without an active organisation-approved access grant, expired requests cannot be approved, and message reads are blocked when no active, unrevoked, unexpired grant matches.
+- Regression coverage verifies platform operators cannot read case details without an active organisation-approved access grant, including explicit SQL predicate assertions for approval, revocation and expiry; expired requests cannot be approved, and message reads are blocked when no active, unrevoked, unexpired grant matches.
 - Platform operators can open a case only with an active organisation-approved grant, view the approved conversation, send customer-visible replies, or add internal notes.
 - Validation tests authored for support request payloads.
 
