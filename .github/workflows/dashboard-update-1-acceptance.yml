@@ -32,7 +32,7 @@ jobs:
           --health-cmd "pg_isready -U postgres -d ats_test"
           --health-interval 10s
           --health-timeout 5s
-          --health-retries 5
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v5
@@ -48,6 +48,7 @@ jobs:
         working-directory: backend
         env:
           PYTHONPATH: .
+          CI: "true"
           DATABASE_URL: postgresql://postgres:postgres@localhost:5432/ats_test
           ATS_INTEGRATION_TESTS: "1"
         run: python -m unittest discover -s tests -v
