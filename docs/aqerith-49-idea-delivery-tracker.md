@@ -203,3 +203,35 @@ This refresh records the latest Idea 04 implementation and verification evidence
 
 - Verified delivery percentage: still not calculable until the canonical 49-row register and production deployment evidence are reconciled.
 - Evidence coverage percentage: still not calculated. This refresh improves evidence for Idea 04 only and does not establish the remaining 48 ideas.
+
+
+## Evidence refresh — 2026-11-01 (recruiter assignment follow-up)
+
+This follow-up is stacked on Idea 04's canonical feature branch. It does not alter the 49-idea completion calculation or release status.
+
+### Recruiter assignment implementation
+
+- Follow-up draft PR: [#87 — Recruiter assignment and audit history](https://github.com/venugopalc80/ATS/pull/87).
+- Branch: `feat/idea-04-recruiter-assignment-sla`.
+- Latest implementation commit at this tracker update: `94a35797529b1e8c4c9e438a363f909247b54c5c`.
+- Added `application_assignments` for current assignment and `application_assignment_history` for assignment/reassignment audit records.
+- Added backend endpoints to assign/unassign, retrieve a single assignment, read assignment history, list organisation recruiters and list organisation assignments.
+- Assignment writes are restricted to organisation owners/admins. The selected assignee must be a member of the same organisation with the `recruiter` role.
+- Application lookup for assignment read/write is tenant-scoped. API tests cover admin restrictions, non-member access and cross-tenant concealment.
+- Added recruiter assignment controls to the Applications Inbox table. The controls are shown only to organisation owners/admins and capture a reason for every assignment change.
+- SLA policies, deadline calculation, background monitoring, notifications and workload reporting are not implemented yet.
+
+### CI evidence and limitations
+
+- Initial run [#980](https://github.com/venugopalc80/ATS/actions/runs/41331585248) failed one assignment authorization test: the assignment read route was still using an unscoped database lookup while the test expected the membership-guarded path. Frontend checks passed (typecheck and production build).
+- Corrected the assignment read endpoints to use the shared tenant-scoped application lookup.
+- Latest run for commit `94a35797529b1e8c4c9e438a363f909247b54c5c`: [GitHub Actions](https://github.com/venugopalc80/ATS/actions/runs/41336129935), queued/in progress at the time of this update. Do not mark the latest backend or frontend checks passed until the run completes.
+- PR #87 remains draft and is stacked on PR #69. It is not merged.
+- No live Supabase migrations, migration repairs, live database writes, production deployments or merges were performed.
+
+**Current Idea 04 status:** Implementation is progressing; recruiter assignment is not yet CI-verified or staging-accepted. SLA work and authenticated acceptance remain outstanding. Do not treat this follow-up as production-ready.
+
+### Overall tracker reporting
+
+- Verified delivery percentage remains uncalculated pending canonical 49-row roadmap reconciliation and production evidence.
+- Evidence coverage percentage remains uncalculated. This follow-up adds evidence for part of Idea 04 only.
