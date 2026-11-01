@@ -45,6 +45,7 @@ values
  ('job.delete','jobs','Delete job records'),
  ('client.read','clients','View client records'),
  ('client.manage','clients','Create and update client records'),
+ ('client.delete','clients','Delete client records'),
  ('audit.read','administration','View organisation audit events'),
  ('member.read','administration','View organisation members')
 on conflict (permission_key) do update
