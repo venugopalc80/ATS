@@ -120,6 +120,23 @@ export default function SecurityPage() {
     }
   }
 
+  async function signOutOtherSessions() {
+    const confirmed = window.confirm("Sign out this AQERITH account from all other devices and browsers? This device will remain signed in.");
+    if (!confirmed) return;
+    setBusy(true);
+    setError("");
+    setNotice("");
+    try {
+      const { error: signOutError } = await getSupabaseClient().auth.signOut({ scope: "others" });
+      if (signOutError) throw signOutError;
+      setNotice("Other refresh-token sessions have been revoked. Existing access tokens may remain valid until they expire.");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "Other sessions could not be revoked.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function beginRemoval(factor: Factor) {
     setBusy(true);
     setError("");
@@ -273,6 +290,13 @@ export default function SecurityPage() {
               </div>
             </div>
           )}
+        </section>
+
+        <section style={{ background: "#fff", border: "1px solid #e2e8f0", borderRadius: 14, padding: 22, marginBottom: 18 }}>
+          <h2 style={{ margin: "0 0 8px", fontSize: 19 }}>Other signed-in devices</h2>
+          <p style={{ margin: "0 0 16px", color: "#66758a", fontSize: 14, lineHeight: 1.6 }}>End other refresh-token sessions for this account while keeping this device signed in. Supabase does not expose a safe per-device session inventory through the current browser client, so AQERITH does not display guessed device or location details.</p>
+          <button type="button" disabled={busy} onClick={() => void signOutOtherSessions()} style={{ border: "1px solid #e4c6c3", background: "#fff", color: "#a23d35", borderRadius: 9, padding: "10px 14px", cursor: "pointer", fontWeight: 700 }}>Sign out other sessions</button>
+          <p style={{ margin: "10px 0 0", color: "#8a6b4c", fontSize: 12, lineHeight: 1.5 }}>Revoked refresh tokens stop future session renewal. Previously issued access tokens can remain valid until their short expiry unless the API checks the session identifier against the Auth session table.</p>
         </section>
 
         <section style={{ background: "#fffaf2", border: "1px solid #f1dfc4", borderRadius: 14, padding: 18 }}>
