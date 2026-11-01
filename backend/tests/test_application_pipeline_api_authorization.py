@@ -1,11 +1,12 @@
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import UUID
 
 from fastapi import HTTPException
 
 from app.routers.applications import transition_application, update_application_stage
 from app.schemas.applications import ApplicationStageConfigUpdate, ApplicationTransition
+from app.services.application_service import ApplicationService
 
 
 ORG = UUID("11111111-1111-4111-8111-111111111111")
@@ -57,3 +58,29 @@ class ApplicationPipelineAuthorizationTests(unittest.IsolatedAsyncioTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class ApplicationTenantScopedReadTests(unittest.IsolatedAsyncioTestCase):
+    async def test_application_read_is_scoped_by_organisation_membership_in_sql(self):
+        application_id = APPLICATION
+        connection = MagicMock()
+        cursor = MagicMock()
+        connection.__enter__.return_value = connection
+        connection.__exit__.return_value = False
+        connection.cursor.return_value.__enter__.return_value = cursor
+        connection.cursor.return_value.__exit__.return_value = False
+        context = MagicMock()
+        context.__enter__.return_value = connection
+        context.__exit__.return_value = False
+        cursor.fetchone.return_value = None
+
+        with patch("app.services.application_service.get_connection", return_value=context):
+            result = await ApplicationService().get_application_for_member(application_id, USER)
+
+        sql, params = cursor.execute.call_args.args
+        self.assertIn("from public.applications a", sql.lower())
+        self.assertIn("from public.organization_members om", sql.lower())
+        self.assertIn("om.organization_id=a.organization_id", sql.replace(" ", "").lower())
+        self.assertIn("om.user_id=%s", sql.replace(" ", "").lower())
+        self.assertEqual(params, [application_id, USER])
+        self.assertIsNone(result)
