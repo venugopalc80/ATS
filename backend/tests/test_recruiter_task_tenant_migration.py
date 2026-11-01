@@ -84,8 +84,8 @@ class RecruiterTaskTenantMigrationTests(unittest.TestCase):
         with get_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute("insert into public.organizations (id) values (%s), (%s)", [self.org_a, self.org_b])
-                cur.execute("insert into public.candidates (id, organization_id) values (%s, %s)", [self.candidate, self.org_a])
-                cur.execute("insert into public.jobs (id, organization_id) values (%s, %s)", [self.job, self.org_a])
+                cur.execute("insert into public.candidates (id, organization_id, first_name) values (%s, %s, %s)", [self.candidate, self.org_a, "Integration"])
+                cur.execute("insert into public.jobs (id, organization_id, title) values (%s, %s, %s)", [self.job, self.org_a, "Integration role"])
 
     def tearDown(self):
         with get_connection() as conn:
