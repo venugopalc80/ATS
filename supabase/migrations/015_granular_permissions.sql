@@ -38,6 +38,7 @@ values
  ('offer.manage','offers','Create and update offer records'),
  ('offer.salary.read','offers','View salary and compensation fields'),
  ('offer.salary.manage','offers','Create and update salary and compensation fields'),
+ ('offer.salary.manage','offers','Create and update salary and compensation fields'),
  ('placement.read','placements','View placement records'),
  ('placement.manage','placements','Create and update placement records'),
  ('job.read','jobs','View job records'),
