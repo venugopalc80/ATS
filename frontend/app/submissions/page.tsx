@@ -419,12 +419,17 @@ export default function SubmissionsPage() {
                     throw new Error(detail?.detail ?? "Unable to create submission.");
                   }
                   const created: Application = await response.json();
+                  const deadlineResponse = await apiFetch(API_BASE + "/api/applications/" + created.id + "/sla-deadlines/recalculate?organization_id=" + encodeURIComponent(organizationId), { method: "POST" });
+                  if (deadlineResponse.ok) {
+                    const deadlines: ApplicationSLADeadline[] = await deadlineResponse.json();
+                    setSlaDeadlines((current) => [...current.filter((item) => item.application_id !== created.id), ...deadlines]);
+                  }
                   setApplications((current) => [created, ...current]);
                   setShowCreate(false);
                   setSelectedJob("");
                   setSelectedCandidate("");
                   setSource("Direct");
-                  setMessage("Submission created successfully.");
+                  setMessage(deadlineResponse.ok || deadlineResponse.status === 404 ? "Submission created successfully." : "Submission created, but SLA deadlines could not be calculated. Retry from the application workflow.");
                 } catch (error) {
                   setMessage(error instanceof Error ? error.message : "Unable to create submission.");
                 } finally {
