@@ -84,8 +84,40 @@ function formatDate(value: string | null | undefined, timeZone?: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", ...(timeZone ? { timeZone } : {}) }).format(date);
 }
 
-function friendlyAction(action: string) {
-  return action.replaceAll("_", " ").replace(/\b\w/g, (letter) => letter.toUpperCase());
+function friendlyActivityTitle(action: string, entityType: string) {
+  const key = action.trim().toLowerCase().replace(/[\\s-]+/g, "_");
+  const entity = entityType.trim().toLowerCase();
+
+  if (key === "insert" && ["candidate", "candidates"].includes(entity)) return "Candidate profile created";
+  if (key.includes("candidate") && key.includes("cv") && key.includes("bulk") && key.includes("import")) return "Candidate CVs imported";
+  if (key.includes("bulk") && key.includes("import") && ["candidate", "candidates"].includes(entity)) return "Candidate CVs imported";
+  if (key === "insert" && ["job", "jobs"].includes(entity)) return "Requisition created";
+  if (key === "insert" && ["interview", "interviews"].includes(entity)) return "Interview scheduled";
+  if (key === "insert" && ["offer", "offers"].includes(entity)) return "Offer created";
+  if (key === "insert" && ["placement", "placements"].includes(entity)) return "Placement created";
+
+  return action.replaceAll("_", " ").replace(/\\b\\w/g, (letter) => letter.toUpperCase());
+}
+
+function friendlyEntityType(entityType: string) {
+  const key = entityType.trim().toLowerCase();
+  const labels: Record<string, string> = {
+    candidate: "Candidate",
+    candidates: "Candidate",
+    job: "Requisition",
+    jobs: "Requisition",
+    interview: "Interview",
+    interviews: "Interview",
+    offer: "Offer",
+    offers: "Offer",
+    placement: "Placement",
+    placements: "Placement",
+    application: "Application",
+    applications: "Application",
+    submission: "Submission",
+    submissions: "Submission",
+  };
+  return labels[key] ?? "Recruitment record";
 }
 
 export default function Dashboard() {
@@ -331,7 +363,7 @@ export default function Dashboard() {
                 <div className="activity dashboard-activity">
                   {data.activity.map((item) => {
                     const target = ["job", "jobs"].includes(item.entity_type) ? "/jobs?job_id=" + item.entity_id : ["candidate", "candidates"].includes(item.entity_type) ? "/candidates/" + item.entity_id : ["interview", "interviews"].includes(item.entity_type) ? "/interviews/" + item.entity_id : ["placement", "placements"].includes(item.entity_type) ? "/placements/" + item.entity_id : ["offer", "offers"].includes(item.entity_type) ? "/offers/" + item.entity_id : "/submissions/" + item.entity_id;
-                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyAction(item.action)}</strong><div>{item.entity_type ? friendlyAction(item.entity_type) : "Recruitment event"} · {item.entity_id ? item.entity_id.slice(0, 8) : "Record"}</div><div className="activity-time">{formatDate(item.created_at, data?.timezone)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
+                    return <Link key={item.id} href={target} className="activity-row dashboard-activity-row"><div className="dot" /><div className="activity-text"><strong>{friendlyActivityTitle(item.action, item.entity_type)}</strong><div>{friendlyEntityType(item.entity_type)}</div><div className="activity-time">{formatDate(item.created_at, data?.timezone)}{item.actor_name ? " · " + item.actor_name : ""}</div></div></Link>;
                   })}
                 </div>
               )}
