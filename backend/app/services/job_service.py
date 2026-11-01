@@ -60,6 +60,13 @@ class JobService:
                     raise RuntimeError("Job was not created")
                 return row
 
+    async def get_job_organization_id(self, job_id: UUID) -> UUID | None:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.jobs where id = %s", [job_id])
+                row = cursor.fetchone()
+                return UUID(str(row["organization_id"])) if row else None
+
     async def get_job(self, job_id: UUID) -> dict[str, Any] | None:
         query = f"""
             select {JOB_COLUMNS}
