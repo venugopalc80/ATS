@@ -63,12 +63,16 @@ SIGNER_PROGRESS = {"pending": 0, "sent": 1, "viewed": 2, "signed": 3}
 
 
 def next_signer_status(current_status: str, event_status: str) -> str:
-    """Apply signer events monotonically so delayed provider events cannot regress state."""
+    """Apply known signer events monotonically without overwriting unknown states."""
+    # Preserve states introduced by a newer provider/API version. We cannot safely
+    # infer their ordering or replace them based on an event we do understand.
+    if current_status not in SIGNER_TERMINAL_STATUSES and current_status not in SIGNER_PROGRESS:
+        return current_status
     if current_status in SIGNER_TERMINAL_STATUSES:
         return current_status
     if event_status in SIGNER_TERMINAL_STATUSES:
         return event_status
-    if event_status not in SIGNER_PROGRESS or current_status not in SIGNER_PROGRESS:
+    if event_status not in SIGNER_PROGRESS:
         return current_status
     return event_status if SIGNER_PROGRESS[event_status] > SIGNER_PROGRESS[current_status] else current_status
 
