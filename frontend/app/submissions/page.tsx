@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DragEvent, FormEvent, useEffect, useMemo, useState } from "react";
+import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
 
