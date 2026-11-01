@@ -143,12 +143,6 @@ async def bulk_transition_applications(
             # Use the same not-found response for absent and cross-tenant records.
             if existing is None:
                 raise HTTPException(status_code=404, detail="Application not found")
-            try:
-                    except HTTPException as exc:
-                if exc.status_code in (401, 403, 404):
-                    raise HTTPException(status_code=404, detail="Application not found") from exc
-                raise
-
             row = await service.transition_application(
                 application_id,
                 payload.status,
