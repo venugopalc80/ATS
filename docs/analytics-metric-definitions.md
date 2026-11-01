@@ -153,3 +153,5 @@ The new `GET /api/analytics/forecast/accuracy` endpoint validates the six-month 
 - A sample warning is raised when fewer than six evaluation months or fewer than three evaluation months have positive actual headcount.
 
 This backtest measures approved requisition demand, not hires, placements or revenue. It is historical validation, not a guarantee of future accuracy. Staging currently has no live-tuple estimates for the source tables, so the endpoint will correctly report unavailable until genuine approved requisition history exists; deterministic algorithm tests use synthetic data in CI.
+
+Backtest MAE, WAPE and MAPE are calculated from unrounded floating-point errors; only the monthly display values are rounded for readability.
