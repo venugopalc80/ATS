@@ -111,7 +111,7 @@ export default function SettingsPage() {
               <div className="card-head"><span className="card-title">Regional settings</span><span className="badge blue">{organization.role}</span></div>
               <label style={{ display: "grid", gap: 8, maxWidth: 440, fontSize: 13, fontWeight: 650 }}>
                 Organisation timezone
-                <input className="filter" list="aqerith-timezones" value={timezone} disabled={!canEdit || saving} onChange={(event) => setTimezone(event.target.value)} placeholder="Europe/London" />
+                <input id="organization-timezone" name="organization-timezone" className="filter" list="aqerith-timezones" value={timezone} disabled={!canEdit || saving} onChange={(event) => setTimezone(event.target.value)} placeholder="Europe/London" />
                 <datalist id="aqerith-timezones"><option value="Europe/London" /><option value="America/New_York" /><option value="America/Chicago" /><option value="America/Denver" /><option value="America/Los_Angeles" /><option value="Asia/Kolkata" /><option value="Asia/Singapore" /><option value="Australia/Sydney" /><option value="Australia/Perth" /><option value="Pacific/Auckland" /><option value="UTC" /></datalist>
               </label>
               <p className="muted-small" style={{ lineHeight: 1.6, marginTop: 12 }}>Enter any valid IANA timezone. This timezone defines organisation-wide calendar boundaries and interview display times. Daylight-saving changes are handled automatically.</p>
