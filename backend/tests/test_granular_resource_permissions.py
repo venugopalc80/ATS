@@ -208,11 +208,7 @@ class PlacementFeePermissionTests(unittest.TestCase):
 
     def test_placement_fee_fields_redacted_without_fee_read_permission(self):
         from app.routers.placements import _placement_output
-        def permission(_user, _org, key):
-            if key == "placement.fee.read":
-                raise HTTPException(403, "denied")
-        with patch("app.routers.placements.require_permission", side_effect=permission):
-            result = _placement_output(self.row, self.user_id, self.organization_id)
+        result = _placement_output(self.row, include_fees=False)
         self.assertIsNone(result.fee_amount)
         self.assertIsNone(result.fee_currency)
         self.assertIsNone(result.fee_type)
