@@ -9,3 +9,4 @@ google-auth
 requests
 pypdf
 python-docx
+stripe>=12,<15
