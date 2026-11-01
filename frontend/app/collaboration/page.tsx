@@ -30,6 +30,8 @@ export default function CollaborationPage() {
   const [events, setEvents] = useState<ConversationEvent[]>([]);
   const [showActivity, setShowActivity] = useState(false);
   const [loadingActivity, setLoadingActivity] = useState(false);
+  const [hasMoreActivity, setHasMoreActivity] = useState(false);
+  const [loadingOlderActivity, setLoadingOlderActivity] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [draft, setDraft] = useState("");
@@ -143,6 +145,8 @@ export default function CollaborationPage() {
     setEvents([]);
     setShowActivity(false);
     setLoadingActivity(false);
+    setHasMoreActivity(false);
+    setLoadingOlderActivity(false);
     setHasMoreMessages(false);
     knownMessageIds.current = new Set();
     if (activeId) void loadMessages(activeId, true);
@@ -286,11 +290,36 @@ export default function CollaborationPage() {
       const data: ConversationEvent[] = await request(
         "/api/collaboration/conversations/" + requestedConversationId + "/events?limit=50"
       );
-      if (activeConversationRef.current === requestedConversationId) setEvents(data);
+      if (activeConversationRef.current === requestedConversationId) {
+        setEvents(data);
+        setHasMoreActivity(data.length === 50);
+      }
     } catch (e) {
       if (activeConversationRef.current === activeId) setError(e instanceof Error ? e.message : "Could not load group activity.");
     } finally {
       setLoadingActivity(false);
+    }
+  }
+
+  async function loadOlderActivity() {
+    if (!activeId || !events.length || !hasMoreActivity || loadingOlderActivity) return;
+    const requestedConversationId = activeId;
+    const cursor = events[events.length - 1].id;
+    setLoadingOlderActivity(true);
+    try {
+      const data: ConversationEvent[] = await request(
+        "/api/collaboration/conversations/" + requestedConversationId + "/events?limit=50&before_event_id=" + encodeURIComponent(cursor)
+      );
+      if (activeConversationRef.current !== requestedConversationId) return;
+      setEvents((current) => {
+        const known = new Set(current.map((event) => event.id));
+        return [...current, ...data.filter((event) => !known.has(event.id))];
+      });
+      setHasMoreActivity(data.length === 50);
+    } catch (e) {
+      if (activeConversationRef.current === requestedConversationId) setError(e instanceof Error ? e.message : "Could not load older group activity.");
+    } finally {
+      if (activeConversationRef.current === requestedConversationId) setLoadingOlderActivity(false);
     }
   }
 
@@ -383,6 +412,7 @@ export default function CollaborationPage() {
                     </li>;
                   })}
                 </ul>}
+              {hasMoreActivity && <button type="button" onClick={() => void loadOlderActivity()} disabled={loadingOlderActivity} style={{ marginTop: 8, border: "1px solid #e0e5ec", borderRadius: 8, padding: "6px 9px", background: "#fff", color: "#536174", fontSize: 11, cursor: loadingOlderActivity ? "wait" : "pointer" }}>{loadingOlderActivity ? "Loading…" : "Load older activity"}</button>}
             </section>}
             <div aria-live="polite" style={{ flex: 1, overflowY: "auto", padding: "20px clamp(14px, 3vw, 32px)", display: "flex", flexDirection: "column", gap: 14 }}>
               {hasMoreMessages && <button type="button" onClick={() => void loadOlderMessages()} disabled={loadingOlderMessages} style={{ alignSelf: "center", border: "1px solid #e0e5ec", borderRadius: 9, padding: "8px 12px", background: "#fff", color: "#536174", fontSize: 12, cursor: loadingOlderMessages ? "wait" : "pointer" }}>{loadingOlderMessages ? "Loading…" : "Load older messages"}</button>}
