@@ -1,7 +1,6 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useState } from "react";
-import { useSearchParams } from "next/navigation";
 import { API_BASE } from "@/lib/api";
 import { supabase } from "@/lib/supabase";
 
@@ -38,8 +37,7 @@ type CandidateDocument = {
 };
 
 export default function CandidatePortalPage() {
-  const searchParams = useSearchParams();
-  const organizationId = searchParams.get("organization_id") || process.env.NEXT_PUBLIC_ORGANIZATION_ID || "";
+  const [organizationId, setOrganizationId] = useState(process.env.NEXT_PUBLIC_ORGANIZATION_ID || "");
   const [email, setEmail] = useState("");
   const [notice, setNotice] = useState("");
   const [busy, setBusy] = useState(false);
@@ -94,6 +92,11 @@ export default function CandidatePortalPage() {
     setDocuments(documentData.documents || []);
     setNotice("");
   }, [organizationId]);
+
+  useEffect(() => {
+    const requestedOrganization = new URLSearchParams(window.location.search).get("organization_id");
+    if (requestedOrganization) setOrganizationId(requestedOrganization);
+  }, []);
 
   useEffect(() => {
     let active = true;
