@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.applications import (
+    ApplicationBulkTransition,
+    ApplicationBulkTransitionOut,
     ApplicationCreate,
     ApplicationOut,
     ApplicationStageConfigOut,
@@ -128,6 +130,66 @@ async def update_application_stage(
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
+
+
+@router.post("/bulk-transition", response_model=ApplicationBulkTransitionOut)
+async def bulk_transition_applications(
+    payload: ApplicationBulkTransition,
+    user_id: UUID = Depends(get_current_user_id),
+) -> ApplicationBulkTransitionOut:
+    """Transition up to 100 applications independently and report partial failures."""
+    results = []
+    for application_id in payload.application_ids:
+        try:
+            existing = await service.get_application(application_id)
+            # Use the same not-found response for absent and cross-tenant records.
+            if existing is None:
+                raise HTTPException(status_code=404, detail="Application not found")
+            try:
+                assert_org_member(user_id, existing["organization_id"])
+            except HTTPException as exc:
+                if exc.status_code in (401, 403, 404):
+                    raise HTTPException(status_code=404, detail="Application not found") from exc
+                raise
+
+            row = await service.transition_application(
+                application_id,
+                payload.status,
+                user_id,
+                payload.reason,
+            )
+            if row is None:
+                raise HTTPException(status_code=404, detail="Application not found")
+            results.append({
+                "application_id": application_id,
+                "success": True,
+                "status": row["status"],
+                "error": None,
+            })
+        except HTTPException as exc:
+            results.append({
+                "application_id": application_id,
+                "success": False,
+                "status": None,
+                "error": "Application not found" if exc.status_code == 404 else str(exc.detail),
+            })
+        except ValueError as exc:
+            results.append({
+                "application_id": application_id,
+                "success": False,
+                "status": None,
+                "error": str(exc),
+            })
+        except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+            raise db_unavailable(exc) from exc
+
+    succeeded = sum(1 for item in results if item["success"])
+    return ApplicationBulkTransitionOut(
+        requested=len(results),
+        succeeded=succeeded,
+        failed=len(results) - succeeded,
+        results=results,
+    )
 
 
 @router.get("/{application_id}", response_model=ApplicationOut)
