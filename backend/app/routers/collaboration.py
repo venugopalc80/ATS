@@ -198,6 +198,40 @@ async def list_messages(conversation_id: UUID, before: datetime | None = None,
                      "created_at":r["created_at"].isoformat(), "edited_at":r["edited_at"].isoformat() if r["edited_at"] else None,
                      "deleted":bool(r["deleted_at"])} for r in reversed(rows)]
 
+@router.get("/conversations/{conversation_id}/events")
+async def list_conversation_events(
+    conversation_id: UUID,
+    before: datetime | None = None,
+    limit: int = Query(default=50, ge=1, le=100),
+    user_id: UUID = Depends(get_current_user_id),
+):
+    """Return group activity visible from the current member's join date."""
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            membership = _member(cursor, conversation_id, user_id)
+            cursor.execute("""
+              select e.id,e.event_type,e.actor_user_id,e.target_user_id,e.metadata,e.created_at,
+                     actor.full_name as actor_name,target.full_name as target_name
+              from public.conversation_events e
+              join public.profiles actor on actor.id=e.actor_user_id
+              left join public.profiles target on target.id=e.target_user_id
+              where e.conversation_id=%s and e.created_at >= %s
+                and (%s is null or e.created_at < %s)
+              order by e.created_at desc,e.id desc
+              limit %s
+            """, [conversation_id, membership["joined_at"], before, before, limit])
+            return [{
+                "id": str(row["id"]),
+                "event_type": row["event_type"],
+                "actor_user_id": str(row["actor_user_id"]),
+                "actor_name": row["actor_name"] or "AQERITH user",
+                "target_user_id": str(row["target_user_id"]) if row["target_user_id"] else None,
+                "target_name": row["target_name"] or None,
+                "metadata": row["metadata"] or {},
+                "created_at": row["created_at"].isoformat(),
+            } for row in cursor.fetchall()]
+
+
 @router.post("/conversations/{conversation_id}/messages", status_code=201)
 async def send_message(conversation_id: UUID, payload: MessageCreate, user_id: UUID = Depends(get_current_user_id)):
     body = payload.body.strip()
