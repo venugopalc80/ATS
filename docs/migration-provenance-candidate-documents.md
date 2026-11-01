@@ -61,3 +61,12 @@ This live shape is closer to the timestamped migration, but it is not an exact m
 ## Safety status
 
 All staging checks in this review were read-only catalogue queries. No DDL, DML, migration-ledger edits, grants, RLS policies or Storage settings were changed. The candidate-document schema conflict is an additional migration-provenance blocker for reproducible environments; the current catalogue snapshot does not establish that the live staging schema is broken or publicly exposed.
+
+
+## Saved analytics report schema added on the feature branch
+
+A new forward-only migration, `supabase/migrations/20261101180000_saved_report_definitions.sql`, now defines a dedicated `saved_report_definitions` table. It stores organisation, creator, report type, validated filter JSON, sharing state and timestamps. It does not reuse saved searches or organisation settings.
+
+The migration uses the existing `is_org_member` and `is_org_admin` helpers. Private reports are visible to their creator; shared reports are visible to organisation members. Only organisation admins can enable or change sharing. The backend independently checks membership and report ownership/admin rights.
+
+**Important:** this migration is committed to the feature branch only. It has not been executed against staging. Before applying it, reconcile the existing migration history and validate the migration against a clean isolated database and a reviewed staging schema snapshot.
