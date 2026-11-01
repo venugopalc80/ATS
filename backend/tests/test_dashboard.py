@@ -117,7 +117,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
                 date_to=date(2026, 10, 13), user_id=USER,
             )
 
-        membership.assert_called_once_with(USER, ORG)
+        membership.assert_called_once_with(USER, ORG, "dashboard.read")
         self.assertEqual(result["metrics"]["open_jobs"], 2)
         self.assertEqual(result["metrics"]["active_candidates"], 8)
         self.assertEqual(result["metrics"]["interviews_today"], 1)
