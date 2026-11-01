@@ -95,6 +95,14 @@ class RequisitionUpdate(BaseModel):
             raise ValueError("target_close_date cannot be earlier than target_start_date")
         return self
 
+    @model_validator(mode="after")
+    def reject_null_required_fields(self):
+        values = self.model_dump(exclude_unset=True)
+        for field in ("title", "justification", "headcount", "required_skills"):
+            if field in values and values[field] is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
 class RequisitionOut(RequisitionFields):
     id: UUID
     organization_id: UUID
