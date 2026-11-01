@@ -588,3 +588,13 @@ Current implementation boundary:
 - The brief does not define who may assign/reassign applications or the exact assignment lifecycle. These are product decisions before implementation.
 
 The Idea 04 score remains unchanged pending complete acceptance evidence and authorised preview/staging acceptance. No migration, live database write, merge, or production deployment was performed.
+
+
+### Bulk stage failure details surfaced in the Applications Inbox (2026-11-01)
+
+- Updated the Applications Inbox to retain the failed application IDs after a partial bulk stage transition and display each individual error next to the affected candidate/application and job, rather than showing only the aggregate failure count.
+- Added an accessible alert region for the per-application failure list. Clearing selection also clears the displayed failure details.
+- Current PR #69 head: `a2d17a1b450f0dcfd932f1e2eeea1b4a2d6399d1`. GitHub Actions run [#916](https://github.com/venugopalc80/ATS/actions/runs/41328267567) passed: **73 backend tests, 4 skipped**, PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and production build.
+- Current-head Vercel deployments are READY: ATS API https://ats-177hh4ydt-the-pixel-muses.vercel.app ; AQERITH frontend https://aqerith-5i9z3fseo-the-pixel-muses.vercel.app ; staging API https://ats-staging-4rrhrnr70-the-pixel-muses.vercel.app . All three deployment records identify the same current commit.
+- Browser acceptance remains outstanding because the preview domains are SSO-protected. No authenticated recruiter workflow is claimed as verified.
+- No staging/production database writes or migrations, merge, or production deployment occurred.
