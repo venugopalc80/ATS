@@ -227,7 +227,12 @@ export default function SubmissionsPage() {
       }
       const updated: Application = await response.json();
       setApplications((current) => current.map((item) => item.id === updated.id ? updated : item));
-      setMessage("");
+      if (application.status === "new" && nextStatus !== "new") {
+        const completion = await apiFetch(API_BASE + "/api/applications/" + application.id + "/sla-deadlines/complete-initial?organization_id=" + encodeURIComponent(getActiveOrganizationId(DEFAULT_ORGANIZATION_ID)), { method: "POST" });
+        if (!completion.ok && completion.status !== 404) setMessage("Application stage updated, but its initial SLA milestones could not be completed.");
+      } else {
+        setMessage("");
+      }
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update application.");
     }
