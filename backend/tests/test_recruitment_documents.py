@@ -4,9 +4,12 @@ import unittest
 
 from fastapi import HTTPException
 
+import inspect
+
 from app.routers.recruitment_documents import (
     _template_body, _validate_recruitment_file, next_signer_status,
-    require_document_manager_role, verify_adapter_signature,
+    receive_normalized_signature_event, require_document_manager_role,
+    verify_adapter_signature,
 )
 
 
@@ -27,6 +30,12 @@ class RecruitmentDocumentPermissionTests(unittest.TestCase):
 
 
 class RecruitmentSignatureTransitionTests(unittest.TestCase):
+    def test_webhook_locks_document_before_signer_to_serialize_events(self):
+        source = inspect.getsource(receive_normalized_signature_event)
+        document_lock = source.index("where id=%s\\n               for update")
+        signer_lock = source.index("where document_id=%s and organization_id=%s and lower(email)=lower(%s)\\n               for update")
+        self.assertLess(document_lock, signer_lock)
+
     def test_progression_is_monotonic_for_out_of_order_events(self):
         self.assertEqual(next_signer_status("viewed", "sent"), "viewed")
         self.assertEqual(next_signer_status("signed", "viewed"), "signed")
