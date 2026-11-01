@@ -45,6 +45,10 @@ grant execute on function public.is_org_member(uuid) to authenticated;
 insert into public.organizations (id, name) values
  ('10000000-0000-0000-0000-000000000001', 'AQERITH Recruitment'),
  ('10000000-0000-0000-0000-000000000002', 'Other Agency');
+
+-- Existing generic references must be preserved while future references adopt the derived prefix.
+insert into public.jobs (organization_id, job_code, title)
+values ('10000000-0000-0000-0000-000000000001', 'JOB-001', 'Legacy JOB reference');
 insert into public.profiles values
  ('20000000-0000-0000-0000-000000000001'), -- recruiter
  ('20000000-0000-0000-0000-000000000002'), -- hiring manager
@@ -213,8 +217,11 @@ begin
   select job_code into first_code from public.jobs where title='First job';
   select job_code into second_code from public.jobs where title='Second job';
   select job_code into other_code from public.jobs where title='Other tenant job';
-  if first_code <> 'AQE-001' or second_code <> 'AQE-002' then
-    raise exception 'unexpected sequential job references: %, %', first_code, second_code;
+  if first_code <> 'AQE-002' or second_code <> 'AQE-003' then
+    raise exception 'unexpected sequential job references after preserving legacy code: %, %', first_code, second_code;
+  end if;
+  if (select job_code from public.jobs where title='Legacy JOB reference') <> 'JOB-001' then
+    raise exception 'migration unexpectedly rewrote an existing job reference';
   end if;
   if other_code <> 'OTH-001' then
     raise exception 'job references should be scoped to each organisation: %', other_code;
