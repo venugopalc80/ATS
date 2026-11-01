@@ -313,7 +313,7 @@ This entry supersedes the earlier #87 follow-up status above. PR #87 was closed 
 - Tightened assignment-history reads to use the same tenant-scoped application lookup as assignment reads and writes.
 - Recruiter directory now selects only the verified profile email field.
 - Follow-up commit: `70f7b807b6545b3ed46e8fea5aab53e73ace99c3`.
-- CI run [#995](https://github.com/venugopalc80/ATS/actions/runs/41337410857) is running against this latest commit. Backend checks have passed and frontend typecheck has passed; frontend production build was still running at this update.
+- CI run [#995](https://github.com/venugopalc80/ATS/actions/runs/41337410857) passed on commit `bf8892732fc3a005f4aebcaef9cf38519500a271` (backend tests, frontend typecheck and production build). A new run [#996](https://github.com/venugopalc80/ATS/actions/runs/41337430978) is running against the current branch head `70f7b807b6545b3ed46e8fea5aab53e73ace99c3`.
 - The overdue refresh endpoint is not yet scheduled. There is no claim of automatic background monitoring or notifications.
 
 **Current Idea 04 estimate:** approximately 84% implementation complete / 16% remaining (engineering estimate only). Still draft and not staging-verified or production-ready.
