@@ -191,7 +191,8 @@ export default function JobsPage() {
   }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
-    const matchesQuery = (job.id ?? "") === query || (job.job_code ?? "") + " " + job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
+    const searchable = (job.job_code ?? "") + " " + job.title + " " + (job.client ?? "") + " " + (job.location ?? "");
+    const matchesQuery = (job.id ?? "") === query || searchable.toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
