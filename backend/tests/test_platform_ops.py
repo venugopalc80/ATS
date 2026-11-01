@@ -269,5 +269,56 @@ class PlatformSupportQueuePrivacyTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any("from public.support_case_messages" in sql.lower() for sql, _ in cursor.executed))
 
 
+class SupportGrantRevocationTests(unittest.IsolatedAsyncioTestCase):
+    async def test_repeated_revocation_is_idempotent_and_does_not_duplicate_audit(self):
+        from contextlib import contextmanager
+        from datetime import datetime, timezone
+        from unittest.mock import patch
+        from uuid import UUID
+        from app.routers import platform_ops
+
+        grant_id = UUID("66666666-6666-4666-8666-666666666666")
+        organization_id = UUID("11111111-1111-4111-8111-111111111111")
+
+        class Cursor:
+            def __init__(self):
+                self.responses = [{"organization_id": organization_id, "revoked_at": datetime.now(timezone.utc)}]
+                self.executed = []
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def execute(self, sql, params=None):
+                self.executed.append((" ".join(sql.split()), params))
+            def fetchone(self):
+                return self.responses.pop(0) if self.responses else None
+
+        cursor = Cursor()
+
+        class Connection:
+            def __enter__(self):
+                return self
+            def __exit__(self, *_args):
+                return False
+            def cursor(self):
+                return cursor
+
+        @contextmanager
+        def fake_connection():
+            with Connection() as connection:
+                yield connection
+
+        with patch.object(platform_ops, "get_connection", fake_connection), patch.object(
+            platform_ops, "assert_org_admin"
+        ):
+            result = await platform_ops.revoke_support_access(
+                grant_id, user_id=UUID("99999999-9999-4999-8999-999999999999")
+            )
+
+        self.assertEqual(result, {"revoked": True})
+        self.assertEqual(len(cursor.executed), 1)
+        self.assertNotIn("insert into public.audit_events", " ".join(sql for sql, _ in cursor.executed).lower())
+
+
 if __name__ == "__main__":
     unittest.main()
