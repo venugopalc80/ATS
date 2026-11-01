@@ -98,3 +98,44 @@ async def get_application_assignment_history(
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_error(exc) from exc
+
+
+@router.get("/recruiters", response_model=list[dict])
+async def list_organisation_recruiters(
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[dict]:
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select m.user_id as id, p.full_name, p.email "
+                    "from public.organization_members m "
+                    "left join public.profiles p on p.id=m.user_id "
+                    "where m.organization_id=%s and m.role='recruiter' "
+                    "order by coalesce(p.full_name, p.email, m.user_id::text)",
+                    [organization_id],
+                )
+                return list(cursor.fetchall())
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
+
+
+@router.get("/assignments", response_model=list[ApplicationAssignmentOut])
+async def list_organisation_assignments(
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[ApplicationAssignmentOut]:
+    assert_org_member(user_id, organization_id)
+    try:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select " + "application_id, organization_id, recruiter_id, assigned_by, assigned_at, updated_at "
+                    "from public.application_assignments where organization_id=%s",
+                    [organization_id],
+                )
+                return [ApplicationAssignmentOut.model_validate(row) for row in cursor.fetchall()]
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _db_error(exc) from exc
