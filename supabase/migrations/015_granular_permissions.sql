@@ -31,6 +31,7 @@ values
  ('candidate.notes.create','candidates','Create recruiter notes'),
  ('application.read','applications','View application records'),
  ('application.manage','applications','Create and update application records'),
+ ('application.delete','applications','Delete application records'),
  ('interview.read','interviews','View interview details'),
  ('interview.manage','interviews','Create and update interview records'),
  ('offer.read','offers','View offer details excluding protected compensation fields'),
