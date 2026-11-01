@@ -173,3 +173,33 @@ This refresh is specific to Idea 04 and does not change the overall 49-idea comp
 
 - Verified delivery percentage: still not calculable until the canonical 49-row register and production deployment evidence are reconciled.
 - Evidence coverage percentage: still not calculated. The Idea 04 evidence above increases coverage for one idea only; it does not establish the remaining 48 ideas.
+
+
+## Evidence refresh — 2026-11-01
+
+This refresh records the latest Idea 04 implementation and verification evidence. It does not change the overall 49-idea completion calculation.
+
+### Idea 04 — Applications & Recruitment Pipeline
+
+- Canonical implementation remains [PR #69](https://github.com/venugopalc80/ATS/pull/69), branch `feat/idea-04-application-pipeline`, draft/open and not merged.
+- Current branch head checked: `7b2134c9f158ba5ca075a8457afc5e579b1b1527`.
+- CI run [#890](https://github.com/venugopalc80/ATS/actions/runs/41327292027) passed against the PR head: 69 backend tests passed, 4 skipped; PostgreSQL 16 migration smoke test passed; frontend TypeScript typecheck and production build passed.
+- The PostgreSQL smoke test verified the Idea 04 migrations can be rerun after partial-state changes, baseline stage-history creation, default stage seeding for existing and newly created organisations, actor/reason capture, and browser-role table privilege restrictions.
+- Added a bulk stage-transition endpoint accepting up to 100 unique application IDs. Each application is independently authorised and transitioned; invalid transitions and cross-tenant/missing records are reported individually without aborting the rest of the batch.
+- Updated Applications Inbox with row selection, page-level select-all, bulk target-stage selection, reason capture, and retention of failed records for review/retry.
+- Bulk transition tests cover mixed success, invalid stage transition, cross-tenant not-found behaviour, duplicate IDs and the 100-item limit.
+- Candidate bulk-CV import validation also checks aggregate actual bytes before candidate/storage writes, including when upload-size metadata is absent.
+- Vercel API preview reached READY on the exact current commit: `https://ats-6blz0tpsq-the-pixel-muses.vercel.app`.
+- Vercel frontend preview reached READY on the exact current commit: `https://aqerith-kj63sm03z-the-pixel-muses.vercel.app`.
+- Vercel status checks for `ats`, `aqerith` and `ats-staging-api` are successful for the current commit. Browser/device acceptance is still outstanding; direct preview access could not be verified and preview SSO protection may require an authorised session.
+- Live Supabase JWT verification and actual Supabase RLS/role checks remain outstanding. The disposable PostgreSQL HTTP tests override FastAPI's current-user dependency.
+- Staging migration-history provenance and ledger reconciliation remain unresolved. Staging has the history objects but does not record migration version `20261026150000`; stage configuration is absent. Production still needs chronological migration/schema reconciliation.
+- Recruiter assignment and SLA monitoring remain outstanding. Bulk stage actions are implemented but still need authenticated staging acceptance.
+- No live Supabase migrations, migration repairs, database writes, merges or production deployments were performed.
+
+**Current Idea 04 status:** In progress, not staging-verified and not released. Do not infer production readiness from passing CI or READY preview deployments.
+
+### Overall tracker reporting
+
+- Verified delivery percentage: still not calculable until the canonical 49-row register and production deployment evidence are reconciled.
+- Evidence coverage percentage: still not calculated. This refresh improves evidence for Idea 04 only and does not establish the remaining 48 ideas.
