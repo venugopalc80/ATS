@@ -72,7 +72,8 @@ export default function SubmissionsPage() {
   const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
   const [assignments, setAssignments] = useState<Record<string, string | null>>({});
   const [canManageAssignments, setCanManageAssignments] = useState(false);
-  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);\n  const [slaPolicy, setSlaPolicy] = useState<ApplicationSLAPolicy | null>(null);\n  const [savingSlaPolicy, setSavingSlaPolicy] = useState(false);
+  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);
+  const [slaPolicy, setSlaPolicy] = useState<ApplicationSLAPolicy | null>(null);\n  const [savingSlaPolicy, setSavingSlaPolicy] = useState(false);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
