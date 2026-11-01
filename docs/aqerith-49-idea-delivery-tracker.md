@@ -235,3 +235,11 @@ This follow-up is stacked on Idea 04's canonical feature branch. It does not alt
 
 - Verified delivery percentage remains uncalculated pending canonical 49-row roadmap reconciliation and production evidence.
 - Evidence coverage percentage remains uncalculated. This follow-up adds evidence for part of Idea 04 only.
+
+
+### CI result update — recruiter assignment follow-up
+
+- Latest follow-up CI run [#981](https://github.com/venugopalc80/ATS/actions/runs/41336129935) completed successfully against commit `94a35797529b1e8c4c9e438a363f909247b54c5c`.
+- Backend unit and migration smoke tests passed.
+- Frontend TypeScript typecheck and production build passed.
+- This verifies the current code against the repository CI environment only. It does not replace authenticated staging acceptance or prove live Supabase JWT/RLS behaviour.
