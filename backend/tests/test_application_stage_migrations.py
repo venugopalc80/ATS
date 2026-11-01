@@ -319,6 +319,36 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
                 cursor.fetchone(),
                 ("screening", "interview", ACTOR_UUID, "PostgreSQL service integration test"),
             )
+            cursor.execute(
+                "insert into public.application_sla_policies (organization_id, updated_by) "
+                "values (%s, %s)",
+                (ORG, ACTOR),
+            )
+        self.connection.commit()
+
+        from app.services.application_sla_service import ApplicationSLADueService
+
+        due_service = ApplicationSLADueService()
+        deadlines = asyncio.run(
+            due_service.recalculate_initial_deadlines(
+                UUID("99999999-9999-4999-8999-999999999999"),
+                UUID(ORG),
+            )
+        )
+        self.assertEqual(
+            {row["milestone"] for row in deadlines},
+            {"initial_review", "first_recruiter_action"},
+        )
+        with self.connection.cursor() as cursor:
+            cursor.execute(
+                "update public.application_sla_deadlines "
+                "set due_at=now()-interval '1 minute', status='pending' "
+                "where application_id=%s",
+                ("99999999-9999-4999-8999-999999999999",),
+            )
+        self.connection.commit()
+        overdue = asyncio.run(due_service.refresh_overdue(UUID(ORG)))
+        self.assertEqual(len(overdue), 2)
 
 
 if __name__ == "__main__":
