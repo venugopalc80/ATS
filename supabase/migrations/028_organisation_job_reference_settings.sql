@@ -26,8 +26,7 @@ update public.organizations o
        )
   from derived d
  where d.id = o.id
-   and o.job_reference_prefix = 'JOB'
-   and o.job_reference_next_number = 1;
+   and o.job_reference_prefix = 'JOB';
 
 comment on column public.organizations.job_reference_prefix is
   'Organisation-specific prefix for new automatically generated job references. Changing it never rewrites existing references.';
