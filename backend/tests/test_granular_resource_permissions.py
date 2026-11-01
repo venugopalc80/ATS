@@ -233,6 +233,18 @@ class PlacementFeePermissionTests(unittest.TestCase):
             _require_placement_write(self.user_id, self.organization_id, payload)
         permission.assert_called_once_with(self.user_id, self.organization_id, "placement.manage")
 
+    def test_fee_read_permission_denial_is_redacted(self):
+        from app.routers.placements import _can_read_placement_fees
+        with patch("app.routers.placements.require_permission", side_effect=HTTPException(403, "denied")):
+            self.assertFalse(_can_read_placement_fees(self.user_id, self.organization_id))
+
+    def test_fee_read_permission_service_failure_is_not_silently_redacted(self):
+        from app.routers.placements import _can_read_placement_fees
+        with patch("app.routers.placements.require_permission", side_effect=HTTPException(503, "unavailable")):
+            with self.assertRaises(HTTPException) as error:
+                _can_read_placement_fees(self.user_id, self.organization_id)
+        self.assertEqual(error.exception.status_code, 503)
+
 
 if __name__ == "__main__":
     unittest.main()
