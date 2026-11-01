@@ -305,3 +305,15 @@ This entry supersedes the earlier #87 follow-up status above. PR #87 was closed 
 ### Overall tracker reporting
 
 - Verified delivery percentage and evidence coverage percentage for all 49 ideas remain uncalculated pending canonical roadmap reconciliation.
+
+
+### Follow-on SLA operations slice — 2026-11-01
+
+- Added an admin-only overdue refresh endpoint backed by an organisation-scoped update query. It marks pending deadlines overdue when `due_at < now()`; it is suitable for invocation by a future scheduled worker.
+- Tightened assignment-history reads to use the same tenant-scoped application lookup as assignment reads and writes.
+- Recruiter directory now selects only the verified profile email field.
+- Follow-up commit: `70f7b807b6545b3ed46e8fea5aab53e73ace99c3`.
+- CI run [#995](https://github.com/venugopalc80/ATS/actions/runs/41337410857) is running against this latest commit. Backend checks have passed and frontend typecheck has passed; frontend production build was still running at this update.
+- The overdue refresh endpoint is not yet scheduled. There is no claim of automatic background monitoring or notifications.
+
+**Current Idea 04 estimate:** approximately 84% implementation complete / 16% remaining (engineering estimate only). Still draft and not staging-verified or production-ready.
