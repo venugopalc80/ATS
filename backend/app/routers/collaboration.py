@@ -202,6 +202,7 @@ async def list_messages(conversation_id: UUID, before: datetime | None = None,
 async def list_conversation_events(
     conversation_id: UUID,
     before: datetime | None = None,
+    before_event_id: UUID | None = None,
     limit: int = Query(default=50, ge=1, le=100),
     user_id: UUID = Depends(get_current_user_id),
 ):
@@ -209,17 +210,37 @@ async def list_conversation_events(
     with get_connection() as connection:
         with connection.cursor() as cursor:
             membership = _member(cursor, conversation_id, user_id)
-            cursor.execute("""
-              select e.id,e.event_type,e.actor_user_id,e.target_user_id,e.metadata,e.created_at,
-                     actor.full_name as actor_name,target.full_name as target_name
-              from public.conversation_events e
-              join public.profiles actor on actor.id=e.actor_user_id
-              left join public.profiles target on target.id=e.target_user_id
-              where e.conversation_id=%s and e.created_at >= %s
-                and (%s is null or e.created_at < %s)
-              order by e.created_at desc,e.id desc
-              limit %s
-            """, [conversation_id, membership["joined_at"], before, before, limit])
+            if before_event_id:
+                cursor.execute("""
+                  select created_at from public.conversation_events
+                  where id=%s and conversation_id=%s and created_at >= %s
+                """, [before_event_id, conversation_id, membership["joined_at"]])
+                anchor = cursor.fetchone()
+                if anchor is None:
+                    raise HTTPException(status_code=404, detail="Activity cursor not found")
+                cursor.execute("""
+                  select e.id,e.event_type,e.actor_user_id,e.target_user_id,e.metadata,e.created_at,
+                         actor.full_name as actor_name,target.full_name as target_name
+                  from public.conversation_events e
+                  join public.profiles actor on actor.id=e.actor_user_id
+                  left join public.profiles target on target.id=e.target_user_id
+                  where e.conversation_id=%s and e.created_at >= %s
+                    and (e.created_at,e.id) < (%s,%s)
+                  order by e.created_at desc,e.id desc
+                  limit %s
+                """, [conversation_id, membership["joined_at"], anchor["created_at"], before_event_id, limit])
+            else:
+                cursor.execute("""
+                  select e.id,e.event_type,e.actor_user_id,e.target_user_id,e.metadata,e.created_at,
+                         actor.full_name as actor_name,target.full_name as target_name
+                  from public.conversation_events e
+                  join public.profiles actor on actor.id=e.actor_user_id
+                  left join public.profiles target on target.id=e.target_user_id
+                  where e.conversation_id=%s and e.created_at >= %s
+                    and (%s is null or e.created_at < %s)
+                  order by e.created_at desc,e.id desc
+                  limit %s
+                """, [conversation_id, membership["joined_at"], before, before, limit])
             return [{
                 "id": str(row["id"]),
                 "event_type": row["event_type"],
