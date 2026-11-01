@@ -140,6 +140,9 @@ export default function CollaborationPage() {
 
   useEffect(() => {
     setMessages([]);
+    setEvents([]);
+    setShowActivity(false);
+    setLoadingActivity(false);
     setHasMoreMessages(false);
     knownMessageIds.current = new Set();
     if (activeId) void loadMessages(activeId, true);
