@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from fastapi.testclient import TestClient
 
 from app.auth import get_current_user_id
+from app.db import DatabaseConnectionError
 from app.main import app
 from app.routers import applications
 
@@ -160,6 +161,45 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
         self.assertEqual(payload["results"][1]["error"], "Invalid application stage transition")
         self.assertEqual(payload["results"][2]["error"], "Application not found")
         self.assertEqual(transition.await_count, 2)
+
+    def test_bulk_transition_preserves_partial_results_when_database_fails(self):
+        first_id = UUID("77777777-7777-4777-8777-777777777781")
+        second_id = UUID("77777777-7777-4777-8777-777777777782")
+        third_id = UUID("77777777-7777-4777-8777-777777777783")
+        first_row = application_row()
+        first_row["id"] = first_id
+        second_row = application_row()
+        second_row["id"] = second_id
+        updated_row = dict(first_row)
+        updated_row["status"] = "screening"
+
+        with patch.object(
+            applications.service, "get_application", new_callable=AsyncMock,
+            side_effect=[first_row, second_row],
+        ):
+            with patch(
+                "app.routers.applications.assert_org_member",
+                return_value=None,
+            ):
+                with patch.object(
+                    applications.service, "transition_application", new_callable=AsyncMock,
+                    side_effect=[updated_row, DatabaseConnectionError("database unavailable")],
+                ):
+                    response = self.client.post(
+                        "/api/applications/bulk-transition",
+                        json={
+                            "application_ids": [str(first_id), str(second_id), str(third_id)],
+                            "status": "screening",
+                            "reason": "Batch CV review",
+                        },
+                    )
+
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual((payload["requested"], payload["succeeded"], payload["failed"]), (3, 1, 2))
+        self.assertTrue(payload["results"][0]["success"])
+        self.assertEqual(payload["results"][1]["error"], "Database unavailable; this application was not processed.")
+        self.assertEqual(payload["results"][2]["error"], "Not processed because the database became unavailable.")
 
     def test_bulk_transition_rejects_duplicate_application_ids(self):
         response = self.client.post(
