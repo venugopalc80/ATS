@@ -19,7 +19,7 @@ class JobService:
     """Persistence boundary for job requisitions."""
 
     async def list_jobs(
-        self, organization_id: UUID, status: str | None = None
+        self, organization_id: UUID, status: str | None = None, job_ids: list[UUID] | None = None
     ) -> list[dict[str, Any]]:
         query = f"""
             select {JOB_COLUMNS}
@@ -31,6 +31,9 @@ class JobService:
         if status:
             query += " and status = %s"
             params.append(status)
+        if job_ids is not None:
+            query += " and id = any(%s)"
+            params.append(job_ids)
 
         query += " order by created_at desc"
 
@@ -59,6 +62,13 @@ class JobService:
                 if row is None:
                     raise RuntimeError("Job was not created")
                 return row
+
+    async def get_job_organization_id(self, job_id: UUID) -> UUID | None:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.jobs where id = %s", [job_id])
+                row = cursor.fetchone()
+                return UUID(str(row["organization_id"])) if row else None
 
     async def get_job(self, job_id: UUID) -> dict[str, Any] | None:
         query = f"""

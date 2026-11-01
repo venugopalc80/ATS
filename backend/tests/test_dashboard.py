@@ -113,7 +113,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
             with FakeConnection(cursor) as connection:
                 yield connection
 
-        with patch.object(dashboard_router, "assert_org_member") as membership, patch.object(
+        with patch.object(dashboard_router, "require_permission") as membership, patch.object(
             dashboard_router, "get_connection", fake_connection
         ):
             result = await dashboard_router.dashboard(
@@ -121,7 +121,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
                 date_to=date(2026, 10, 13), user_id=USER,
             )
 
-        membership.assert_called_once_with(USER, ORG)
+        membership.assert_called_once_with(USER, ORG, "dashboard.read")
         self.assertEqual(result["metrics"]["open_jobs"], 2)
         self.assertEqual(result["metrics"]["active_candidates"], 8)
         self.assertEqual(result["metrics"]["interviews_today"], 1)
@@ -214,7 +214,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rejects_non_member_before_database_access(self):
         with patch.object(
-            dashboard_router, "assert_org_member", side_effect=HTTPException(status_code=403, detail="forbidden")
+            dashboard_router, "require_permission", side_effect=HTTPException(status_code=403, detail="forbidden")
         ), patch.object(dashboard_router, "get_connection") as connection:
             with self.assertRaises(HTTPException) as error:
                 await dashboard_router.dashboard(
@@ -224,7 +224,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         connection.assert_not_called()
 
     async def test_rejects_inverted_date_range_before_database_access(self):
-        with patch.object(dashboard_router, "assert_org_member"), patch.object(
+        with patch.object(dashboard_router, "require_permission"), patch.object(
             dashboard_router, "get_connection"
         ) as connection:
             with self.assertRaises(HTTPException) as error:

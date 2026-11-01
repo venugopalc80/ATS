@@ -41,6 +41,13 @@ class ClientService:
                     raise RuntimeError("Client was not created")
                 return row
 
+    async def get_client_organization_id(self, client_id: UUID) -> UUID | None:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("select organization_id from public.clients where id = %s", [client_id])
+                row = cursor.fetchone()
+                return UUID(str(row["organization_id"])) if row else None
+
     async def get_client(self, client_id: UUID) -> dict[str, Any] | None:
         with get_connection() as connection:
             with connection.cursor() as cursor:

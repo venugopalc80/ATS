@@ -16,12 +16,15 @@ ALLOWED_INTERVIEW_TRANSITIONS = {
 
 
 class InterviewService:
-    async def list_interviews(self, organization_id: UUID, status: str | None = None):
+    async def list_interviews(self, organization_id: UUID, status: str | None = None, candidate_id: UUID | None = None):
         query = f"select {COLUMNS} from public.interviews where organization_id=%s"
         params: list[Any] = [organization_id]
         if status:
             query += " and status=%s"
             params.append(status)
+        if candidate_id:
+            query += " and application_id in (select id from public.applications where organization_id=%s and candidate_id=%s)"
+            params.extend([organization_id, candidate_id])
         query += " order by scheduled_at asc"
         with get_connection() as c:
             with c.cursor() as cur:

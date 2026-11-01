@@ -14,18 +14,32 @@ ALLOWED_APPLICATION_TRANSITIONS = {
 }
 APPLICATION_COLUMNS = "id, organization_id, job_id, candidate_id, source, status, match_score, match_explanation, human_reviewed, human_reviewed_by, human_reviewed_at, created_at, updated_at"
 
+
 class ApplicationService:
     async def list_applications(self, organization_id: UUID, status: str | None = None, job_id: UUID | None = None, candidate_id: UUID | None = None) -> list[dict[str, Any]]:
         query = "select " + APPLICATION_COLUMNS + " from public.applications where organization_id = %s"
         params: list[Any] = [organization_id]
-        if status: query += " and status = %s"; params.append(status)
-        if job_id: query += " and job_id = %s"; params.append(job_id)
-        if candidate_id: query += " and candidate_id = %s"; params.append(candidate_id)
+        if status:
+            query += " and status = %s"; params.append(status)
+        if job_id:
+            query += " and job_id = %s"; params.append(job_id)
+        if candidate_id:
+            query += " and candidate_id = %s"; params.append(candidate_id)
         query += " order by created_at desc"
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
+
+    async def get_application_organization_id(self, application_id: UUID) -> UUID | None:
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select organization_id from public.applications where id = %s",
+                    [application_id],
+                )
+                row = cursor.fetchone()
+                return UUID(str(row["organization_id"])) if row else None
 
     async def create_application(self, payload: ApplicationCreate) -> dict[str, Any]:
         with get_connection() as connection:

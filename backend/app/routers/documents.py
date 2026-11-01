@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from pydantic import BaseModel
 from supabase import create_client
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import get_current_user_id, require_permission
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/documents", tags=["candidate documents"])
@@ -61,6 +61,16 @@ def storage_client():
     return create_client(url, key)
 
 
+def can_read_candidate_contact(user_id: UUID, organization_id: UUID) -> bool:
+    try:
+        require_permission(user_id, organization_id, "candidate.read_contact")
+        return True
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
+        raise
+
+
 def verify_candidate(candidate_id: UUID, organization_id: UUID):
     with get_connection() as connection:
         with connection.cursor() as cursor:
@@ -90,7 +100,7 @@ async def upload_candidate_document(
     application_id: UUID | None = Query(default=None),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "candidate.cv.upload")
     verify_candidate(candidate_id, organization_id)
 
     mime = (file.content_type or "").lower()
@@ -165,7 +175,7 @@ async def list_candidate_documents(
     candidate_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "candidate.cv.read")
     try:
         verify_candidate(candidate_id, organization_id)
         with get_connection() as connection:
@@ -195,7 +205,7 @@ async def create_document_download(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "candidate.cv.download")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -226,7 +236,7 @@ async def preview_candidate_document(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Return a short-lived inline PDF URL or extracted DOCX text for an authorised recruiter."""
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "candidate.cv.preview")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -335,7 +345,9 @@ async def bulk_upload_cvs(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
-    assert_org_member(user_id, organization_id)
+    require_permission(user_id, organization_id, "candidate.create")
+    require_permission(user_id, organization_id, "candidate.cv.upload")
+    include_contact = can_read_candidate_contact(user_id, organization_id)
     if not files:
         raise HTTPException(status_code=422, detail="Choose at least one CV to upload")
     if len(files) > MAX_BULK_FILES:
@@ -414,7 +426,7 @@ async def bulk_upload_cvs(
                 results.append({
                     "filename": filename, "status": "imported", "candidate_id": str(candidate_id),
                     "name": " ".join(part for part in [fields["first_name"], fields["last_name"]] if part),
-                    "email": fields["email"], "skills_found": fields["skills"],
+                    "email": fields["email"] if include_contact else None, "skills_found": fields["skills"],
                     "text_extracted": bool(text.strip()),
                 })
             except Exception:
