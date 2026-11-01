@@ -59,3 +59,17 @@ class ApplicationSLAPolicyOut(BaseModel):
     updated_by: UUID | None
     created_at: datetime
     updated_at: datetime
+
+
+class ApplicationSLADeadlineOut(BaseModel):
+    id: UUID
+    organization_id: UUID
+    application_id: UUID
+    milestone: str
+    starts_at: datetime
+    due_at: datetime
+    status: str
+    completed_at: datetime | None
+    last_calculated_at: datetime
+    created_at: datetime
+    updated_at: datetime
