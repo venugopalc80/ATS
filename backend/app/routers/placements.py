@@ -1,20 +1,42 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status, HTTPException
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import get_current_user_id, require_permission
+from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.placements import PlacementCreate, PlacementOut, PlacementUpdate
-from app.services.placement_service import create_placement,get_placement,list_placements,update_placement
-router=APIRouter(prefix="/api/placements",tags=["placements"])
-@router.get("",response_model=list[PlacementOut])
-def get_placements(organization_id: UUID,status_filter: str|None=Query(None,alias="status"),user_id: UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,organization_id); return list_placements(organization_id,status_filter)
-@router.post("",response_model=PlacementOut,status_code=status.HTTP_201_CREATED)
-def post_placement(payload: PlacementCreate,user_id: UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,payload.organization_id)
-    try:return create_placement(payload,user_id)
-    except ValueError as exc:raise HTTPException(409,str(exc)) from exc
-@router.get("/{placement_id}",response_model=PlacementOut)
-def get_one(placement_id: UUID,organization_id: UUID,user_id: UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,organization_id); return get_placement(organization_id,placement_id)
-@router.patch("/{placement_id}",response_model=PlacementOut)
-def patch_placement(placement_id: UUID,payload: PlacementUpdate,organization_id: UUID,user_id: UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,organization_id); return update_placement(organization_id,placement_id,payload,user_id)
+from app.services.placement_service import create_placement, get_placement, list_placements, update_placement
+
+router = APIRouter(prefix="/api/placements", tags=["placements"])
+
+@router.get("", response_model=list[PlacementOut])
+def get_placements(organization_id: UUID, status_filter: str | None = Query(None, alias="status"), user_id: UUID = Depends(get_current_user_id)):
+    require_permission(user_id, organization_id, "placement.read")
+    try:
+        return [PlacementOut.model_validate(row) for row in list_placements(organization_id, status_filter)]
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(503, "Database operation failed") from exc
+
+@router.post("", response_model=PlacementOut, status_code=status.HTTP_201_CREATED)
+def post_placement(payload: PlacementCreate, user_id: UUID = Depends(get_current_user_id)):
+    require_permission(user_id, payload.organization_id, "placement.manage")
+    try:
+        return PlacementOut.model_validate(create_placement(payload, user_id))
+    except ValueError as exc:
+        raise HTTPException(409, str(exc)) from exc
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(503, "Database operation failed") from exc
+
+@router.get("/{placement_id}", response_model=PlacementOut)
+def get_one(placement_id: UUID, organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    require_permission(user_id, organization_id, "placement.read")
+    try:
+        return PlacementOut.model_validate(get_placement(organization_id, placement_id))
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(503, "Database operation failed") from exc
+
+@router.patch("/{placement_id}", response_model=PlacementOut)
+def patch_placement(placement_id: UUID, payload: PlacementUpdate, organization_id: UUID, user_id: UUID = Depends(get_current_user_id)):
+    require_permission(user_id, organization_id, "placement.manage")
+    try:
+        return PlacementOut.model_validate(update_placement(organization_id, placement_id, payload, user_id))
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise HTTPException(503, "Database operation failed") from exc
