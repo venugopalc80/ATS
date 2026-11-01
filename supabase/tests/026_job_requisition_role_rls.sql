@@ -146,7 +146,7 @@ do $$ declare affected integer; begin
 end $$;
 
 -- UPDATE WITH CHECK must also reject invalid reassignment and tenant changes.
-do $ begin
+do $$ begin
  begin
   update public.job_requisitions
   set client_id='30000000-0000-0000-0000-000000000002'
@@ -175,7 +175,7 @@ do $ begin
   raise exception 'requester moved requisition to another organisation';
  exception when insufficient_privilege then null;
  end;
-end $;
+end $$;
 
 -- Admin retains administrative update access.
 select set_config('request.jwt.claim.sub','20000000-0000-0000-0000-000000000004',false);
