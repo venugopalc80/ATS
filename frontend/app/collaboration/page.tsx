@@ -153,20 +153,36 @@ export default function CollaborationPage() {
   }, [activeId, loadMessages]);
 
   // Poll the active thread until server-side realtime delivery is introduced.
+  // Pause in background tabs and back off on failures so reconnects do not create request storms.
   const pollInFlight = useRef(false);
   const pinRequestsInFlight = useRef<Set<string>>(new Set());
   useEffect(() => {
     if (!activeId || !organizationId) return;
     const conversationId = activeId;
-    const timer = window.setInterval(async () => {
-      if (pollInFlight.current) return;
+    let cancelled = false;
+    let timer: number | undefined;
+    let delay = 8000;
+
+    const schedule = (nextDelay: number) => {
+      if (cancelled || document.hidden) return;
+      if (timer !== undefined) window.clearTimeout(timer);
+      timer = window.setTimeout(() => { void poll(); }, nextDelay);
+    };
+
+    const poll = async () => {
+      if (cancelled || document.hidden || !navigator.onLine) return;
+      if (pollInFlight.current) {
+        schedule(delay);
+        return;
+      }
       pollInFlight.current = true;
+      let succeeded = false;
       try {
         await Promise.all([
           loadMessages(conversationId),
           request("/api/collaboration/conversations?organization_id=" + encodeURIComponent(organizationId))
             .then((data: Conversation[]) => {
-              if (activeConversationRef.current !== conversationId) return;
+              if (cancelled || activeConversationRef.current !== conversationId) return;
               setConversations(data);
               setActiveId((current) =>
                 current && data.some((conversation) => conversation.id === current)
@@ -175,13 +191,37 @@ export default function CollaborationPage() {
               );
             }),
         ]);
+        succeeded = true;
       } catch {
-        // A transient polling failure should not replace the current thread with stale data.
+        // Keep the current thread visible during transient network or session failures.
       } finally {
         pollInFlight.current = false;
+        if (!cancelled) {
+          delay = succeeded ? 8000 : Math.min(delay * 2, 60000);
+          schedule(delay);
+        }
       }
-    }, 8000);
-    return () => window.clearInterval(timer);
+    };
+
+    const resume = () => {
+      if (document.hidden) {
+        if (timer !== undefined) window.clearTimeout(timer);
+        timer = undefined;
+        return;
+      }
+      delay = 8000;
+      void poll();
+    };
+    const onOnline = () => { delay = 8000; void poll(); };
+    document.addEventListener("visibilitychange", resume);
+    window.addEventListener("online", onOnline);
+    schedule(8000);
+    return () => {
+      cancelled = true;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", resume);
+      window.removeEventListener("online", onOnline);
+    };
   }, [activeId, organizationId, loadMessages, request]);
 
   const filteredConversations = useMemo(() => {
