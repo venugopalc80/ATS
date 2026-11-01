@@ -24,10 +24,9 @@ def _include_salary(user_id: UUID, organization_id: UUID) -> bool:
 
 def _require_offer_write(user_id: UUID, organization_id: UUID, payload) -> None:
     salary_fields = {"salary_amount", "salary_currency", "bonus_amount"}
+    require_permission(user_id, organization_id, "offer.manage")
     if salary_fields.intersection(payload.model_fields_set):
         require_permission(user_id, organization_id, "offer.salary.manage")
-    else:
-        require_permission(user_id, organization_id, "offer.manage")
 
 @router.get("", response_model=list[OfferOut])
 def get_offers(organization_id: UUID, status_filter: str | None = Query(None, alias="status"), user_id: UUID = Depends(get_current_user_id)):
