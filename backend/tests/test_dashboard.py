@@ -2,6 +2,7 @@ import unittest
 from contextlib import contextmanager
 from datetime import date, datetime, timezone
 from uuid import UUID
+from zoneinfo import ZoneInfo
 from unittest.mock import patch
 
 from fastapi import HTTPException
@@ -142,11 +143,15 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(pipeline_query[1][2], datetime(2026, 10, 13, 23, tzinfo=timezone.utc))
         vacancy_query = next((sql, params) for sql, params in cursor.queries if "left join public.applications" in sql)
         self.assertIn("at time zone %s", vacancy_query[0])
-        self.assertEqual(vacancy_query[1][0], date(2026, 10, 13))
+        local_today = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/London")).date()
+        self.assertEqual(vacancy_query[1][0], local_today)
         self.assertEqual(vacancy_query[1][1], "Europe/London")
         month_query = next((sql, params) for sql, params in cursor.queries if "from public.placements" in sql and "created_at >= %s" in sql)
         self.assertEqual(month_query[1][0], ORG)
-        self.assertEqual(month_query[1][1], datetime(2026, 9, 30, 23, tzinfo=timezone.utc))
+        expected_month_start, _ = dashboard_router.organisation_date_bounds_utc(
+            "Europe/London", local_today.replace(day=1)
+        )
+        self.assertEqual(month_query[1][1], expected_month_start)
         self.assertTrue(any(item["type"] == "interview_today" and item["href"] == f"/interviews?interview_id={INTERVIEW}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "offer_expiring" and item["href"] == f"/offers?offer_id={OFFER}" for item in result["priorities"]))
         self.assertTrue(any(item["type"] == "vacancy_health" and item["href"] == f"/jobs?job_id={JOB}" for item in result["priorities"]))
