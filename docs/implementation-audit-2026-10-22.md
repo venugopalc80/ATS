@@ -523,3 +523,13 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Current PR #69 head: `a0fcd08ff129c8177ddc69d0d5c11a5cefcdd7ce`. GitHub Actions run [#853](https://github.com/venugopalc80/ATS/actions/runs/41201353521) passed: **66 backend tests, 4 skipped**, PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and production build.
 - This closes the specific aggregate-size enforcement gap. It does not resolve the separate duplicate-import race risk: email/hash duplicate checks are read-before-write and are not backed by a demonstrated database uniqueness guarantee. That needs a migration-safe data review and concurrency design before adding constraints.
 - No staging/production database writes or migrations, merge, or production deployment occurred.
+
+
+### Cross-tenant document preview/download regression test passed (2026-11-01)
+
+- Added a disposable-PostgreSQL-backed FastAPI test with a real candidate document row stored under `OTHER_ORG`. A user who belongs to `ORG` requests that document ID while supplying `organization_id=ORG`.
+- Both `POST /api/documents/{id}/download` and `POST /api/documents/{id}/preview` return 404 because their metadata queries require both document ID and organisation ID. The test patches the private storage client and verifies it is never called, proving no signed URL is generated for the cross-tenant row.
+- The test uses real membership rows and real PostgreSQL document metadata, but FastAPI's current-user dependency remains overridden and the private storage provider itself is mocked/not contacted. This does not establish live Supabase JWT, Storage policy, or authenticated recruiter UI acceptance.
+- Current PR #69 head: `da3d1067ca96c21fb40e71f02a5b66b2315b58b4`. GitHub Actions run [#898](https://github.com/venugopalc80/ATS/actions/runs/41327511714) passed: **70 backend tests, 4 skipped**, PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and production build.
+- Idea 04 remains at its previously reported **41.7% evidenced / 58.3% pending** against six provisional acceptance criteria; this test adds security evidence but does not close a whole criterion.
+- No staging/production database writes or migrations, merge, or production deployment occurred.
