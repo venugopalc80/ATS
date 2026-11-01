@@ -1,14 +1,15 @@
 -- Assertions run after the hardening migration in an isolated PostgreSQL database.
 DO $$
-DECLARE expected text[] := ARRAY[
+DECLARE
+  expected text[] := ARRAY[
   'applications_member_all','audit_member_read','candidates_member_all','clients_member_all',
   'interviews_member_all','job_distribution_member_read','job_distribution_member_write',
   'jobs_member_all','memberships_member_read','organizations_member_read','offers_member_all',
   'placements_member_all','profiles_self_read','application_stage_history_member_insert',
   'application_stage_history_member_read'
-];
-DECLARE missing_count integer;
-DECLARE trigger_function text;
+ ];
+  missing_count integer;
+  trigger_function text;
 BEGIN
   SELECT count(*) INTO missing_count
   FROM unnest(expected) AS e(policy_name)
