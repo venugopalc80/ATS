@@ -6,7 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field, model_validator
 
-from app.auth import assert_org_admin, assert_org_member, get_current_user_id
+from app.auth import assert_org_admin, assert_org_member, get_current_user_id, require_mfa
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/privacy", tags=["privacy"])
@@ -456,7 +456,11 @@ async def preview_retention(
 
 
 @router.post("/retention-policies", status_code=201)
-async def create_retention_policy(payload: RetentionPolicyCreate, user_id: UUID = Depends(get_current_user_id)):
+async def create_retention_policy(
+    payload: RetentionPolicyCreate,
+    user_id: UUID = Depends(get_current_user_id),
+    _mfa_claims: dict = Depends(require_mfa),
+):
     assert_org_admin(user_id, payload.organization_id)
     try:
         with get_connection() as connection:
@@ -513,7 +517,11 @@ async def list_retention_exceptions(
 
 
 @router.post("/retention-exceptions", status_code=201)
-async def create_retention_exception(payload: RetentionExceptionCreate, user_id: UUID = Depends(get_current_user_id)):
+async def create_retention_exception(
+    payload: RetentionExceptionCreate,
+    user_id: UUID = Depends(get_current_user_id),
+    _mfa_claims: dict = Depends(require_mfa),
+):
     assert_org_admin(user_id, payload.organization_id)
     if payload.ends_at is not None and payload.ends_at <= payload.starts_at:
         raise HTTPException(status_code=422, detail="Exception end must be after its start")
@@ -560,6 +568,7 @@ async def create_retention_exception(payload: RetentionExceptionCreate, user_id:
 async def approve_retention_exception(
     exception_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
+    _mfa_claims: dict = Depends(require_mfa),
 ):
     """Explicitly approve an exception; the requester cannot approve their own exception."""
     try:
@@ -723,6 +732,7 @@ async def update_rights_request(
     request_id: UUID,
     payload: PrivacyRequestUpdate,
     user_id: UUID = Depends(get_current_user_id),
+    _mfa_claims: dict = Depends(require_mfa),
 ):
     try:
         with get_connection() as connection:
