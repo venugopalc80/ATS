@@ -140,3 +140,22 @@ async def list_organisation_application_sla_deadlines(
         return await deadline_service.list_organization_deadlines(organization_id)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _database_error(exc) from exc
+
+
+@router.post("/{application_id}/sla-deadlines/complete-initial", response_model=list[dict])
+async def complete_initial_application_sla_milestones(
+    application_id: UUID,
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+) -> list[dict]:
+    assert_org_member(user_id, organization_id)
+    try:
+        return await deadline_service.complete_milestones(
+            application_id,
+            organization_id,
+            ["initial_review", "first_recruiter_action"],
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise _database_error(exc) from exc
