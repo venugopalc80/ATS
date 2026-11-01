@@ -565,3 +565,26 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Both environments reported **0 duplicate candidate-email groups within an organisation** using the existing import comparison semantics (`lower(email)`), and **0 duplicate active document-hash groups within an organisation**.
 - This supports the current data being clean for a future unique partial index on active candidate-document hashes, but does not itself authorise or apply a schema change. The production/staging data may change between this check and any migration; repeat the duplicate check in the approved migration window.
 - No SQL writes, migrations, migration-ledger edits, or data changes were executed.
+
+
+### Idea 04 acceptance scope clarified from the original product brief (2026-11-01)
+
+The original Idea 04 brief defines six acceptance criteria:
+1. Applications remain distinct from candidate profiles; one candidate may have multiple job-specific applications with separate statuses, recruiters, interview histories and decisions.
+2. The backend rejects invalid application-stage transitions.
+3. Every transition is auditable.
+4. Tenant isolation is tested.
+5. Bulk actions accurately report partial failures.
+6. Candidate-facing and internal statuses are separated where necessary.
+
+Additional proposed functionality in the brief includes configurable organisation-specific stages, an application detail view, reason/actor-attributed transitions, safe bulk assignment/tagging/stage changes with confirmation and affected-record history, application-level recruiter assignment, and SLA monitoring for applications waiting too long, overdue reviews and overlooked candidates.
+
+Current implementation boundary:
+- Bulk stage changes are implemented with per-application results, mixed-outcome tests, a 100-record limit, duplicate-ID rejection, and UI retention of failed records. A database interruption mid-batch now preserves earlier successful results and marks remaining records unprocessed.
+- Bulk recruiter assignment and bulk tagging are not implemented yet.
+- Application-level recruiter assignment is not implemented yet.
+- SLA thresholds, elapsed-vs-business-hour semantics, pause conditions, and escalation/notification rules are not defined in the brief; do not invent them in code.
+- Candidate-facing status separation is not yet established as a separate persisted model. The anonymous careers submission response is deliberately limited to a submission acknowledgement; candidate progress visibility must be designed before exposing internal stages through a candidate portal.
+- The brief does not define who may assign/reassign applications or the exact assignment lifecycle. These are product decisions before implementation.
+
+The Idea 04 score remains unchanged pending complete acceptance evidence and authorised preview/staging acceptance. No migration, live database write, merge, or production deployment was performed.
