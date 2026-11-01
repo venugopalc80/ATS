@@ -57,6 +57,17 @@ class RequisitionEndpointTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaises(ValueError):
             RequisitionUpdate(title="   ")
 
+    def test_update_rejects_null_for_non_nullable_database_fields(self):
+        for field in ("title", "justification", "headcount", "required_skills"):
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                RequisitionUpdate(**{field: None})
+
+    def test_update_allows_null_for_nullable_fields(self):
+        payload = RequisitionUpdate(department=None, client_id=None, recruiter_id=None)
+        self.assertIsNone(payload.department)
+        self.assertIsNone(payload.client_id)
+        self.assertIsNone(payload.recruiter_id)
+
 class RequisitionLifecycleEndpointTests(unittest.IsolatedAsyncioTestCase):
     async def test_update_is_restricted_to_draft_or_rejected(self):
         rid = UUID("33333333-3333-4333-8333-333333333333")
