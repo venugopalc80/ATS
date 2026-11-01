@@ -354,5 +354,50 @@ class BillingWebhookTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(any("organization_subscriptions" in sql for sql, _ in cursor.executed))
 
 
+    def test_subscription_lifecycle_statuses_are_normalised(self):
+        cases = [
+            ("incomplete", "customer.subscription.created", "incomplete"),
+            ("trialing", "customer.subscription.updated", "trialing"),
+            ("active", "customer.subscription.updated", "active"),
+            ("past_due", "customer.subscription.updated", "past_due"),
+            ("paused", "customer.subscription.paused", "paused"),
+            ("active", "customer.subscription.resumed", "active"),
+            ("unpaid", "customer.subscription.updated", "unpaid"),
+            ("active", "customer.subscription.deleted", "canceled"),
+            ("incomplete_expired", "customer.subscription.updated", "canceled"),
+        ]
+        for provider_status, event_type, expected in cases:
+            with self.subTest(provider_status=provider_status, event_type=event_type):
+                self.assertEqual(
+                    billing_webhooks._normalise_status(provider_status, event_type),
+                    expected,
+                )
+
+    def test_subscription_lifecycle_history_event_types_are_explicit(self):
+        expected = {
+            "customer.subscription.created": "created",
+            "customer.subscription.updated": "reconciled",
+            "customer.subscription.deleted": "canceled",
+            "customer.subscription.paused": "paused",
+            "customer.subscription.resumed": "resumed",
+        }
+        self.assertEqual(billing_webhooks.HISTORY_EVENT_TYPES, expected)
+
+    def test_subscription_event_timestamp_guard_is_monotonic(self):
+        # The stored provider timestamp must never move backwards. Equal-second
+        # events are deliberately ambiguous because Stripe's event.created is
+        # second-granularity and event IDs are not a chronological tie-breaker.
+        self.assertIsNone(billing_webhooks.subscription_event_rejection_reason(None, 100))
+        self.assertIsNone(billing_webhooks.subscription_event_rejection_reason(100, 101))
+        self.assertEqual(
+            billing_webhooks.subscription_event_rejection_reason(101, 100),
+            "stale_provider_event",
+        )
+        self.assertEqual(
+            billing_webhooks.subscription_event_rejection_reason(101, 101),
+            "ambiguous_provider_event_timestamp",
+        )
+
+
 if __name__ == "__main__":
     unittest.main()
