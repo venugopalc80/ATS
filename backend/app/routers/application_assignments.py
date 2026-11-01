@@ -104,11 +104,11 @@ async def list_organisation_recruiters(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    "select m.user_id as id, p.full_name, p.email "
+                    "select m.user_id as id, p.email "
                     "from public.organization_members m "
                     "left join public.profiles p on p.id=m.user_id "
                     "where m.organization_id=%s and m.role='recruiter' "
-                    "order by coalesce(p.full_name, p.email, m.user_id::text)",
+                    "order by coalesce(p.email, m.user_id::text)",
                     [organization_id],
                 )
                 return list(cursor.fetchall())
