@@ -533,3 +533,14 @@ This remains a proposal only. Production/staging schema changes require explicit
 - Current PR #69 head: `da3d1067ca96c21fb40e71f02a5b66b2315b58b4`. GitHub Actions run [#898](https://github.com/venugopalc80/ATS/actions/runs/41327511714) passed: **70 backend tests, 4 skipped**, PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and production build.
 - Idea 04 remains at its previously reported **41.7% evidenced / 58.3% pending** against six provisional acceptance criteria; this test adds security evidence but does not close a whole criterion.
 - No staging/production database writes or migrations, merge, or production deployment occurred.
+
+
+### Concurrent bulk CV deduplication serialisation and bulk-stage outage reporting (2026-11-01)
+
+- Bulk CV duplicate checks previously ran in one database transaction and candidate/document/audit inserts in a later transaction, leaving a race where two simultaneous bulk imports could both pass the same email/hash checks.
+- Added transaction-scoped PostgreSQL advisory locks keyed by organisation + normalized email and organisation + SHA-256. Lock keys are acquired in sorted order to avoid lock-order deadlocks, and locks remain held through duplicate checks, private storage upload, and metadata/audit inserts. This serialises competing requests through the bulk CV import route for the same tenant/email or tenant/file hash.
+- Added tests that verify tenant-scoped lock keys, deterministic lock ordering, and hash-only locking when no email is extracted. This is not a global uniqueness guarantee: ordinary candidate creation does not yet participate in the lock protocol, and no unique database constraint was added. A global email uniqueness rule still needs product-policy confirmation and a duplicate-data review.
+- Bulk stage transitions previously raised HTTP 503 on a database connection failure at any point in the batch, which could hide successful transitions already committed for earlier records. The endpoint now preserves those results and reports the current and remaining records as not processed, allowing the UI to retain them for review/retry.
+- Added a regression test where one item succeeds, the next encounters a database failure, and the final item is explicitly marked unprocessed.
+- Current PR #69 head: `55057f42eb40ea57dda7963b0957bb979cff0f5b`. GitHub Actions run [#908](https://github.com/venugopalc80/ATS/actions/runs/41327840136) passed: **73 backend tests, 4 skipped**, PostgreSQL 16 migration smoke test, frontend TypeScript typecheck, and production build. The run log confirms the database-interruption test, bulk CV lock tests, and cross-tenant document preview/download test passed.
+- No staging/production database writes or migrations, merge, or production deployment occurred.
