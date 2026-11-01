@@ -332,3 +332,52 @@ This entry supersedes the earlier #87 follow-up status above. PR #87 was closed 
 - Candidate follow-up and post-interview milestone event integration, holiday calendars, scheduled overdue scanning, notifications and workload reporting remain outstanding.
 
 **Current Idea 04 estimate:** approximately 86% implementation complete / 14% remaining (engineering estimate only). This does not include authenticated staging acceptance or release readiness. The PR remains draft, no live Supabase migration/write, production deployment or merge has been performed.
+
+
+## Evidence refresh — 2026-11-01 (latest CI and workflow-automation repair)
+
+This update records exact-head GitHub Actions evidence checked on 2026-11-01. It does not change any staging or production release status.
+
+### Latest successful exact-head checks
+
+| Workstream | PR / exact head | CI evidence | Assessment |
+|---|---|---|---|
+| Idea 04 — application pipeline | [PR #69](https://github.com/venugopalc80/ATS/pull/69), `b856f156e86d635c89cf8492b6d81a008d8660b6` | [Run #1048](https://github.com/venugopalc80/ATS/actions/runs/41336933297): backend tests, migration smoke tests, frontend typecheck and production build passed | CI passed. Staging migration-ledger reconciliation and authenticated staging acceptance remain blocked. |
+| Ideas 09–13 — interviews, assessments, offers and documents | [PR #71](https://github.com/venugopalc80/ATS/pull/71), `6955ef29164e8f8e28b8d1a62647c237c5e2735d` | [Run #36](https://github.com/venugopalc80/ATS/actions/runs/41329774490) recruitment-document tests passed; [run #932](https://github.com/venugopalc80/ATS/actions/runs/41329774521) backend tests, frontend typecheck and production build passed | Signer-state regression fix is CI-verified. Full feature-group acceptance, migration/RLS review and authenticated browser testing remain. |
+| Collaboration hub | [PR #84](https://github.com/venugopalc80/ATS/pull/84), `75e4a50afab15b1ff1d5369cbdb977100d787104` | [Run #41330115367](https://github.com/venugopalc80/ATS/actions/runs/41330115367) passed backend tests, frontend typecheck and production build | Code checks passed. Multi-user browser/mobile acceptance and server-side realtime delivery remain. |
+| Section 7 — responsible AI | [PR #76](https://github.com/venugopalc80/ATS/pull/76), `1e751fecd87243f616e2186cc86b50bc3d9cd16c` | [Runs #41330042832](https://github.com/venugopalc80/ATS/actions/runs/41330042832) and [#41330042891](https://github.com/venugopalc80/ATS/actions/runs/41330042891) passed | CI passed; provider, fairness, governance and authenticated staging acceptance gates remain. |
+| Section 8 — privacy and security | [PR #77](https://github.com/venugopalc80/ATS/pull/77), `336625c688d44123121c4206f001253b418aa099` | [Runs #41332473612](https://github.com/venugopalc80/ATS/actions/runs/41332473612) and [#41332473606](https://github.com/venugopalc80/ATS/actions/runs/41332473606) passed | CI passed; retention execution, rights-request orchestration and security operations acceptance remain. |
+| Section 6 — analytics | [PR #80](https://github.com/venugopalc80/ATS/pull/80), `b7b4f955438a4f3fdd6eb8528721780f0d60ce70` | [Run #41337267199](https://github.com/venugopalc80/ATS/actions/runs/41337267199) passed | CI passed; metric correctness, tenant isolation, exports and authenticated staging acceptance remain. |
+| Section 9 — commercial operations | [PR #81](https://github.com/venugopalc80/ATS/pull/81), `08183150d7c49ab8d8ef9eb014f42395f21f242b` | [Runs #41332581917](https://github.com/venugopalc80/ATS/actions/runs/41332581917) and [#41332581949](https://github.com/venugopalc80/ATS/actions/runs/41332581949) passed | CI passed; Stripe end-to-end, entitlement enforcement and support-grant acceptance remain. |
+| Idea 16 — candidate portal foundation | [PR #85](https://github.com/venugopalc80/ATS/pull/85), `bf7795499453df6d41cb9933ac39c069dc9bee42` | [Run #41337976850](https://github.com/venugopalc80/ATS/actions/runs/41337976850) passed | CI passed; verified-email linking, recovery, session controls and authenticated candidate-portal acceptance remain. |
+| Ideas 18–21 — search and sourcing | [PR #72](https://github.com/venugopalc80/ATS/pull/72), `40bcf6f06b0a67d0f4cbebbfc422c818d9c66bf4` | [Run #39775491859](https://github.com/venugopalc80/ATS/actions/runs/39775491859) and [#39775491291](https://github.com/venugopalc80/ATS/actions/runs/39775491291) passed | CI passed; remaining per-record ACL, import and browser acceptance still apply. |
+| Ideas 14–15 — communication and notification preferences | [PR #68](https://github.com/venugopalc80/ATS/pull/68), `e685e7b65e2ef23956c1f1cd2e7a1c7ac0f5f8c7` | [Run #41190784044](https://github.com/venugopalc80/ATS/actions/runs/41190784044) passed | CI passed; provider delivery, retries, webhooks and event production are not complete. |
+| Idea 05 — application forms | [PR #62](https://github.com/venugopalc80/ATS/pull/62), `f35c837a3671b12fc7377947c815b1b63c755e7f` | [Run #39760953989](https://github.com/venugopalc80/ATS/actions/runs/39760953989) passed | CI passed; secure public CV upload and staging/browser acceptance remain. |
+| Idea 06 — CV parsing | [PR #61](https://github.com/venugopalc80/ATS/pull/61), `da02ae0feca41de87466234086f88c1ebc1460cb` | [Run #39760486214](https://github.com/venugopalc80/ATS/actions/runs/39760486214) passed | CI passed; OCR, durable worker queue, malware scanning and authenticated acceptance remain. |
+| Idea 03 — candidates and talent pool | [PR #60](https://github.com/venugopalc80/ATS/pull/60), `4bbb9a5781cf01f864caab4f727352e26a0627ea` | [Run #39805490607](https://github.com/venugopalc80/ATS/actions/runs/39805490607) passed backend tests, typecheck and build | CI passed. Separate Vercel checks were reported as failed in the PR body at the time of that record; staging and authenticated deletion/tenant tests remain. |
+
+### Idea 08 — workflow automation: CI failure diagnosed and repaired
+
+- Draft PR: [#63](https://github.com/venugopalc80/ATS/pull/63), branch `feat/recruitment-workflow-automation`.
+- Original run [#39763857297](https://github.com/venugopalc80/ATS/actions/runs/39763857297) failed for two independent reasons:
+  - Backend test discovery imported `backend/tests/test_workflows.py`, which requires pytest, but the acceptance workflow installed only `backend/requirements.txt`.
+  - Frontend TypeScript rejected `preview && ...` because `preview` is typed `unknown` and therefore is not a valid ReactNode condition.
+- Applied two focused fixes on the same feature branch:
+  - The acceptance workflow now installs pytest as a test-only CI dependency.
+  - The preview rendering condition now uses `preview !== null`, yielding a boolean.
+- Fix commit(s): `0f0c9a69bf4a3f71f3832a906747b0c0958c6003` and `9f5c293bd46cb09423fba4b13455016c128d9ca0`.
+- New exact-head run [#41338158346](https://github.com/venugopalc80/ATS/actions/runs/41338158346): backend tests passed and frontend typecheck passed at last inspection; frontend production build was still running. Do not mark the run fully passed until the workflow completes.
+- PR #63 remains draft. Even after CI passes, the feature remains a foundation only: event producers, durable worker execution, execution-time permission checks, approval decisions, idempotent external side effects and recovery are still required.
+
+### Roadmap source coverage
+
+- The project Library source `Pasted markdown.md` confirms exact titles and detailed requirements for Ideas 04–08.
+- The project Library source `Pasted text(1).txt` confirms the exact title `Idea 03 of 49 — Candidates & Talent Pool` and its core profile, lifecycle, duplicate-detection and search requirements.
+- This refresh does not establish the complete canonical 49-title list. Ideas not grounded in the source material remain unassessed; do not infer missing titles from PR groupings.
+
+### Safety and release status
+
+- All PRs above remain draft/open unless separately stated; successful CI is not merge approval.
+- No production merge, deployment, database write or production migration was performed in this refresh.
+- Idea 04 staging migration reconciliation remains blocked on a supported schema-only backup/export and authenticated Supabase CLI migration-repair route. Do not directly edit the Supabase migration ledger or apply the dependent stage-config migration out of order.
+- No verified delivery percentage is claimed. The canonical 49-row register and production release evidence are still incomplete.
