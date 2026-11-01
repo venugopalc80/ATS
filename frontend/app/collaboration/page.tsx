@@ -98,7 +98,9 @@ export default function CollaborationPage() {
           setConversations((items) => items.map((c) => c.id === id ? { ...c, unread_count: 0 } : c));
         }
       }
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not load messages."); }
+    } catch (e) {
+      if (activeConversationRef.current === id) setError(e instanceof Error ? e.message : "Could not load messages.");
+    }
   }, [currentUserId, request]);
 
   const loadOlderMessages = useCallback(async () => {
@@ -106,9 +108,11 @@ export default function CollaborationPage() {
     setLoadingOlderMessages(true);
     try {
       const cursor = messages[0].id;
+      const requestedConversationId = activeId;
       const data: Message[] = await request(
-        "/api/collaboration/conversations/" + activeId + "/messages?limit=50&before_message_id=" + encodeURIComponent(cursor)
+        "/api/collaboration/conversations/" + requestedConversationId + "/messages?limit=50&before_message_id=" + encodeURIComponent(cursor)
       );
+      if (activeConversationRef.current !== requestedConversationId) return;
       setMessages((current) => {
         const byId = new Map(data.map((message) => [message.id, message]));
         current.forEach((message) => byId.set(message.id, message));
@@ -118,7 +122,9 @@ export default function CollaborationPage() {
       });
       data.forEach((message) => knownMessageIds.current.add(message.id));
       setHasMoreMessages(data.length === 50);
-    } catch (e) { setError(e instanceof Error ? e.message : "Could not load older messages."); }
+    } catch (e) {
+      if (activeConversationRef.current === activeId) setError(e instanceof Error ? e.message : "Could not load older messages.");
+    }
     finally { setLoadingOlderMessages(false); }
   }, [activeId, hasMoreMessages, loadingOlderMessages, messages, request]);
 
@@ -135,7 +141,14 @@ export default function CollaborationPage() {
     const timer = window.setInterval(() => {
       void loadMessages(activeId);
       void request("/api/collaboration/conversations?organization_id=" + encodeURIComponent(organizationId))
-        .then((data) => setConversations(data))
+        .then((data: Conversation[]) => {
+          setConversations(data);
+          setActiveId((current) =>
+            current && data.some((conversation) => conversation.id === current)
+              ? current
+              : (data[0]?.id ?? "")
+          );
+        })
         .catch(() => undefined);
     }, 8000);
     return () => window.clearInterval(timer);
