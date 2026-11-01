@@ -67,6 +67,21 @@ BEGIN
 END
 $$;
 
+-- The membership helper must still return the caller's membership result for authenticated sessions.
+SET ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000020', false);
+DO $
+BEGIN
+  IF NOT public.is_org_member('00000000-0000-0000-0000-000000000010') THEN
+    RAISE EXCEPTION 'authenticated membership helper did not recognise an organisation member';
+  END IF;
+  IF public.is_org_member('00000000-0000-0000-0000-000000000099') THEN
+    RAISE EXCEPTION 'authenticated membership helper incorrectly accepted a non-member';
+  END IF;
+END
+$;
+RESET ROLE;
+
 -- The event trigger must still work after its function's direct EXECUTE grant is revoked.
 CREATE TABLE public.rls_enabled_by_event_trigger (id integer);
 DO $$
