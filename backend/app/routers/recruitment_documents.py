@@ -58,6 +58,20 @@ class SignatureProviderEvent(BaseModel):
     signer_email: str = Field(min_length=3, max_length=320)
     occurred_at: datetime | None = None
 
+SIGNER_TERMINAL_STATUSES = {"signed", "declined", "expired", "revoked"}
+SIGNER_PROGRESS = {"pending": 0, "sent": 1, "viewed": 2, "signed": 3}
+
+
+def next_signer_status(current_status: str, event_status: str) -> str:
+    """Apply signer events monotonically so delayed provider events cannot regress state."""
+    if current_status in SIGNER_TERMINAL_STATUSES:
+        return current_status
+    if event_status in SIGNER_TERMINAL_STATUSES:
+        return event_status
+    if event_status not in SIGNER_PROGRESS or current_status not in SIGNER_PROGRESS:
+        return current_status
+    return event_status if SIGNER_PROGRESS[event_status] > SIGNER_PROGRESS[current_status] else current_status
+
 
 def verify_adapter_signature(raw: bytes, timestamp_header: str, signature_header: str, secret: str, now: int | None = None) -> bool:
     try:
@@ -257,38 +271,40 @@ async def receive_normalized_signature_event(
                 raise HTTPException(status_code=409, detail="Duplicate provider event rejected") from exc
             raise
 
-        signer_status = event.event_type
+        previous_signer_status = signer["status"]
+        signer_status = next_signer_status(previous_signer_status, event.event_type)
         stamp_column = {
             "sent": "sent_at", "viewed": "viewed_at", "signed": "signed_at",
             "declined": "declined_at",
         }.get(signer_status)
-        assignments = ["status=%s"]
-        values: list[object] = [signer_status]
-        if stamp_column:
-            assignments.append(f"{stamp_column}=coalesce({stamp_column},%s)")
-            values.append(occurred_at or datetime.now(timezone.utc))
-        values.extend([signer["id"], org_id])
-        cursor.execute(
-            f"update public.recruitment_document_signers set {', '.join(assignments)} where id=%s and organization_id=%s",
-            values,
-        )
+        if signer_status != previous_signer_status:
+            assignments = ["status=%s"]
+            values: list[object] = [signer_status]
+            if stamp_column:
+                assignments.append(f"{stamp_column}=coalesce({stamp_column},%s)")
+                values.append(occurred_at or datetime.now(timezone.utc))
+            values.extend([signer["id"], org_id])
+            cursor.execute(
+                f"update public.recruitment_document_signers set {', '.join(assignments)} where id=%s and organization_id=%s",
+                values,
+            )
 
-        # A document is signed only after every signer has signed. Decline/expiry/revocation
-        # are terminal states; provider events cannot silently resurrect them.
+        # Derive document state from the effective signer state, not a potentially
+        # delayed event that was ignored by the monotonic signer transition.
         if document["status"] not in {"signed", "declined", "expired", "revoked", "void"}:
-            if event.event_type in {"declined", "expired", "revoked"}:
-                doc_status = event.event_type
-            elif event.event_type == "signed":
+            if signer_status in {"declined", "expired", "revoked"} and signer_status != previous_signer_status:
+                doc_status = signer_status
+            elif signer_status == "signed" and signer_status != previous_signer_status:
                 cursor.execute(
                     """select count(*) as pending from public.recruitment_document_signers
                        where document_id=%s and organization_id=%s and status <> 'signed'""",
                     [event.document_id, org_id],
                 )
                 doc_status = "signed" if cursor.fetchone()["pending"] == 0 else document["status"]
-            elif event.event_type in {"sent", "viewed"}:
+            elif signer_status in {"sent", "viewed"} and signer_status != previous_signer_status:
                 doc_status = (
-                    "sent" if event.event_type == "sent" and document["status"] not in {"viewed", "signed"}
-                    else "viewed" if event.event_type == "viewed" and document["status"] in {"sent", "viewed"}
+                    "sent" if signer_status == "sent" and document["status"] not in {"viewed", "signed"}
+                    else "viewed" if signer_status == "viewed" and document["status"] in {"sent", "viewed"}
                     else document["status"]
                 )
             else:
