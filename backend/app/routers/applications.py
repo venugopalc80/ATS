@@ -65,10 +65,9 @@ async def transition_application(
     user_id: UUID = Depends(get_current_user_id),
 ) -> ApplicationOut:
     try:
-        existing = await service.get_application(application_id)
+        existing = await service.get_application_for_member(application_id, user_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Application not found")
-        assert_org_member(user_id, existing["organization_id"])
         row = await service.transition_application(
             application_id,
             payload.status,
@@ -90,10 +89,9 @@ async def get_application_history(
     user_id: UUID = Depends(get_current_user_id),
 ) -> list[ApplicationStageHistoryOut]:
     try:
-        existing = await service.get_application(application_id)
+        existing = await service.get_application_for_member(application_id, user_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Application not found")
-        assert_org_member(user_id, existing["organization_id"])
         rows = await service.list_stage_history(existing["organization_id"], application_id)
         return [ApplicationStageHistoryOut.model_validate(row) for row in rows]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -141,13 +139,12 @@ async def bulk_transition_applications(
     results = []
     for index, application_id in enumerate(payload.application_ids):
         try:
-            existing = await service.get_application(application_id)
+            existing = await service.get_application_for_member(application_id, user_id)
             # Use the same not-found response for absent and cross-tenant records.
             if existing is None:
                 raise HTTPException(status_code=404, detail="Application not found")
             try:
-                assert_org_member(user_id, existing["organization_id"])
-            except HTTPException as exc:
+                    except HTTPException as exc:
                 if exc.status_code in (401, 403, 404):
                     raise HTTPException(status_code=404, detail="Application not found") from exc
                 raise
@@ -214,12 +211,11 @@ async def get_application(
     user_id: UUID = Depends(get_current_user_id),
 ) -> ApplicationOut:
     try:
-        row = await service.get_application(application_id)
+        row = await service.get_application_for_member(application_id, user_id)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Application not found")
-    assert_org_member(user_id, row["organization_id"])
     return ApplicationOut.model_validate(row)
 
 
@@ -230,10 +226,9 @@ async def update_application(
     user_id: UUID = Depends(get_current_user_id),
 ) -> ApplicationOut:
     try:
-        existing = await service.get_application(application_id)
+        existing = await service.get_application_for_member(application_id, user_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Application not found")
-        assert_org_member(user_id, existing["organization_id"])
         if "status" in payload.model_fields_set:
             raise HTTPException(
                 status_code=409,
@@ -255,10 +250,9 @@ async def delete_application(
     user_id: UUID = Depends(get_current_user_id),
 ) -> None:
     try:
-        existing = await service.get_application(application_id)
+        existing = await service.get_application_for_member(application_id, user_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Application not found")
-        assert_org_member(user_id, existing["organization_id"])
         deleted = await service.delete_application(application_id)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc

@@ -52,8 +52,8 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
 
     def test_cross_tenant_application_read_returns_forbidden(self):
         with patch.object(
-            applications.service, "get_application", new_callable=AsyncMock,
-            return_value=application_row(OTHER_ORG),
+            applications.service, "get_application_for_member", new_callable=AsyncMock,
+            return_value=None,
         ) as get_application:
             with patch(
                 "app.routers.applications.assert_org_member",
@@ -61,14 +61,14 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
             ):
                 response = self.client.get(f"/api/applications/{APPLICATION}")
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         self.assertNotIn("match_explanation", response.text)
-        get_application.assert_awaited_once_with(APPLICATION)
+        get_application.assert_awaited_once_with(APPLICATION, USER)
 
     def test_cross_tenant_history_read_is_denied_before_history_query(self):
         with patch.object(
-            applications.service, "get_application", new_callable=AsyncMock,
-            return_value=application_row(OTHER_ORG),
+            applications.service, "get_application_for_member", new_callable=AsyncMock,
+            return_value=None,
         ):
             with patch(
                 "app.routers.applications.assert_org_member",
@@ -79,13 +79,13 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
                 ) as list_history:
                     response = self.client.get(f"/api/applications/{APPLICATION}/history")
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         list_history.assert_not_awaited()
 
     def test_cross_tenant_transition_is_denied_before_transition_write(self):
         with patch.object(
-            applications.service, "get_application", new_callable=AsyncMock,
-            return_value=application_row(OTHER_ORG),
+            applications.service, "get_application_for_member", new_callable=AsyncMock,
+            return_value=None,
         ):
             with patch(
                 "app.routers.applications.assert_org_member",
@@ -99,7 +99,7 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
                         json={"status": "screening", "reason": "CV reviewed"},
                     )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         transition.assert_not_awaited()
 
     def test_non_admin_cannot_write_stage_configuration_over_http(self):
@@ -115,7 +115,7 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
                     json={"label": "Private review"},
                 )
 
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 404)
         update_stage.assert_not_awaited()
 
 
@@ -133,12 +133,12 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
         updated_row["status"] = "screening"
 
         with patch.object(
-            applications.service, "get_application", new_callable=AsyncMock,
-            side_effect=[first_row, second_row, other_row],
+            applications.service, "get_application_for_member", new_callable=AsyncMock,
+            side_effect=[first_row, second_row, None],
         ):
             with patch(
                 "app.routers.applications.assert_org_member",
-                side_effect=[None, None, HTTPException(status_code=403, detail="Not an organisation member")],
+                side_effect=[None, None, None],
             ):
                 with patch.object(
                     applications.service, "transition_application", new_callable=AsyncMock,
@@ -174,7 +174,7 @@ class ApplicationPipelineHttpAuthorizationTests(unittest.TestCase):
         updated_row["status"] = "screening"
 
         with patch.object(
-            applications.service, "get_application", new_callable=AsyncMock,
+            applications.service, "get_application_for_member", new_callable=AsyncMock,
             side_effect=[first_row, second_row],
         ):
             with patch(

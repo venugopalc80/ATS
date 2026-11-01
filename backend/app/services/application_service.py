@@ -181,6 +181,21 @@ class ApplicationService:
                 )
                 return cursor.fetchone()
 
+    async def get_application_for_member(
+        self, application_id: UUID, user_id: UUID
+    ) -> dict[str, Any] | None:
+        """Only return an application when the caller belongs to its organisation."""
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    "select " + APPLICATION_COLUMNS + " from public.applications a "
+                    "where a.id=%s and exists ("
+                    "select 1 from public.organization_members om "
+                    "where om.organization_id=a.organization_id and om.user_id=%s)",
+                    [application_id, user_id],
+                )
+                return cursor.fetchone()
+
     async def get_application(self, application_id: UUID) -> dict[str, Any] | None:
         with get_connection() as connection:
             with connection.cursor() as cursor:

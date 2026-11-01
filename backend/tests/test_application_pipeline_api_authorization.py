@@ -15,7 +15,7 @@ USER = UUID("22222222-2222-4222-8222-222222222222")
 
 class ApplicationPipelineAuthorizationTests(unittest.IsolatedAsyncioTestCase):
     @patch("app.routers.applications.service.transition_application", new_callable=AsyncMock)
-    @patch("app.routers.applications.service.get_application", new_callable=AsyncMock)
+    @patch("app.routers.applications.service.get_application_for_member", new_callable=AsyncMock)
     @patch(
         "app.routers.applications.assert_org_member",
         side_effect=HTTPException(status_code=403, detail="Not an organisation member"),
@@ -23,7 +23,7 @@ class ApplicationPipelineAuthorizationTests(unittest.IsolatedAsyncioTestCase):
     async def test_non_member_cannot_transition_application(
         self, _assert_member, get_application, transition
     ):
-        get_application.return_value = {"id": APPLICATION, "organization_id": ORG}
+        get_application.return_value = None
 
         with self.assertRaises(HTTPException) as raised:
             await transition_application(
@@ -32,7 +32,7 @@ class ApplicationPipelineAuthorizationTests(unittest.IsolatedAsyncioTestCase):
                 user_id=USER,
             )
 
-        self.assertEqual(raised.exception.status_code, 403)
+        self.assertEqual(raised.exception.status_code, 404)
         transition.assert_not_awaited()
 
     @patch("app.routers.applications.service.update_stage_config", new_callable=AsyncMock)
