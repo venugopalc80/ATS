@@ -91,7 +91,7 @@ export default function SecurityPage() {
   }
 
   async function verifyEnrollment() {
-    if (!setup || !/^\\d{6,8}$/.test(setupCode.trim())) {
+    if (!setup || !/^\d{6,8}$/.test(setupCode.trim())) {
       setError("Enter the current verification code from your authenticator app.");
       return;
     }
@@ -140,7 +140,7 @@ export default function SecurityPage() {
   }
 
   async function confirmRemoval() {
-    if (!removeFactor || !/^\\d{6,8}$/.test(removeCode.trim())) {
+    if (!removeFactor || !/^\d{6,8}$/.test(removeCode.trim())) {
       setError("Enter the current code from the authenticator you are removing.");
       return;
     }
@@ -254,7 +254,7 @@ export default function SecurityPage() {
               </div>
               <label htmlFor="setup-code" style={{ display: "block", fontSize: 13, fontWeight: 700, margin: "18px 0 7px" }}>6-digit verification code</label>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <input id="setup-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={setupCode} onChange={(event) => setSetupCode(event.target.value.replace(/\\D/g, "").slice(0, 8))} placeholder="Enter code" style={{ border: "1px solid #d8e0e9", borderRadius: 9, padding: "11px 12px", width: 180, color: "#182230" }} />
+                <input id="setup-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={setupCode} onChange={(event) => setSetupCode(event.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="Enter code" style={{ border: "1px solid #d8e0e9", borderRadius: 9, padding: "11px 12px", width: 180, color: "#182230" }} />
                 <button type="button" disabled={busy} onClick={() => void verifyEnrollment()} style={{ border: 0, background: "#172b48", color: "#fff", borderRadius: 9, padding: "11px 16px", cursor: "pointer", fontWeight: 700 }}>Verify and enable</button>
                 <button type="button" disabled={busy} onClick={() => { setSetup(null); setSetupCode(""); }} style={{ border: "1px solid #d8e0e9", background: "#fff", color: "#34445a", borderRadius: 9, padding: "11px 16px", cursor: "pointer" }}>Cancel</button>
               </div>
@@ -267,7 +267,7 @@ export default function SecurityPage() {
               <p style={{ color: "#66758a", fontSize: 14 }}>Enter a fresh code from <strong>{removeFactor.friendly_name || "this authenticator"}</strong> to verify your identity before removing it.</p>
               <label htmlFor="remove-code" style={{ display: "block", fontSize: 13, fontWeight: 700, marginBottom: 7 }}>Verification code</label>
               <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
-                <input id="remove-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={removeCode} onChange={(event) => setRemoveCode(event.target.value.replace(/\\D/g, "").slice(0, 8))} placeholder="Enter code" style={{ border: "1px solid #d8e0e9", borderRadius: 9, padding: "11px 12px", width: 180, color: "#182230" }} />
+                <input id="remove-code" inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={removeCode} onChange={(event) => setRemoveCode(event.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="Enter code" style={{ border: "1px solid #d8e0e9", borderRadius: 9, padding: "11px 12px", width: 180, color: "#182230" }} />
                 <button type="button" disabled={busy} onClick={() => void confirmRemoval()} style={{ border: 0, background: "#a23d35", color: "#fff", borderRadius: 9, padding: "11px 16px", cursor: "pointer", fontWeight: 700 }}>Verify and remove</button>
                 <button type="button" disabled={busy} onClick={() => { setRemoveFactor(null); setRemoveChallengeId(""); setRemoveCode(""); }} style={{ border: "1px solid #d8e0e9", background: "#fff", color: "#34445a", borderRadius: 9, padding: "11px 16px", cursor: "pointer" }}>Cancel</button>
               </div>
