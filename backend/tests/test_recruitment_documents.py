@@ -5,8 +5,8 @@ import unittest
 from fastapi import HTTPException
 
 from app.routers.recruitment_documents import (
-    _template_body, _validate_recruitment_file, require_document_manager_role,
-    verify_adapter_signature,
+    _template_body, _validate_recruitment_file, next_signer_status,
+    require_document_manager_role, verify_adapter_signature,
 )
 
 
@@ -23,6 +23,29 @@ class RecruitmentDocumentPermissionTests(unittest.TestCase):
                 with self.assertRaises(HTTPException) as error:
                     require_document_manager_role(role)
                 self.assertEqual(error.exception.status_code, 403)
+
+
+
+class RecruitmentSignatureTransitionTests(unittest.TestCase):
+    def test_progression_is_monotonic_for_out_of_order_events(self):
+        self.assertEqual(next_signer_status("viewed", "sent"), "viewed")
+        self.assertEqual(next_signer_status("signed", "viewed"), "signed")
+        self.assertEqual(next_signer_status("sent", "viewed"), "viewed")
+
+    def test_terminal_states_cannot_be_reversed(self):
+        for terminal in ("signed", "declined", "expired", "revoked"):
+            with self.subTest(terminal=terminal):
+                self.assertEqual(next_signer_status(terminal, "sent"), terminal)
+                self.assertEqual(next_signer_status(terminal, "viewed"), terminal)
+                self.assertEqual(next_signer_status(terminal, "signed"), terminal)
+
+    def test_terminal_event_closes_active_signer(self):
+        self.assertEqual(next_signer_status("pending", "declined"), "declined")
+        self.assertEqual(next_signer_status("viewed", "expired"), "expired")
+        self.assertEqual(next_signer_status("sent", "revoked"), "revoked")
+
+    def test_unknown_existing_state_is_not_replaced(self):
+        self.assertEqual(next_signer_status("unexpected", "signed"), "unexpected")
 
 
 class RecruitmentDocumentTemplateTests(unittest.TestCase):
