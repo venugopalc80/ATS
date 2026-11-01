@@ -76,6 +76,49 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
                     )
                 """)
                 cursor.execute("""
+                    create table if not exists public.organizations (
+                        id uuid primary key,
+                        job_reference_prefix text not null default 'JOB',
+                        job_reference_next_number bigint not null default 1,
+                        updated_at timestamptz not null default now()
+                    )
+                """)
+                cursor.execute("""
+                    create or replace function public.next_job_reference(p_organization_id uuid)
+                    returns text language plpgsql as $job_ref$
+                    declare v_prefix text; v_number bigint;
+                    begin
+                      update public.organizations
+                         set job_reference_next_number=job_reference_next_number+1, updated_at=now()
+                       where id=p_organization_id
+                       returning job_reference_prefix, job_reference_next_number-1 into v_prefix,v_number;
+                      if not found then raise exception 'Organisation not found'; end if;
+                      return v_prefix || '-' || lpad(v_number::text,3,'0');
+                    end;
+                    $job_ref$
+                """)
+                cursor.execute("""
+                    create or replace function public.assign_job_reference()
+                    returns trigger language plpgsql as $job_ref$
+                    begin
+                      if tg_op='INSERT' then
+                        if new.job_code is null or btrim(new.job_code)='' then
+                          new.job_code:=public.next_job_reference(new.organization_id);
+                        end if;
+                      elsif new.job_code is distinct from old.job_code then
+                        raise exception 'Job reference numbers are immutable' using errcode='23514';
+                      end if;
+                      return new;
+                    end;
+                    $job_ref$
+                """)
+                cursor.execute("drop trigger if exists jobs_assign_reference on public.jobs")
+                cursor.execute("""
+                    create trigger jobs_assign_reference
+                    before insert or update of job_code on public.jobs
+                    for each row execute function public.assign_job_reference()
+                """)
+                cursor.execute("""
                     create table if not exists public.job_requisitions (
                         id uuid primary key default gen_random_uuid(),
                         organization_id uuid not null,
@@ -168,6 +211,7 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
         self.user_id = uuid4()
         with get_connection() as connection:
             with connection.cursor() as cursor:
+                cursor.execute("insert into public.organizations (id) values (%s), (%s)", [self.organization_id, self.other_organization_id])
                 cursor.execute(
                     "insert into public.jobs (id, organization_id, title, status) values (%s, %s, %s, 'open'), (%s, %s, %s, 'open')",
                     [self.job_id, self.organization_id, "Integration Test Role",
@@ -189,6 +233,7 @@ class PostgreSQLRecruitmentWorkflowIntegrationTests(unittest.IsolatedAsyncioTest
                     "delete from public.jobs where id in (%s, %s)",
                     [self.job_id, self.other_job_id],
                 )
+                cursor.execute("delete from public.organizations where id in (%s, %s)", [self.organization_id, self.other_organization_id])
 
     async def test_careers_submission_is_persisted_and_visible_after_fresh_read(self):
         result = await apply_for_public_job(
@@ -297,6 +342,9 @@ class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTes
     def setUp(self):
         self.organization_id = uuid4()
         self.user_id = uuid4()
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("insert into public.organizations (id) values (%s)", [self.organization_id])
 
     def tearDown(self):
         with get_connection() as connection:
@@ -304,6 +352,7 @@ class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTes
                 cursor.execute("delete from public.job_requisitions where organization_id=%s", [self.organization_id])
                 cursor.execute("delete from public.jobs where organization_id=%s", [self.organization_id])
                 cursor.execute("delete from public.audit_events where organization_id=%s", [self.organization_id])
+                cursor.execute("delete from public.organizations where id=%s", [self.organization_id])
 
     async def _create_requisition(self):
         from app.schemas.requisitions import RequisitionCreate
@@ -346,7 +395,7 @@ class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTes
         self.assertEqual(converted["requisition"]["status"], "converted")
         self.assertEqual(converted["job"]["title"], "Integration Platform Engineer")
         self.assertEqual(converted["job"]["status"], "draft")
-        self.assertEqual(converted["job"]["job_code"], created["requisition_code"])
+        self.assertEqual(converted["job"]["job_code"], "JOB-001")
 
         retry = await service.convert_to_job(requisition_id, self.user_id)
         self.assertTrue(retry["already_converted"])
@@ -363,7 +412,7 @@ class PostgreSQLRequisitionLifecycleIntegrationTests(unittest.IsolatedAsyncioTes
                 self.assertEqual(persisted_req["job_id"], converted["job"]["id"])
                 cursor.execute(
                     "select count(*) as total from public.jobs where organization_id=%s and job_code=%s",
-                    [self.organization_id, created["requisition_code"]],
+                    [self.organization_id, "JOB-001"],
                 )
                 self.assertEqual(cursor.fetchone()["total"], 1)
                 cursor.execute(
