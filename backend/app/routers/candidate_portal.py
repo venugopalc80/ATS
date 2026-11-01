@@ -205,7 +205,6 @@ def _candidate_document_payload(row) -> dict:
     """Return metadata safe for the candidate; never expose private storage coordinates."""
     return {
         "id": row["id"],
-        "application_id": row.get("application_id"),
         "document_type": row["document_type"],
         "original_filename": row["original_filename"],
         "content_type": row["content_type"],
@@ -225,10 +224,12 @@ async def list_candidate_portal_documents(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select id, application_id, document_type, original_filename,
-                              content_type, file_size_bytes, created_at
-                       from public.candidate_documents
-                       where organization_id=%s and candidate_id=%s and deleted_at is null
+                    """select d.id, d.document_type, d.original_filename,
+                              d.content_type, d.file_size_bytes, d.created_at
+                       from public.candidate_documents d
+                       join public.candidates c
+                         on c.id=d.candidate_id and c.organization_id=d.organization_id
+                       where d.organization_id=%s and d.candidate_id=%s and d.deleted_at is null
                        order by created_at desc""",
                     [organization_id, candidate_id],
                 )
