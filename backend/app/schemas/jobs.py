@@ -1,17 +1,15 @@
 from datetime import datetime
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, Field, StringConstraints, field_validator
-from typing import Annotated
 
 JobStatus = Literal["draft", "open", "on_hold", "closed", "filled", "cancelled"]
 
 
 class JobBase(BaseModel):
     client_id: UUID | None = None
-    job_code: str | None = None
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
@@ -54,7 +52,6 @@ class JobCreate(JobBase):
 
 class JobUpdate(BaseModel):
     client_id: UUID | None = None
-    job_code: str | None = None
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
@@ -93,6 +90,7 @@ class JobUpdate(BaseModel):
 class JobOut(JobBase):
     id: UUID
     organization_id: UUID
+    job_code: str
     created_at: datetime
     updated_at: datetime
 
