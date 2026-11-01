@@ -80,3 +80,5 @@ The migration uses the existing `is_org_member` and `is_org_admin` helpers. Priv
 - Saved filter JSON is a typed allowlist of date range, job and recruiter IDs. Unsupported date/job filters for workload and forecast are rejected at save/update time.
 - Added a Saved Reports panel to Analytics to save a private report setup, apply a saved setup and delete a saved report.
 - The migration remains unexecuted in staging pending migration provenance reconciliation and isolated-database validation.
+
+- Saved report request models reject unknown fields; API responses expose per-user `can_manage` so the UI does not offer deletion where the caller lacks permission.
