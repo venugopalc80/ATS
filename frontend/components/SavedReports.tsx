@@ -61,7 +61,10 @@ export default function SavedReports({ reportType, dateFrom, dateTo, onApply }: 
 
   async function save() {
     const cleaned = name.trim();
-    if (!cleaned || !organizationId) return;
+    if (!cleaned || !organizationId || !API_BASE) {
+      setError("Analytics API or organisation configuration is missing.");
+      return;
+    }
     setSaving(true);
     setError("");
     setMessage("");
@@ -81,7 +84,7 @@ export default function SavedReports({ reportType, dateFrom, dateTo, onApply }: 
       );
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not save this report.");
       setName("");
-      setMessage("Report saved privately to this organisation.");
+      setMessage("Report saved privately to your account in this organisation.");
       await load();
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : "Could not save this report.");
@@ -91,7 +94,7 @@ export default function SavedReports({ reportType, dateFrom, dateTo, onApply }: 
   }
 
   async function remove(report: SavedReport) {
-    if (!organizationId) return;
+    if (!organizationId || !API_BASE) return;
     setError("");
     setMessage("");
     try {
@@ -123,7 +126,7 @@ export default function SavedReports({ reportType, dateFrom, dateTo, onApply }: 
         </label>
         <div className="analytics-saved-report-action">
           <span className="muted-small">{label(reportType)} · {["workload", "forecast"].includes(reportType) ? "Snapshot / baseline filters" : dateFrom || "Any start"} to {["workload", "forecast"].includes(reportType) ? "not applicable" : dateTo || "Any end"}</span>
-          <button className="btn primary" type="button" disabled={saving || !name.trim() || !organizationId} onClick={() => void save()}>
+          <button className="btn primary" type="button" disabled={saving || !name.trim() || !organizationId || !API_BASE} onClick={() => void save()}>
             {saving ? "Saving…" : "Save current setup"}
           </button>
         </div>
