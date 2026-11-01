@@ -10,7 +10,9 @@ END
 $$;
 
 CREATE SCHEMA IF NOT EXISTS auth;
-CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $$ SELECT NULL::uuid $$;
+CREATE OR REPLACE FUNCTION auth.uid() RETURNS uuid LANGUAGE sql STABLE AS $
+  SELECT nullif(current_setting('request.jwt.claim.sub', true), '')::uuid
+$;
 
 CREATE TABLE public.applications (id uuid PRIMARY KEY, organization_id uuid NOT NULL, status text);
 CREATE TABLE public.audit_events (
@@ -23,6 +25,8 @@ CREATE TABLE public.interviews (id uuid PRIMARY KEY, organization_id uuid NOT NU
 CREATE TABLE public.job_distribution_channels (id uuid PRIMARY KEY, organization_id uuid NOT NULL);
 CREATE TABLE public.jobs (id uuid PRIMARY KEY, organization_id uuid NOT NULL);
 CREATE TABLE public.organization_members (organization_id uuid NOT NULL, user_id uuid NOT NULL);
+INSERT INTO public.organization_members VALUES
+  ('00000000-0000-0000-0000-000000000010', '00000000-0000-0000-0000-000000000020');
 CREATE TABLE public.organizations (id uuid PRIMARY KEY);
 CREATE TABLE public.offers (id uuid PRIMARY KEY, organization_id uuid NOT NULL, status text);
 CREATE TABLE public.placements (id uuid PRIMARY KEY, organization_id uuid NOT NULL, status text);
