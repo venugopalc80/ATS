@@ -8,6 +8,7 @@ import { getSupabaseClient } from "@/lib/supabase";
 
 type Contact = { id: string; full_name: string; role: string };
 type Message = { id: string; sender_user_id: string; body: string; created_at: string; deleted?: boolean };
+type ConversationEvent = { id: string; event_type: string; actor_user_id: string; actor_name: string; target_user_id: string | null; target_name: string | null; metadata: Record<string, unknown>; created_at: string };
 type Conversation = {
   id: string; kind: "direct" | "group"; title: string | null; last_message: string | null;
   last_message_at: string | null; unread_count: number; is_pinned: boolean;
@@ -26,6 +27,9 @@ export default function CollaborationPage() {
   const [activeId, setActiveId] = useState("");
   const [currentUserId, setCurrentUserId] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
+  const [events, setEvents] = useState<ConversationEvent[]>([]);
+  const [showActivity, setShowActivity] = useState(false);
+  const [loadingActivity, setLoadingActivity] = useState(false);
   const [hasMoreMessages, setHasMoreMessages] = useState(false);
   const [loadingOlderMessages, setLoadingOlderMessages] = useState(false);
   const [draft, setDraft] = useState("");
@@ -269,6 +273,24 @@ export default function CollaborationPage() {
     finally { setBusy(false); }
   }
 
+  async function toggleActivity() {
+    const nextOpen = !showActivity;
+    setShowActivity(nextOpen);
+    if (!nextOpen || !activeId || active?.kind !== "group") return;
+    setLoadingActivity(true);
+    try {
+      const requestedConversationId = activeId;
+      const data: ConversationEvent[] = await request(
+        "/api/collaboration/conversations/" + requestedConversationId + "/events?limit=50"
+      );
+      if (activeConversationRef.current === requestedConversationId) setEvents(data);
+    } catch (e) {
+      if (activeConversationRef.current === activeId) setError(e instanceof Error ? e.message : "Could not load group activity.");
+    } finally {
+      setLoadingActivity(false);
+    }
+  }
+
   async function togglePin(chat: Conversation) {
     // Ignore repeated clicks while this conversation's pin request is unresolved.
     if (pinRequestsInFlight.current.has(chat.id)) return;
@@ -334,7 +356,7 @@ export default function CollaborationPage() {
         </aside>
         <div style={{ display: "flex", flexDirection: "column", minWidth: 0 }}>
           {active ? <>
-            <header style={{ padding: "17px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, borderBottom: "1px solid #edf0f4" }}><div><strong style={{ fontSize: 15 }}>{activeTitle}</strong><div style={{ fontSize: 12, color: "#7b8595", marginTop: 4 }}>{active.kind === "group" ? "Group conversation" : "Direct conversation"} · {active.members.length} member{active.members.length === 1 ? "" : "s"}</div></div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>{active.kind === "group" && <><button onClick={() => setManageMembers((v) => !v)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>Members</button><button onClick={() => void leaveGroup()} disabled={busy} style={{ border: "1px solid #f0d6d3", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#9d3024", fontSize: 12 }}>Leave</button></>}<button onClick={() => void togglePin(active)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 12px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>{active.is_pinned ? "Unpin" : "Pin conversation"}</button></div></header>
+            <header style={{ padding: "17px 22px", display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, borderBottom: "1px solid #edf0f4" }}><div><strong style={{ fontSize: 15 }}>{activeTitle}</strong><div style={{ fontSize: 12, color: "#7b8595", marginTop: 4 }}>{active.kind === "group" ? "Group conversation" : "Direct conversation"} · {active.members.length} member{active.members.length === 1 ? "" : "s"}</div></div><div style={{ display: "flex", gap: 6, flexWrap: "wrap", justifyContent: "flex-end" }}>{active.kind === "group" && <><button onClick={() => void toggleActivity()} style={{ border: "1px solid #e0e5ec", background: showActivity ? "#f0f2ff" : "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>Activity</button><button onClick={() => setManageMembers((v) => !v)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>Members</button><button onClick={() => void leaveGroup()} disabled={busy} style={{ border: "1px solid #f0d6d3", background: "#fff", borderRadius: 9, padding: "9px 10px", cursor: "pointer", color: "#9d3024", fontSize: 12 }}>Leave</button></>}<button onClick={() => void togglePin(active)} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 9, padding: "9px 12px", cursor: "pointer", color: "#46546a", fontSize: 12 }}>{active.is_pinned ? "Unpin" : "Pin conversation"}</button></div></header>
             {manageMembers && active.kind === "group" && <div style={{ padding: 14, borderBottom: "1px solid #edf0f4", background: "#fafbfc" }}>
               <strong style={{ fontSize: 12 }}>Group members</strong>
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginTop: 8 }}>{active.members.map((m) => <span key={m.id} style={{ border: "1px solid #e0e5ec", background: "#fff", borderRadius: 8, padding: "6px 8px", fontSize: 12, display: "inline-flex", gap: 6, alignItems: "center" }}>{m.full_name || "AQERITH user"}{m.id === currentUserId ? " (you)" : ""}{active.members.some((x) => x.id === currentUserId && x.role === "owner") && m.id !== currentUserId && <button disabled={busy} onClick={() => void removeGroupMember(m.id)} aria-label={"Remove " + (m.full_name || "member")} style={{ border: 0, background: "transparent", color: "#9d3024", cursor: "pointer", padding: 0 }}>×</button>}</span>)}</div>
@@ -346,6 +368,19 @@ export default function CollaborationPage() {
                 <button onClick={() => void addGroupMembers()} disabled={busy || addMemberIds.length === 0} style={{ marginTop: 10, border: 0, borderRadius: 8, padding: "8px 11px", background: "#3549c7", color: "#fff", opacity: busy || addMemberIds.length === 0 ? .5 : 1, cursor: "pointer", fontSize: 12 }}>Add selected members</button>
               </>}
             </div>}
+            {showActivity && active.kind === "group" && <section aria-label="Group activity" style={{ padding: 14, borderBottom: "1px solid #edf0f4", background: "#fafbfc", maxHeight: 190, overflowY: "auto" }}>
+              <strong style={{ fontSize: 12 }}>Recent group activity</strong>
+              {loadingActivity ? <p style={{ fontSize: 12, color: "#7b8595" }}>Loading activity…</p> : events.length === 0 ? <p style={{ fontSize: 12, color: "#7b8595" }}>No activity available since you joined this group.</p> :
+                <ul style={{ listStyle: "none", padding: 0, margin: "8px 0 0", display: "grid", gap: 8 }}>
+                  {events.map((event) => {
+                    const action = event.event_type === "member_added" ? "added" : event.event_type === "member_removed" ? "removed" : event.event_type === "member_left" ? "left the group" : event.event_type === "title_changed" ? "renamed the group" : "updated the group";
+                    return <li key={event.id} style={{ fontSize: 12, color: "#596579" }}>
+                      <strong style={{ color: "#344054" }}>{event.actor_name}</strong> {action}{event.target_name ? <> <strong style={{ color: "#344054" }}>{event.target_name}</strong></> : null}{event.event_type === "title_changed" && typeof event.metadata.title === "string" ? <> to <strong>{event.metadata.title}</strong></> : null}
+                      <span style={{ color: "#929baa" }}> · {timeLabel(event.created_at)}</span>
+                    </li>;
+                  })}
+                </ul>}
+            </section>}
             <div aria-live="polite" style={{ flex: 1, overflowY: "auto", padding: "20px clamp(14px, 3vw, 32px)", display: "flex", flexDirection: "column", gap: 14 }}>
               {hasMoreMessages && <button type="button" onClick={() => void loadOlderMessages()} disabled={loadingOlderMessages} style={{ alignSelf: "center", border: "1px solid #e0e5ec", borderRadius: 9, padding: "8px 12px", background: "#fff", color: "#536174", fontSize: 12, cursor: loadingOlderMessages ? "wait" : "pointer" }}>{loadingOlderMessages ? "Loading…" : "Load older messages"}</button>}
               {messages.length === 0 && <div style={{ margin: "auto", textAlign: "center", maxWidth: 300, color: "#7b8595" }}><div style={{ fontSize: 30, marginBottom: 8 }}>✳</div><strong style={{ color: "#344054" }}>Start a useful conversation</strong><p style={{ fontSize: 13, lineHeight: 1.6 }}>Coordinate a vacancy, share an update or agree on the next step.</p></div>}
