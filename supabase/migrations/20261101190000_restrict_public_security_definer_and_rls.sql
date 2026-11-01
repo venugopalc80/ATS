@@ -25,7 +25,8 @@ grant execute on function public.is_org_member(uuid) to authenticated;
 
 do $$
 declare
-  policy_row record;
+  policy_row text[];
+  optional_policy record;
   required_policies constant text[][] := array[
     array['applications', 'applications_member_all'],
     array['audit_events', 'audit_member_read'],
@@ -64,7 +65,7 @@ begin
   -- This feature exists in ATS-Staging but is absent from the current
   -- production schema. Apply the same role restriction when present.
   if to_regclass('public.application_stage_history') is not null then
-    for policy_row in
+    for optional_policy in
       select policyname
       from pg_policies
       where schemaname = 'public'
@@ -76,7 +77,7 @@ begin
     loop
       execute format(
         'alter policy %I on public.application_stage_history to authenticated',
-        policy_row.policyname
+        optional_policy.policyname
       );
     end loop;
   end if;
