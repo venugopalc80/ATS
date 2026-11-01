@@ -5,6 +5,7 @@ from unittest.mock import patch
 from uuid import UUID
 
 from fastapi import HTTPException
+from pydantic import ValidationError
 
 from app.routers import saved_reports as reports
 
@@ -94,6 +95,7 @@ class SavedReportTests(unittest.IsolatedAsyncioTestCase):
         result = await reports.list_saved_reports(ORG, OWNER)
         self.assertEqual(len(result), 1)
         self.assertEqual(result[0]["id"], str(REPORT))
+        self.assertTrue(result[0]["can_manage"])
         sql, params = self.cursor.queries[0]
         self.assertIn("is_shared=true or created_by=%s or %s=true", sql)
         self.assertEqual(params, [ORG, OWNER, False])
@@ -147,6 +149,10 @@ class SavedReportTests(unittest.IsolatedAsyncioTestCase):
             await reports.create_saved_report(ORG, payload, OWNER)
         self.assertEqual(context.exception.status_code, 422)
         self.assertEqual(self.cursor.queries, [])
+
+    async def test_unknown_filter_fields_are_rejected(self):
+        with self.assertRaises(ValidationError):
+            reports.SavedReportCreate(name="Unsafe", report_type="kpis", filters={"sql": "select * from candidates"})
 
     async def test_forecast_rejects_job_filter(self):
         payload = reports.SavedReportCreate(

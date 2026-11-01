@@ -4,7 +4,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.auth import assert_org_admin, assert_org_member, get_current_user_id, get_org_role
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
@@ -15,6 +15,7 @@ ReportType = Literal["kpis", "funnel", "workload", "sources", "forecast", "campa
 
 
 class ReportFilters(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     date_from: date | None = None
     date_to: date | None = None
     job_id: UUID | None = None
@@ -22,6 +23,7 @@ class ReportFilters(BaseModel):
 
 
 class SavedReportCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str = Field(min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)
     report_type: ReportType
@@ -30,6 +32,7 @@ class SavedReportCreate(BaseModel):
 
 
 class SavedReportUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
     name: str | None = Field(default=None, min_length=1, max_length=100)
     description: str | None = Field(default=None, max_length=500)
     report_type: ReportType | None = None
@@ -67,7 +70,7 @@ def _filters_json(filters: ReportFilters) -> str:
     return json.dumps(filters.model_dump(exclude_none=True), default=str)
 
 
-def _public_report(row: dict) -> dict:
+def _public_report(row: dict, can_manage: bool = False) -> dict:
     filters = row.get("filters") or {}
     return {
         "id": str(row["id"]),
@@ -78,6 +81,7 @@ def _public_report(row: dict) -> dict:
         "report_type": row["report_type"],
         "filters": filters,
         "is_shared": bool(row["is_shared"]),
+        "can_manage": can_manage,
         "created_at": row["created_at"].isoformat() if row.get("created_at") else None,
         "updated_at": row["updated_at"].isoformat() if row.get("updated_at") else None,
     }
@@ -105,7 +109,7 @@ async def list_saved_reports(
                        order by updated_at desc, created_at desc""",
                     [organization_id, user_id, is_admin],
                 )
-                return [_public_report(row) for row in cursor.fetchall()]
+                return [_public_report(row, is_admin or row["created_by"] == user_id) for row in cursor.fetchall()]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_unavailable(exc) from exc
 
@@ -135,7 +139,7 @@ async def create_saved_report(
                         payload.report_type, _filters_json(payload.filters), payload.is_shared,
                     ],
                 )
-                return _public_report(cursor.fetchone())
+                return _public_report(cursor.fetchone(), can_manage=True)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise _db_unavailable(exc) from exc
 
@@ -162,7 +166,7 @@ async def get_saved_report(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Saved report not found")
-                return _public_report(row)
+                return _public_report(row, can_manage=is_admin or row["created_by"] == user_id)
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -225,7 +229,7 @@ async def update_saved_report(
                         report_id, organization_id,
                     ],
                 )
-                return _public_report(cursor.fetchone())
+                return _public_report(cursor.fetchone(), can_manage=True)
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:

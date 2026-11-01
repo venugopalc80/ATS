@@ -13,6 +13,7 @@ export type SavedReport = {
   filters: { date_from?: string; date_to?: string; job_id?: string; recruiter_id?: string };
   is_shared: boolean;
   created_by: string;
+  can_manage: boolean;
 };
 type Props = {
   reportType: SavedReportType;
@@ -143,7 +144,7 @@ export default function SavedReports({ reportType, dateFrom, dateTo, onApply }: 
               </div>
               <div className="analytics-saved-report-buttons">
                 <button className="btn" type="button" onClick={() => onApply(report)}>Apply</button>
-                <button className="btn" type="button" onClick={() => void remove(report)} aria-label={"Delete " + report.name}>Delete</button>
+                {report.can_manage && <button className="btn" type="button" onClick={() => void remove(report)} aria-label={"Delete " + report.name}>Delete</button>}
               </div>
             </div>
           ))}
