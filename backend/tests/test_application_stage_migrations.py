@@ -263,7 +263,11 @@ class ApplicationStageMigrationSmokeTests(unittest.TestCase):
             self.assertEqual(cursor.fetchone(), ("new", "screening", ACTOR_UUID, "CV reviewed"))
 
             # Browser roles have no direct table privileges; RLS is enabled as defence in depth.
-            for table in ("application_stage_history", "application_stage_config"):
+            for table in (
+                "application_stage_history", "application_stage_config",
+                "application_assignments", "application_assignment_history",
+                "application_sla_policies",
+            ):
                 cursor.execute(
                     "select has_table_privilege('anon', %s, 'select'), "
                     "has_table_privilege('authenticated', %s, 'select'), "
