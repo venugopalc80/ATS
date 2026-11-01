@@ -19,7 +19,7 @@ class JobService:
     """Persistence boundary for job requisitions."""
 
     async def list_jobs(
-        self, organization_id: UUID, status: str | None = None
+        self, organization_id: UUID, status: str | None = None, job_ids: list[UUID] | None = None
     ) -> list[dict[str, Any]]:
         query = f"""
             select {JOB_COLUMNS}
@@ -31,6 +31,9 @@ class JobService:
         if status:
             query += " and status = %s"
             params.append(status)
+        if job_ids is not None:
+            query += " and id = any(%s)"
+            params.append(job_ids)
 
         query += " order by created_at desc"
 
