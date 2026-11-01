@@ -284,85 +284,32 @@ class ApplicationStagePersistenceTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase):
-    async def test_get_application_denies_non_member_before_returning_application(self):
-        from fastapi import HTTPException
-
-        row = {
-            "id": APPLICATION,
-            "organization_id": ORG,
-            "job_id": JOB,
-            "candidate_id": CANDIDATE,
-            "source": "careers_page",
-            "status": "new",
-            "match_score": None,
-            "match_explanation": None,
-            "human_reviewed": False,
-            "human_reviewed_by": None,
-            "human_reviewed_at": None,
-            "created_at": NOW,
-            "updated_at": NOW,
-        }
+    async def test_get_application_returns_not_found_for_non_member(self):
         with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=None):
-                with self.assertRaises(HTTPException) as error:
-                    await applications.get_application(APPLICATION, USER)
-
+            with self.assertRaises(HTTPException) as error:
+                await applications.get_application(APPLICATION, USER)
         self.assertEqual(error.exception.status_code, 404)
 
-    async def test_update_application_does_not_mutate_before_membership_check(self):
-        from fastapi import HTTPException
-
-        row = {
-            "id": APPLICATION,
-            "organization_id": ORG,
-            "job_id": JOB,
-            "candidate_id": CANDIDATE,
-            "source": "careers_page",
-            "status": "new",
-            "match_score": None,
-            "match_explanation": None,
-            "human_reviewed": False,
-            "human_reviewed_by": None,
-            "human_reviewed_at": None,
-            "created_at": NOW,
-            "updated_at": NOW,
-        }
+    async def test_update_application_does_not_mutate_for_non_member(self):
         with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=None):
-                with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
-                    with self.assertRaises(HTTPException) as error:
-                        await applications.update_application(
-                            APPLICATION, ApplicationUpdate(status="screening"), USER
-                        )
-
-        self.assertEqual(error.exception.status_code, 403)
+            with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
+                with self.assertRaises(HTTPException) as error:
+                    await applications.update_application(
+                        APPLICATION, ApplicationUpdate(source="tampered"), USER
+                    )
+        self.assertEqual(error.exception.status_code, 404)
         update.assert_not_awaited()
 
-    async def test_transition_application_denies_non_member_before_transition(self):
-        row = {
-            "id": APPLICATION,
-            "organization_id": ORG,
-            "job_id": JOB,
-            "candidate_id": CANDIDATE,
-            "source": "careers_page",
-            "status": "new",
-            "match_score": None,
-            "match_explanation": None,
-            "human_reviewed": False,
-            "human_reviewed_by": None,
-            "human_reviewed_at": None,
-            "created_at": NOW,
-            "updated_at": NOW,
-        }
-        with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
-                with patch.object(applications.service, "transition_application", new_callable=AsyncMock) as transition:
-                    with self.assertRaises(HTTPException) as error:
-                        await applications.transition_application(
-                            APPLICATION,
-                            ApplicationTransition(status="screening", reason="CV reviewed"),
-                            USER,
-                        )
-
-        self.assertEqual(error.exception.status_code, 403)
+    async def test_transition_application_returns_not_found_for_non_member(self):
+        with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=None):
+            with patch.object(applications.service, "transition_application", new_callable=AsyncMock) as transition:
+                with self.assertRaises(HTTPException) as error:
+                    await applications.transition_application(
+                        APPLICATION,
+                        ApplicationTransition(status="screening", reason="CV reviewed"),
+                        USER,
+                    )
+        self.assertEqual(error.exception.status_code, 404)
         transition.assert_not_awaited()
 
     async def test_stage_config_update_requires_org_admin(self):
@@ -375,7 +322,6 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
                         ApplicationStageConfigUpdate(label="Screening"),
                         USER,
                     )
-
         self.assertEqual(error.exception.status_code, 403)
         update.assert_not_awaited()
 
@@ -396,13 +342,11 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "updated_at": NOW,
         }
         with patch.object(applications.service, "get_application_for_member", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member"):
-                with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
-                    with self.assertRaises(HTTPException) as error:
-                        await applications.update_application(
-                            APPLICATION, ApplicationUpdate(status="screening"), USER
-                        )
-
+            with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
+                with self.assertRaises(HTTPException) as error:
+                    await applications.update_application(
+                        APPLICATION, ApplicationUpdate(status="screening"), USER
+                    )
         self.assertEqual(error.exception.status_code, 409)
         self.assertIn("transition endpoint", error.exception.detail)
         update.assert_not_awaited()
