@@ -13,10 +13,10 @@ def db_unavailable(exc: Exception) -> HTTPException:
     return HTTPException(status_code=503, detail="Database operation failed")
 
 @router.get("", response_model=list[JobOut])
-async def list_jobs(organization_id: UUID, status: str | None = Query(default=None), user_id: UUID = Depends(get_current_user_id)) -> list[JobOut]:
+async def list_jobs(organization_id: UUID, status: str | None = Query(default=None), job_ids: list[UUID] | None = Query(default=None, max_length=100), user_id: UUID = Depends(get_current_user_id)) -> list[JobOut]:
     require_permission(user_id, organization_id, "job.read")
     try:
-        rows = await service.list_jobs(organization_id, status)
+        rows = await service.list_jobs(organization_id, status, job_ids)
         return [JobOut.model_validate(row) for row in rows]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
