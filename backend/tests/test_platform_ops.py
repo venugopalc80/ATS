@@ -153,6 +153,9 @@ class PlatformSupportQueuePrivacyTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(cursor.executed), 2)
         grant_sql = next(sql for sql, _ in cursor.executed if "from public.support_access_grants" in sql.lower())
         self.assertIn("scope @> array['case_content']::text[]", grant_sql)
+        self.assertIn("approved_at is not null", grant_sql)
+        self.assertIn("revoked_at is null", grant_sql)
+        self.assertIn("expires_at > now()", grant_sql)
         self.assertFalse(any("description" in sql.lower() for sql, _ in cursor.executed))
 
     async def test_expired_support_request_cannot_be_approved(self):
