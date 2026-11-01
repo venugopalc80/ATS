@@ -264,3 +264,44 @@ This follow-up is stacked on Idea 04's canonical feature branch. It does not alt
 ### Overall tracker reporting
 
 - Verified delivery percentage and evidence coverage percentage for the full 49-idea roadmap remain uncalculated pending canonical roadmap reconciliation.
+
+
+## Evidence refresh — 2026-11-01 (rebased recruiter assignment and SLA engine)
+
+This entry supersedes the earlier #87 follow-up status above. PR #87 was closed without merging because its branch diverged from the current Idea 04 base. The work was ported to a clean follow-up branch.
+
+### Current implementation
+- Canonical follow-up PR: [#88 — Recruiter assignment and SLA deadlines](https://github.com/venugopalc80/ATS/pull/88), draft/open, not merged.
+- Branch: `feat/idea-04-assignment-sla-rebased`.
+- Latest verified commit: `dd9e8c5d55cee2a9728a89e378f843a9ff078248`.
+- Base: latest Idea 04 pipeline head `b856f156e86d635c89cf8492b6d81a008d8660b6`; GitHub reports the PR mergeable.
+- PR #87 is closed as superseded; no code was merged from it.
+
+### Delivered in PR #88
+- Organisation-scoped recruiter assignment and assignment history; owner/admin assignment permissions; recruiter must belong to the same organisation.
+- Assignment APIs, recruiter directory and owner/admin assignment controls in the Applications Inbox.
+- Organisation-level SLA policy schema, migration, API and admin UI.
+- Time-zone-aware working-time calculator supporting business hours, working days and UK DST boundary handling.
+- Persisted initial-review and first-recruiter-action deadlines with recalculate/read APIs.
+- PostgreSQL migration smoke test now applies history, assignment, SLA policy, SLA deadline and stage-config migrations in chronological order and checks RLS/browser-role table privilege restrictions.
+
+### Exact-head CI
+- Run [#993](https://github.com/venugopalc80/ATS/actions/runs/41337176503) passed on `dd9e8c5d55cee2a9728a89e378f843a9ff078248`.
+- Backend: 89 tests passed, 4 skipped.
+- Disposable PostgreSQL 16 migration smoke passed.
+- Frontend TypeScript typecheck and production build passed.
+- This does not prove live Supabase JWT validation, live RLS behaviour or authenticated staging acceptance.
+
+### Remaining
+- Automatically create initial deadlines on application creation.
+- Complete/refresh first-action deadlines on recruitment events.
+- Candidate follow-up and post-interview milestone event integration.
+- Holiday calendar support.
+- Background overdue monitoring, notification delivery and recruiter workload reporting.
+- Authenticated staging acceptance and live Supabase security verification.
+
+**Current Idea 04 estimate:** approximately 83% implementation complete / 17% remaining (engineering estimate, not acceptance score). The feature remains draft, not staging-verified and not production-ready. No live Supabase migrations, live database writes, production deployments or merges were performed.
+
+### Overall tracker reporting
+
+- Verified delivery percentage and evidence coverage percentage for all 49 ideas remain uncalculated pending canonical roadmap reconciliation.
