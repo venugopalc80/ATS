@@ -98,7 +98,7 @@ async def delete_application(
         organization_id = await service.get_application_organization_id(application_id)
         if organization_id is None:
             raise HTTPException(status_code=404, detail="Application not found")
-        require_permission(user_id, organization_id, "application.manage")
+        require_permission(user_id, organization_id, "application.delete")
         deleted = await service.delete_application(application_id)
     except HTTPException:
         raise
