@@ -1,5 +1,12 @@
+import asyncio
 import unittest
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from types import SimpleNamespace
+from unittest.mock import patch
+from uuid import uuid4
+
+from fastapi import HTTPException
 
 from app.routers.candidate_portal import _verified_email
 
@@ -18,12 +25,7 @@ class CandidatePortalIdentityTests(unittest.TestCase):
         self.assertIsNone(_verified_email(SimpleNamespace(email="not-an-email", email_confirmed_at="2026-10-01")))
 
 
-if __name__ == "__main__":
-    unittest.main()
 
-
-from datetime import datetime, timezone
-from uuid import uuid4
 
 from app.routers.candidate_portal import _candidate_document_payload
 
@@ -56,15 +58,7 @@ class CandidatePortalDocumentTests(unittest.TestCase):
         self.assertNotIn("organization_id", payload)
 
 
-if __name__ == "__main__":
-    unittest.main()
 
-
-import asyncio
-from contextlib import contextmanager
-from unittest.mock import patch
-
-from fastapi import HTTPException
 from app.routers import candidate_portal
 
 
@@ -156,6 +150,8 @@ class CandidatePortalDocumentOwnershipTests(unittest.TestCase):
                 ))
         self.assertEqual(raised.exception.status_code, 404)
         storage_client.assert_not_called()
+
+
 
 
 if __name__ == "__main__":
