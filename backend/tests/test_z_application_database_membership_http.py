@@ -8,6 +8,7 @@ import unittest
 from uuid import UUID
 
 from fastapi.testclient import TestClient
+from unittest.mock import patch
 
 from app.auth import get_current_user_id
 from app.main import app
@@ -22,6 +23,7 @@ JOB = UUID("aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa")
 CANDIDATE = UUID("bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb")
 OTHER_JOB = UUID("eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee")
 OTHER_CANDIDATE = UUID("ffffffff-ffff-4fff-8fff-ffffffffffff")
+OTHER_DOCUMENT = UUID("12121212-1212-4121-8121-121212121212")
 NOW = "2026-10-14T12:00:00+00:00"
 
 
@@ -50,6 +52,11 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                     "insert into public.organization_members(organization_id,user_id,role) values (%s,%s,'recruiter') "
                     "on conflict (organization_id,user_id) do update set role=excluded.role",
                     (ORG, RECRUITER),
+                )
+                cursor.execute(
+                    "insert into public.organization_members(organization_id,user_id,role) values (%s,%s,'admin') "
+                    "on conflict (organization_id,user_id) do update set role=excluded.role",
+                    (ORG, ACTOR),
                 )
                 cursor.execute(
                     "insert into public.jobs(id,organization_id) values (%s,%s) on conflict (id) do nothing",
@@ -91,6 +98,37 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                     "values (%s,%s,%s,%s,'careers_page','new','confidential recruiter assessment') "
                     "on conflict (id) do nothing",
                     (APPLICATION, OTHER_ORG, OTHER_JOB, OTHER_CANDIDATE),
+                )
+                cursor.execute("""
+                    create table if not exists public.candidate_documents (
+                        id uuid primary key,
+                        organization_id uuid not null,
+                        candidate_id uuid not null,
+                        application_id uuid,
+                        document_type text not null,
+                        original_filename text not null,
+                        storage_bucket text not null,
+                        storage_path text not null unique,
+                        content_type text not null,
+                        file_size_bytes bigint not null,
+                        sha256 text not null,
+                        uploaded_by uuid,
+                        created_at timestamptz not null default now(),
+                        deleted_at timestamptz
+                    )
+                """)
+                cursor.execute(
+                    """insert into public.candidate_documents
+                       (id,organization_id,candidate_id,document_type,original_filename,
+                        storage_bucket,storage_path,content_type,file_size_bytes,sha256)
+                       values (%s,%s,%s,'cv','private.pdf','candidate-documents',
+                               'private/test-document.pdf','application/pdf',128,%s)
+                       on conflict (id) do update set
+                         organization_id=excluded.organization_id,
+                         candidate_id=excluded.candidate_id,
+                         storage_path=excluded.storage_path,
+                         deleted_at=null""",
+                    (OTHER_DOCUMENT, OTHER_ORG, OTHER_CANDIDATE, "a" * 64),
                 )
             connection.commit()
 
@@ -166,6 +204,25 @@ class ApplicationDatabaseMembershipHttpTests(unittest.TestCase):
                     (OTHER_CANDIDATE,),
                 )
                 self.assertEqual(cursor.fetchone()[0], "Private Candidate")
+
+
+    def test_document_preview_and_download_hide_cross_tenant_document(self):
+        # The document exists in another organisation. A member of ORG supplies
+        # that organisation ID, so the document lookup must scope by both ID
+        # and organisation before asking private storage for a signed URL.
+        self.current_user["id"] = str(ACTOR)
+        with patch("app.routers.documents.storage_client") as storage:
+            response = self.client.post(
+                f"/api/documents/{OTHER_DOCUMENT}/download?organization_id={ORG}"
+            )
+            self.assertEqual(response.status_code, 404)
+
+            response = self.client.post(
+                f"/api/documents/{OTHER_DOCUMENT}/preview?organization_id={ORG}"
+            )
+            self.assertEqual(response.status_code, 404)
+
+            storage.assert_not_called()
 
     def test_real_membership_role_blocks_recruiter_stage_config_write(self):
         # This uses the real membership row and real stage-config endpoint.
