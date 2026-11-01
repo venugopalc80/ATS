@@ -61,6 +61,16 @@ def storage_client():
     return create_client(url, key)
 
 
+def can_read_candidate_contact(user_id: UUID, organization_id: UUID) -> bool:
+    try:
+        require_permission(user_id, organization_id, "candidate.read_contact")
+        return True
+    except HTTPException as exc:
+        if exc.status_code == 403:
+            return False
+        raise
+
+
 def verify_candidate(candidate_id: UUID, organization_id: UUID):
     with get_connection() as connection:
         with connection.cursor() as cursor:
@@ -337,6 +347,7 @@ async def bulk_upload_cvs(
     """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
     require_permission(user_id, organization_id, "candidate.create")
     require_permission(user_id, organization_id, "candidate.cv.upload")
+    include_contact = can_read_candidate_contact(user_id, organization_id)
     if not files:
         raise HTTPException(status_code=422, detail="Choose at least one CV to upload")
     if len(files) > MAX_BULK_FILES:
@@ -415,7 +426,7 @@ async def bulk_upload_cvs(
                 results.append({
                     "filename": filename, "status": "imported", "candidate_id": str(candidate_id),
                     "name": " ".join(part for part in [fields["first_name"], fields["last_name"]] if part),
-                    "email": fields["email"], "skills_found": fields["skills"],
+                    "email": fields["email"] if include_contact else None, "skills_found": fields["skills"],
                     "text_extracted": bool(text.strip()),
                 })
             except Exception:
