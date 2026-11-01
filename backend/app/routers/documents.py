@@ -267,6 +267,21 @@ MAX_BULK_FILES = 20
 MAX_BULK_BYTES = 4 * 1024 * 1024  # Stay below the Vercel Functions request-body limit.
 
 
+def acquire_bulk_cv_dedup_locks(cursor, organization_id: UUID, email: str | None, digest: str) -> None:
+    """Serialize same-tenant bulk imports sharing an email or document hash."""
+    lock_keys = [
+        f"aqerith:bulk-cv:sha256:{organization_id}:{digest}",
+    ]
+    if email:
+        lock_keys.append(f"aqerith:bulk-cv:email:{organization_id}:{email.casefold()}")
+    # Every request acquires keys in the same order, avoiding lock-order deadlocks.
+    for lock_key in sorted(lock_keys):
+        cursor.execute(
+            "select pg_advisory_xact_lock(hashtextextended(%s, 0))",
+            [lock_key],
+        )
+
+
 async def read_bulk_cv_files(files: list[UploadFile]) -> list[bytes]:
     """Read and enforce the aggregate batch limit before any candidate/storage writes."""
     payloads: list[bytes] = []
@@ -379,34 +394,42 @@ async def bulk_upload_cvs(
             if not fields["first_name"].strip():
                 fields["first_name"] = "CV candidate"
 
-            with get_connection() as connection:
-                with connection.cursor() as cursor:
-                    if fields["email"]:
-                        cursor.execute(
-                            "select id from public.candidates where organization_id=%s and lower(email)=lower(%s) limit 1",
-                            [organization_id, fields["email"]],
-                        )
-                        existing = cursor.fetchone()
-                        if existing:
-                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists", "candidate_id": str(existing["id"])})
-                            continue
-                    cursor.execute(
-                        "select id from public.candidate_documents where organization_id=%s and sha256=%s and deleted_at is null limit 1",
-                        [organization_id, digest],
-                    )
-                    if cursor.fetchone():
-                        results.append({"filename": filename, "status": "duplicate", "message": "This CV file has already been uploaded"})
-                        continue
-
             candidate_id = uuid4()
             document_id = uuid4()
             path = f"{organization_id}/{candidate_id}/{document_id}{extension}"
-            storage_client().storage.from_(BUCKET).upload(
-                path, data, {"content-type": mime, "upsert": "false", "cache-control": "0"}
-            )
+            uploaded_storage = None
+            uploaded = False
             try:
+                # Keep the transaction-scoped advisory locks through duplicate checks,
+                # private storage upload, and metadata inserts. Competing bulk imports
+                # for the same tenant/email or tenant/file hash must wait until commit.
                 with get_connection() as connection:
                     with connection.cursor() as cursor:
+                        acquire_bulk_cv_dedup_locks(
+                            cursor, organization_id, fields["email"], digest
+                        )
+                        if fields["email"]:
+                            cursor.execute(
+                                "select id from public.candidates where organization_id=%s and lower(email)=lower(%s) limit 1",
+                                [organization_id, fields["email"]],
+                            )
+                            existing = cursor.fetchone()
+                            if existing:
+                                results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists", "candidate_id": str(existing["id"])})
+                                continue
+                        cursor.execute(
+                            "select id from public.candidate_documents where organization_id=%s and sha256=%s and deleted_at is null limit 1",
+                            [organization_id, digest],
+                        )
+                        if cursor.fetchone():
+                            results.append({"filename": filename, "status": "duplicate", "message": "This CV file has already been uploaded"})
+                            continue
+
+                        uploaded_storage = storage_client().storage.from_(BUCKET)
+                        uploaded_storage.upload(
+                            path, data, {"content-type": mime, "upsert": "false", "cache-control": "0"}
+                        )
+                        uploaded = True
                         cursor.execute(
                             """insert into public.candidates
                                (id, organization_id, first_name, last_name, email, phone, status,
@@ -438,10 +461,11 @@ async def bulk_upload_cvs(
                     "text_extracted": bool(text.strip()),
                 })
             except Exception:
-                try:
-                    storage_client().storage.from_(BUCKET).remove([path])
-                except Exception:
-                    pass
+                if uploaded and uploaded_storage is not None:
+                    try:
+                        uploaded_storage.remove([path])
+                    except Exception:
+                        pass
                 raise
         except HTTPException as exc:
             results.append({"filename": filename, "status": "error", "message": str(exc.detail)})
