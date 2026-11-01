@@ -128,7 +128,7 @@ export default function WorkflowsPage() {
         <button disabled={busy || !selected || selectedWorkflow?.status === "disabled"} onClick={() => changeStatus("publish")}>Publish version</button>
         <button className="danger" disabled={busy || !selected || selectedWorkflow?.status === "disabled"} onClick={() => changeStatus("disable")}>Disable</button>
       </div>
-      {preview && <pre className="workflow-preview">{JSON.stringify(preview, null, 2)}</pre>}
+      {preview !== null && <pre className="workflow-preview">{JSON.stringify(preview, null, 2)}</pre>}
     </section>
     <section className="panel"><div className="panel-heading"><div><h2>Saved workflows</h2><p className="muted">Select a workflow to inspect its current definition.</p></div></div>
       {items.length === 0 ? <p className="muted">No workflows yet.</p> : <div className="table-wrap"><table><thead><tr><th>Name</th><th>Trigger</th><th>Status</th><th>Updated</th></tr></thead><tbody>{items.map((item) => <tr key={item.id} className={selected === item.id ? "selected-row" : ""} onClick={() => { setSelected(item.id); setName(item.name); setDescription(item.description ?? ""); if (item.draft_definition?.trigger_event) setEventName(item.draft_definition.trigger_event); }}><td><strong>{item.name}</strong><small>{item.id}</small></td><td>{item.draft_definition?.trigger_event ?? "Published version"}</td><td><span className="status-pill">{item.status}</span></td><td>{new Date(item.updated_at).toLocaleString()}</td></tr>)}</tbody></table></div>}
