@@ -134,12 +134,12 @@ class RequisitionService:
                 if req["status"] != "approved":
                     raise ValueError("Only an approved requisition can be converted to a job")
                 cursor.execute(
-                    """insert into public.jobs (organization_id,client_id,job_code,title,description,location,country_code,
+                    """insert into public.jobs (organization_id,client_id,title,description,location,country_code,
                        employment_type,work_mode,salary_min,salary_max,salary_currency,required_skills,recruiter_id,
                        hiring_manager_id,created_by,status)
-                       values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'draft')
+                       values (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,'draft')
                        returning id,organization_id,job_code,title,status""",
-                    [req["organization_id"], req["client_id"], req["requisition_code"], req["title"], req["justification"],
+                    [req["organization_id"], req["client_id"], req["title"], req["justification"],
                      req["location"], req["country_code"], req["employment_type"], req["work_mode"], req["salary_min"],
                      req["salary_max"], req["salary_currency"], req["required_skills"], req["recruiter_id"], req["hiring_manager_id"], actor_id],
                 )
