@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { DragEvent, useEffect, useMemo, useState } from "react";
+import { type DragEvent, type FormEvent, useEffect, useMemo, useState } from "react";
 import { apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
 
@@ -20,6 +20,34 @@ type Application = {
   match_score?: number | null;
   human_reviewed: boolean;
   created_at: string;
+};
+
+type Recruiter = { id: string; full_name?: string | null; email?: string | null };
+type ApplicationAssignment = { application_id: string; recruiter_id: string | null };
+type ApplicationSLAPolicy = {
+  organization_id: string;
+  initial_review_minutes: number;
+  first_recruiter_action_minutes: number;
+  candidate_follow_up_minutes: number;
+  post_interview_update_minutes: number;
+  timezone: string;
+  business_days_only: boolean;
+  business_hours_start: string;
+  business_hours_end: string;
+  working_days: number[];
+  enabled: boolean;
+};
+const DEFAULT_SLA_POLICY = {
+  initial_review_minutes: 1440,
+  first_recruiter_action_minutes: 2880,
+  candidate_follow_up_minutes: 2880,
+  post_interview_update_minutes: 1440,
+  timezone: "Europe/London",
+  business_days_only: true,
+  business_hours_start: "09:00",
+  business_hours_end: "17:00",
+  working_days: [1, 2, 3, 4, 5],
+  enabled: true,
 };
 
 type ApplicationStageConfig = {
@@ -41,6 +69,12 @@ export default function SubmissionsPage() {
   const [jobs, setJobs] = useState<Job[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [stages, setStages] = useState<ApplicationStageConfig[]>([]);
+  const [recruiters, setRecruiters] = useState<Recruiter[]>([]);
+  const [assignments, setAssignments] = useState<Record<string, string | null>>({});
+  const [canManageAssignments, setCanManageAssignments] = useState(false);
+  const [savingAssignmentId, setSavingAssignmentId] = useState<string | null>(null);
+  const [slaPolicy, setSlaPolicy] = useState<ApplicationSLAPolicy | null>(null);
+  const [savingSlaPolicy, setSavingSlaPolicy] = useState(false);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -89,17 +123,30 @@ export default function SubmissionsPage() {
       }
       try {
         const org = encodeURIComponent(organizationId);
-        const [apps, jobResponse, candidateResponse, stageResponse] = await Promise.all([
+        const [apps, jobResponse, candidateResponse, stageResponse, recruiterResponse, assignmentResponse, meResponse] = await Promise.all([
           apiFetch(API_BASE + "/api/applications?organization_id=" + org),
           apiFetch(API_BASE + "/api/jobs?organization_id=" + org),
           apiFetch(API_BASE + "/api/candidates?organization_id=" + org),
           apiFetch(API_BASE + "/api/applications/stages?organization_id=" + org),
+          apiFetch(API_BASE + "/api/applications/recruiters?organization_id=" + org),
+          apiFetch(API_BASE + "/api/applications/assignments?organization_id=" + org),
+          apiFetch(API_BASE + "/api/me"),
         ]);
-        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok || !stageResponse.ok) throw new Error("Unable to load recruitment pipeline and stage configuration.");
+        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok || !stageResponse.ok || !recruiterResponse.ok || !assignmentResponse.ok || !meResponse.ok) throw new Error("Unable to load recruitment pipeline, assignment and recruiter data.");
         setApplications(await apps.json());
         setJobs(await jobResponse.json());
         setCandidates(await candidateResponse.json());
         setStages(await stageResponse.json());
+        setRecruiters(await recruiterResponse.json());
+        const assignmentRows: ApplicationAssignment[] = await assignmentResponse.json();
+        setAssignments(Object.fromEntries(assignmentRows.map((item) => [item.application_id, item.recruiter_id])));
+        const me = await meResponse.json();
+        const membership = (me.organizations ?? []).find((item: { id: string; role: string }) => item.id === organizationId);
+        setCanManageAssignments(membership?.role === "owner" || membership?.role === "admin");
+        setSlaPolicy({ organization_id: organizationId, ...DEFAULT_SLA_POLICY });
+        const slaResponse = await apiFetch(API_BASE + "/api/applications/sla-policy?organization_id=" + org);
+        if (slaResponse.ok) setSlaPolicy(await slaResponse.json());
+        else if (slaResponse.status !== 404) throw new Error("Unable to load the organisation SLA policy.");
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to load submissions.");
       } finally {
@@ -180,6 +227,42 @@ export default function SubmissionsPage() {
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update application.");
     }
+  }
+
+  async function changeAssignment(application: Application, recruiterId: string) {
+    const current = assignments[application.id] ?? null;
+    const nextRecruiterId = recruiterId || null;
+    if (current === nextRecruiterId || savingAssignmentId) return;
+    const reason = window.prompt(nextRecruiterId ? "Why is this application being assigned or reassigned?" : "Why is this application being unassigned?");
+    if (reason === null) return;
+    if (!reason.trim() || reason.trim().length > 1000) { setMessage("Enter an assignment reason between 1 and 1000 characters."); return; }
+    setSavingAssignmentId(application.id);
+    try {
+      const response = await apiFetch(API_BASE + "/api/applications/" + application.id + "/assignment", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ recruiter_id: nextRecruiterId, reason: reason.trim() }),
+      });
+      if (!response.ok) { const detail = await response.json().catch(() => null); throw new Error(detail?.detail ?? "Unable to update recruiter assignment."); }
+      const updated: ApplicationAssignment = await response.json();
+      setAssignments((currentAssignments) => ({ ...currentAssignments, [application.id]: updated.recruiter_id }));
+      setMessage("Recruiter assignment updated.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to update recruiter assignment."); }
+    finally { setSavingAssignmentId(null); }
+  }
+
+  async function saveSlaPolicy(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (!slaPolicy || savingSlaPolicy) return;
+    setSavingSlaPolicy(true);
+    try {
+      const response = await apiFetch(API_BASE + "/api/applications/sla-policy", {
+        method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify(slaPolicy),
+      });
+      if (!response.ok) { const detail = await response.json().catch(() => null); throw new Error(detail?.detail ?? "Unable to save SLA policy."); }
+      setSlaPolicy(await response.json());
+      setMessage("Recruitment SLA policy saved.");
+    } catch (error) { setMessage(error instanceof Error ? error.message : "Unable to save SLA policy."); }
+    finally { setSavingSlaPolicy(false); }
   }
 
   async function runBulkTransition() {
@@ -297,6 +380,21 @@ export default function SubmissionsPage() {
           </div>
           <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{stages.map((item) => <option key={item.stage_key} value={item.stage_key}>{item.label}</option>)}</select><select className="filter" aria-label="Filter application source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(1); }}><option value="all">All sources</option>{sourceOptions.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} application{filtered.length === 1 ? "" : "s"}</span></div></div>
           {message && <div className="notice">{message}</div>}
+          {canManageAssignments && slaPolicy && <form className="card" style={{ marginBottom: 16 }} onSubmit={(event) => void saveSlaPolicy(event)}>
+            <div className="card-head"><span className="card-title">Recruitment SLA policy</span><label style={{ display: "flex", gap: 8, alignItems: "center" }}><input type="checkbox" checked={slaPolicy.enabled} onChange={(event) => setSlaPolicy({ ...slaPolicy, enabled: event.target.checked })} /> Enabled</label></div>
+            <p className="muted-small">Internal response targets for your recruitment team. These are operational targets, not legal deadlines.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: 12 }}>
+              <label>Initial review (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.initial_review_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, initial_review_minutes: Number(event.target.value) })} /></label>
+              <label>First recruiter action (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.first_recruiter_action_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, first_recruiter_action_minutes: Number(event.target.value) })} /></label>
+              <label>Candidate follow-up (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.candidate_follow_up_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, candidate_follow_up_minutes: Number(event.target.value) })} /></label>
+              <label>Post-interview update (minutes)<input type="number" min="1" max="43200" required value={slaPolicy.post_interview_update_minutes} onChange={(event) => setSlaPolicy({ ...slaPolicy, post_interview_update_minutes: Number(event.target.value) })} /></label>
+              <label>Time zone<input required maxLength={100} value={slaPolicy.timezone} onChange={(event) => setSlaPolicy({ ...slaPolicy, timezone: event.target.value })} placeholder="Europe/London" /></label>
+              <label>Calendar<select value={slaPolicy.business_days_only ? "working" : "all"} onChange={(event) => setSlaPolicy({ ...slaPolicy, business_days_only: event.target.value === "working" })}><option value="working">Working days only</option><option value="all">All calendar days</option></select></label>
+              <label>Business hours start<input type="time" required value={slaPolicy.business_hours_start} onChange={(event) => setSlaPolicy({ ...slaPolicy, business_hours_start: event.target.value })} /></label>
+              <label>Business hours end<input type="time" required value={slaPolicy.business_hours_end} onChange={(event) => setSlaPolicy({ ...slaPolicy, business_hours_end: event.target.value })} /></label>
+            </div>
+            <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 12 }}><button className="btn primary" disabled={savingSlaPolicy}>{savingSlaPolicy ? "Saving..." : "Save SLA policy"}</button></div>
+          </form>}
 
           {showCreate && (
             <div className="modal-backdrop">
@@ -430,9 +528,9 @@ export default function SubmissionsPage() {
                   const pageIds = new Set(pageApplications.map((item) => item.id));
                   setSelectedApplicationIds(selectedApplicationIds.filter((id) => !pageIds.has(id)));
                 }
-              }} /></th><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
+              }} /></th><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th>{canManageAssignments && <th>Assigned recruiter</th>}<th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={11}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={11}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
+                {loading ? <tr><td colSpan={canManageAssignments ? 12 : 11}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={canManageAssignments ? 12 : 11}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
                     const candidate = candidateMap.get(application.candidate_id);
                     const job = jobMap.get(application.job_id);
                     return (
@@ -449,7 +547,7 @@ export default function SubmissionsPage() {
                         <td><Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link></td>
                         <td>{candidate?.email ?? "—"}</td><td>{candidate?.phone ?? "—"}</td><td>{[candidate?.city, candidate?.region].filter(Boolean).join(", ") || "—"}</td><td>{application.source || "Direct"}</td>
                         <td><select className="filter" aria-label={"Status for " + candidateName(candidate)} value={application.status} onChange={(event) => void changeStatus(application, event.target.value as ApplicationStatus)}><option value={application.status}>{application.status.replaceAll("_", " ")}</option>{(stageMap.get(application.status)?.allowed_next_stages ?? []).filter((next) => stageMap.get(next)?.enabled).map((next) => <option key={next} value={next}>{stageLabel(next)}</option>)}</select></td>
-                        <td>{job?.title ?? "Unknown job"}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td><td>{new Date(application.created_at).toLocaleDateString()}</td>
+                        <td>{job?.title ?? "Unknown job"}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td>{canManageAssignments && <td><select className="filter" aria-label={"Assigned recruiter for " + candidateName(candidate)} value={assignments[application.id] ?? ""} disabled={savingAssignmentId === application.id} onChange={(event) => void changeAssignment(application, event.target.value)}><option value="">Unassigned</option>{recruiters.map((recruiter) => <option key={recruiter.id} value={recruiter.id}>{recruiter.full_name || recruiter.email || recruiter.id.slice(0, 8)}</option>)}</select></td>}<td>{new Date(application.created_at).toLocaleDateString()}</td>
                       </tr>
                     );
                   })}
