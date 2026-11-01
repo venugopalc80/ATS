@@ -49,7 +49,7 @@ class RecruiterTaskTenantMigrationTests(unittest.TestCase):
             with conn.cursor() as cur:
                 cur.execute("insert into public.organizations (id) values (%s), (%s)", [cls.org_a, cls.org_b])
                 cur.execute("insert into public.candidates (id, organization_id, first_name) values (%s, %s, %s)", [cls.candidate_a, cls.org_a, "Integration"])
-                cur.execute("insert into public.jobs (id, organization_id) values (%s, %s)", [cls.job_a, cls.org_a])
+                cur.execute("insert into public.jobs (id, organization_id, title) values (%s, %s, %s)", [cls.job_a, cls.org_a, "Integration role"])
                 cur.execute(
                     "insert into public.recruiter_tasks (id, organization_id, candidate_id) values (%s, %s, %s)",
                     [cls.bad_task, cls.org_b, cls.candidate_a],
