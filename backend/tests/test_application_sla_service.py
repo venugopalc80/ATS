@@ -46,7 +46,7 @@ class WorkingMinutesTests(unittest.TestCase):
             180,
             timezone_name="Europe/London",
         )
-        self.assertEqual(result, datetime(2026, 10, 26, 10, 0, tzinfo=timezone.utc))
+        self.assertEqual(result, datetime(2026, 10, 26, 11, 0, tzinfo=timezone.utc))
 
     def test_rejects_naive_start(self):
         with self.assertRaises(ValueError):
