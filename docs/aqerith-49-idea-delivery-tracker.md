@@ -243,3 +243,24 @@ This follow-up is stacked on Idea 04's canonical feature branch. It does not alt
 - Backend unit and migration smoke tests passed.
 - Frontend TypeScript typecheck and production build passed.
 - This verifies the current code against the repository CI environment only. It does not replace authenticated staging acceptance or prove live Supabase JWT/RLS behaviour.
+
+
+## Evidence refresh — 2026-11-01 (SLA policy configuration)
+
+- Idea 04 follow-up PR remains [#87](https://github.com/venugopalc80/ATS/pull/87), draft/open and not merged.
+- Current follow-up branch head: `edd15038104dac0c0f343f8cf9416f60d3b47a0f`.
+- Added organisation-level `application_sla_policies` migration with configurable initial-review, first-recruiter-action, candidate-follow-up and post-interview-update targets; IANA time zone; business-hours window; working-day configuration; and enable/disable state.
+- Added owner/admin SLA policy read/update endpoints and validation for duration limits, IANA time zones, weekday values and business-hours ordering.
+- Added an admin-facing SLA policy editor in the Applications Inbox. Default values are operational suggestions, not statutory or regulatory deadlines.
+- Extended the disposable PostgreSQL migration smoke test to apply the recruiter-assignment and SLA migrations and verify RLS/browser-role privilege restrictions for their tables.
+- Backend CI passed on commit `2dd9f76b5c4f080a1b5de1c9189811b4917fbb1e`, including the SLA validation and authorization tests. This run preceded the latest UI and migration-smoke-test edits.
+- Frontend CI failed on commit `a1531ceac226ca4daec339a477aa8476cc4c4afb` because a literal escaped newline was introduced in the Applications Inbox state declarations. The source was corrected in subsequent commits (`9f4dcf14f7f02f7571b95d2aeb2ad5f0edf7b935`, then type-only import cleanup at current head `edd15038104dac0c0f343f8cf9416f60d3b47a0f)); a successful CI run on the current head is still required.
+- The PR currently reports a merge conflict against its stacked base. Keep it draft; resolve/reconcile the branch against the current Idea 04 base before considering integration.
+- Per-application SLA deadlines, working-time deadline calculation, holiday calendars, background monitoring, reminders/notifications and workload reporting remain outstanding.
+- No live Supabase migrations, live database writes, production deployments or merges were performed.
+
+**Current Idea 04 estimate:** approximately 80% implementation complete / 20% remaining (engineering estimate only). It is not staging-verified or production-ready. The estimate excludes release acceptance gates.
+
+### Overall tracker reporting
+
+- Verified delivery percentage and evidence coverage percentage for the full 49-idea roadmap remain uncalculated pending canonical roadmap reconciliation.
