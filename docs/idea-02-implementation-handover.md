@@ -184,3 +184,19 @@
 - Migration 026 has passed isolated CI checks only. It remains unapplied to ATS-Staging and production. Do not apply it to either environment without the user's explicit approval.
 - Expanded the disposable RLS harness to verify UPDATE WITH CHECK rejects cross-organisation client assignment, ineligible hiring-manager assignment, ineligible recruiter assignment, and organisation reassignment. The first run exposed a malformed anonymous-block delimiter in this added test; the delimiter was corrected and the full workflow passed in [run 41329089765](https://github.com/venugopalc80/ATS/actions/runs/41329089765): backend tests, frontend typecheck/production build, and migration/RLS tests all succeeded.
 - The successful run validates migrations 024-026 only inside the disposable PostgreSQL service. It does not constitute staging approval or a staging application.
+
+
+## Automatic public job references (migration 027)
+
+- The existing `jobs.job_code` field is retained as the public reference field.
+- Migration `027_automatic_job_references.sql` adds an organisation-level prefix and atomic counter.
+- New jobs receive a database-generated reference in `PREFIX-001` format; the default prefix for new organisations is `JOB`.
+- Prefixes are organisation-specific and constrained to 2-8 uppercase alphanumeric characters.
+- Existing non-empty job codes are preserved; missing values are backfilled.
+- A tenant-scoped unique index prevents duplicate references within an organisation.
+- A database trigger prevents changing an assigned reference.
+- Job create/update API schemas no longer accept client-controlled `job_code`.
+- Requisition conversion now lets the database assign a job reference instead of copying the `REQ-` requisition code.
+- The Jobs register displays and searches by job reference.
+- Migration 027 has been committed to the feature branch only. It has not been applied to ATS-Staging or production.
+- The SQL integration harness now includes migration 027 and checks sequential numbering, tenant isolation and immutability.
