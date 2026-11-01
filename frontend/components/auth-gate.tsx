@@ -139,7 +139,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   async function verifySecondFactor(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!mfaChallenge || !/^\\d{6,8}$/.test(mfaCode.trim())) {
+    if (!mfaChallenge || !/^\d{6,8}$/.test(mfaCode.trim())) {
       setMfaError("Enter the current verification code from your authenticator.");
       return;
     }
@@ -177,7 +177,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
           {mfaError && <div role="alert" style={{ background: "#fff1f0", color: "#9d3028", padding: 11, borderRadius: 8, marginBottom: 12, fontSize: 13 }}>{mfaError}</div>}
           <form onSubmit={verifySecondFactor}>
             <label htmlFor="aqerith-mfa-code" style={{ display: "block", color: "#34445a", fontSize: 13, fontWeight: 700, marginBottom: 7 }}>Verification code</label>
-            <input id="aqerith-mfa-code" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\\D/g, "").slice(0, 8))} placeholder="Enter code" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #d8e0e9", borderRadius: 9, padding: "12px 13px", fontSize: 18, letterSpacing: ".18em", color: "#182230" }} />
+            <input id="aqerith-mfa-code" autoFocus inputMode="numeric" autoComplete="one-time-code" maxLength={8} value={mfaCode} onChange={(event) => setMfaCode(event.target.value.replace(/\D/g, "").slice(0, 8))} placeholder="Enter code" style={{ width: "100%", boxSizing: "border-box", border: "1px solid #d8e0e9", borderRadius: 9, padding: "12px 13px", fontSize: 18, letterSpacing: ".18em", color: "#182230" }} />
             <button type="submit" disabled={mfaBusy} style={{ width: "100%", marginTop: 14, border: 0, background: "#172b48", color: "#fff", borderRadius: 9, padding: 13, cursor: mfaBusy ? "wait" : "pointer", fontWeight: 800 }}>{mfaBusy ? "Verifying…" : "Verify and continue"}</button>
           </form>
           <button type="button" onClick={async () => { await supabase.auth.signOut(); window.location.replace("/login"); }} style={{ marginTop: 14, border: 0, background: "transparent", color: "#66758a", cursor: "pointer", fontSize: 13 }}>Sign out</button>
