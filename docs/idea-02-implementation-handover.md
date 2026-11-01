@@ -200,3 +200,14 @@
 - The Jobs register displays and searches by job reference.
 - Migration 027 has been committed to the feature branch only. It has not been applied to ATS-Staging or production.
 - The SQL integration harness now includes migration 027 and checks sequential numbering, tenant isolation and immutability.
+
+
+## Organisation job-reference settings (migration 028)
+
+- Migration `028_organisation_job_reference_settings.sql` derives a short default prefix from each organisation name (for example, AQERITH becomes `AQE`). It preserves the current sequence and all previously issued job references.
+- Organisation creation now derives the prefix at the API boundary; organisations created through the API receive their own prefix instead of the generic `JOB` default.
+- Owners and admins can read or update the prefix through `/api/me/organizations/{organization_id}/job-reference-settings`. Other roles are denied.
+- The settings page is available at `/settings`. Prefix changes affect future references only; the allocator moves the next number forward if the chosen prefix already has issued numeric references.
+- Prefix format is 2-8 uppercase alphanumeric characters, beginning with a letter. The database allocator remains atomic and job references remain immutable.
+- Migration 028 and the settings implementation are committed to the Idea 02 feature branch. They have not been applied to ATS-Staging or production.
+- The disposable PostgreSQL harness now applies migrations 024-028 and checks tenant-specific defaults (AQE and OTH), numbering and immutability. CI result is pending.
