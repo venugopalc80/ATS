@@ -14,7 +14,7 @@ as $$ select nullif(current_setting('request.jwt.claim.sub', true), '')::uuid $$
 grant usage on schema auth to authenticated, anon;
 grant execute on function auth.uid() to authenticated, anon;
 
-create table public.organizations (id uuid primary key);
+create table public.organizations (id uuid primary key, updated_at timestamptz not null default now());
 create table public.profiles (id uuid primary key);
 create table public.organization_members (
  organization_id uuid not null references public.organizations(id),
@@ -28,7 +28,9 @@ create table public.clients (
 );
 create table public.jobs (
  id uuid primary key default gen_random_uuid(),
- organization_id uuid not null references public.organizations(id)
+ organization_id uuid not null references public.organizations(id),
+ job_code text,
+ title text not null default 'Test job'
 );
 create or replace function public.is_org_member(p_org_id uuid) returns boolean
 language sql stable security definer set search_path=public
@@ -66,6 +68,7 @@ insert into public.clients values
 \i supabase/migrations/024_job_requisitions.sql
 \i supabase/migrations/025_job_requisition_fk_indexes.sql
 \i supabase/migrations/026_job_requisition_role_rls.sql
+\i supabase/migrations/027_automatic_job_references.sql
 
 -- Seed rows as the database owner; tests below run as authenticated.
 insert into public.job_requisitions
@@ -193,4 +196,34 @@ do $$ begin
 end $$;
 
 reset role;
-select 'migration 024-026 RLS checks passed' as result;
+
+-- Job references are generated, tenant-scoped, unique and immutable.
+insert into public.jobs (organization_id, title)
+values ('10000000-0000-0000-0000-000000000001', 'First job'),
+       ('10000000-0000-0000-0000-000000000001', 'Second job'),
+       ('10000000-0000-0000-0000-000000000002', 'Other tenant job');
+
+do $
+declare
+  first_code text;
+  second_code text;
+  other_code text;
+begin
+  select job_code into first_code from public.jobs where title='First job';
+  select job_code into second_code from public.jobs where title='Second job';
+  select job_code into other_code from public.jobs where title='Other tenant job';
+  if first_code <> 'JOB-001' or second_code <> 'JOB-002' then
+    raise exception 'unexpected sequential job references: %, %', first_code, second_code;
+  end if;
+  if other_code <> 'JOB-001' then
+    raise exception 'job references should be scoped to each organisation: %', other_code;
+  end if;
+  begin
+    update public.jobs set job_code='MANUAL-999' where title='First job';
+    raise exception 'job reference unexpectedly changed';
+  exception when check_violation then null;
+  end;
+end;
+$;
+
+select 'migration 024-027 RLS and job-reference checks passed' as result;
