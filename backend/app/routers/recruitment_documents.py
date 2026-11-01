@@ -243,7 +243,8 @@ async def receive_normalized_signature_event(
     with get_connection() as connection, connection.cursor() as cursor:
         cursor.execute(
             """select id, organization_id, status from public.recruitment_documents
-               where id=%s""",
+               where id=%s
+               for update""",
             [event.document_id],
         )
         document = cursor.fetchone()
