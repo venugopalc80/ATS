@@ -4,7 +4,7 @@ from uuid import UUID
 
 import requests
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, Field, EmailStr
+from pydantic import BaseModel, Field
 
 from app.auth import assert_org_permission, get_current_user_id
 from app.db import get_connection
