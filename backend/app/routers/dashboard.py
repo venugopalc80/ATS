@@ -75,7 +75,7 @@ async def dashboard(
                 open_jobs = cursor.fetchone()["total"]
 
                 cursor.execute(
-                    "select count(*)::int as total from public.candidates where organization_id=%s and status='active' and public.can_access_application(application_id, organization_id, %s) and public.can_access_candidate(id, organization_id, %s)",
+                    "select count(*)::int as total from public.candidates where organization_id=%s and status='active' and public.can_access_candidate(id, organization_id, %s)",
                     [organization_id, user_id],
                 )
                 active_candidates = cursor.fetchone()["total"]
@@ -87,7 +87,7 @@ async def dashboard(
                 interviews_today = cursor.fetchone()["total"]
 
                 cursor.execute(
-                    "select count(*)::int as total from public.placements where organization_id=%s and status='active'",
+                    "select count(*)::int as total from public.placements where organization_id=%s and status='active' and public.can_access_application(application_id, organization_id, %s)",
                     [organization_id, user_id],
                 )
                 active_placements = cursor.fetchone()["total"]
