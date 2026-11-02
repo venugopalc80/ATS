@@ -37,6 +37,7 @@ export default function SettingsPage() {
   const [inviteMessage, setInviteMessage] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviteLink, setInviteLink] = useState("");
+  const [myPermissions, setMyPermissions] = useState<Record<string, boolean>>({});
   const [permissionData, setPermissionData] = useState<PermissionData | null>(null);
   const [selectedRoleId, setSelectedRoleId] = useState("");
   const [permissionSaving, setPermissionSaving] = useState(false);
@@ -69,24 +70,32 @@ export default function SettingsPage() {
         if (!cancelled) {
           setOrganization(active);
           setTimezone(active.timezone || "UTC");
-          if (active.role === "owner" || active.role === "admin") {
-            const inviteResponse = await apiFetch(API_BASE + "/api/me/organizations/" + active.id + "/invitations");
-            if (inviteResponse.ok) {
-              const inviteData = await inviteResponse.json();
-              setInvitations(inviteData.invitations || []);
+          const myPermissionResponse = await apiFetch(API_BASE + "/api/organizations/" + active.id + "/my-permissions");
+          if (myPermissionResponse.ok) {
+            const myPermissionResult = await myPermissionResponse.json();
+            const effective = myPermissionResult.permissions || {};
+            setMyPermissions(effective);
+            if (effective["team.invite"]) {
+              const inviteResponse = await apiFetch(API_BASE + "/api/me/organizations/" + active.id + "/invitations");
+              if (inviteResponse.ok) {
+                const inviteData = await inviteResponse.json();
+                setInvitations(inviteData.invitations || []);
+              }
             }
-          }
-          const permissionResponse = await apiFetch(API_BASE + "/api/organizations/" + active.id + "/permissions");
-          if (permissionResponse.ok) {
-            const permissionResult = await permissionResponse.json() as PermissionData;
-            setPermissionData(permissionResult);
-            const initialRole = permissionResult.roles.find((role) => role.role_key === "recruiter") || permissionResult.roles[0];
-            if (initialRole) setSelectedRoleId(initialRole.id);
-            if (permissionResult.members[0]) {
-              setSelectedMemberId(permissionResult.members[0].user_id);
-              setSelectedMemberRole(permissionResult.members[0].custom_role_id ? "custom:" + permissionResult.members[0].custom_role_id : permissionResult.members[0].role);
+            if (effective["team.manage_roles"]) {
+              const permissionResponse = await apiFetch(API_BASE + "/api/organizations/" + active.id + "/permissions");
+              if (permissionResponse.ok) {
+                const permissionResult = await permissionResponse.json() as PermissionData;
+                setPermissionData(permissionResult);
+                const initialRole = permissionResult.roles.find((role) => role.role_key === "recruiter") || permissionResult.roles[0];
+                if (initialRole) setSelectedRoleId(initialRole.id);
+                if (permissionResult.members[0]) {
+                  setSelectedMemberId(permissionResult.members[0].user_id);
+                  setSelectedMemberRole(permissionResult.members[0].custom_role_id ? "custom:" + permissionResult.members[0].custom_role_id : permissionResult.members[0].role);
+                }
+                if (permissionResult.permissions[0]) setSelectedPermissionKey(permissionResult.permissions[0].permission_key);
+              }
             }
-            if (permissionResult.permissions[0]) setSelectedPermissionKey(permissionResult.permissions[0].permission_key);
           }
         }
       } catch (cause) {
@@ -124,7 +133,8 @@ export default function SettingsPage() {
     }
   }
 
-  const canEdit = organization?.role === "owner" || organization?.role === "admin";
+  const canEdit = Boolean(myPermissions["organization.settings.manage"]);
+  const canInvite = Boolean(myPermissions["team.invite"]);
   const selectedRole = permissionData?.roles.find((role) => role.id === selectedRoleId) || null;
   const selectedMember = permissionData?.members.find((member) => member.user_id === selectedMemberId) || null;
 
@@ -283,7 +293,7 @@ export default function SettingsPage() {
                     <option value="recruiter">Recruiter</option>
                     <option value="hiring_manager">Hiring manager</option>
                     <option value="viewer">Viewer</option>
-                    <option value="admin">Administrator</option>
+                    {organization.role === "owner" && <option value="admin">Administrator</option>}
                   </select>
                 </label>
                 <button className="btn primary" disabled={inviting}>{inviting ? "Sending…" : "Send invitation"}</button>
