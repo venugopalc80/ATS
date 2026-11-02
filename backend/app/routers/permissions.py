@@ -172,8 +172,8 @@ async def update_role_permissions(
             role = cursor.fetchone()
             if role is None:
                 raise HTTPException(status_code=404, detail="Role not found")
-            if role["role_key"] == "owner" and actor_role != "owner":
-                raise HTTPException(status_code=403, detail="Only the Owner can change the Owner permission template")
+            if role["role_key"] == "owner":
+                raise HTTPException(status_code=409, detail="The Owner permission template is immutable; ownership always retains full access")
             if role["role_key"] == "admin" and actor_role != "owner":
                 raise HTTPException(status_code=403, detail="Only the Owner can change the Administrator permission template")
 
@@ -225,8 +225,10 @@ async def update_member_role(
             if target is None:
                 raise HTTPException(status_code=404, detail="Team member not found")
             actor_role = get_org_role(user_id, organization_id)
-            if target["role"] in {"owner", "admin"} and actor_role != "owner":
-                raise HTTPException(status_code=403, detail="Only the Owner can change an Owner or Administrator membership")
+            if target["role"] == "owner":
+                raise HTTPException(status_code=409, detail="Owner membership can only be changed through the ownership transfer workflow")
+            if target["role"] == "admin" and actor_role != "owner":
+                raise HTTPException(status_code=403, detail="Only the Owner can change an Administrator membership")
             if payload.role == "admin" and actor_role != "owner":
                 raise HTTPException(status_code=403, detail="Only the Owner can grant Administrator access")
 
@@ -297,8 +299,8 @@ async def update_member_permission_override(
             target = cursor.fetchone()
             if target is None:
                 raise HTTPException(status_code=404, detail="Team member not found")
-            if target["role"] == "owner" and actor_role != "owner":
-                raise HTTPException(status_code=403, detail="Only the Owner can manage the Owner's access")
+            if target["role"] == "owner":
+                raise HTTPException(status_code=409, detail="Owner access cannot be overridden")
             if target["role"] == "admin" and actor_role != "owner":
                 raise HTTPException(status_code=403, detail="Only the Owner can manage an Administrator's access")
             cursor.execute("select 1 from public.permission_catalog where permission_key=%s", [permission_key])
