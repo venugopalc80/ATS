@@ -94,6 +94,19 @@ create table if not exists public.candidate_access_assignments (
       references public.organization_members(organization_id, user_id) on delete cascade
 );
 
+create table if not exists public.application_access_assignments (
+    organization_id uuid not null,
+    application_id uuid not null,
+    user_id uuid not null,
+    assigned_by uuid references public.profiles(id) on delete set null,
+    created_at timestamptz not null default now(),
+    primary key (application_id, user_id),
+    foreign key (application_id, organization_id)
+      references public.applications(id, organization_id) on delete cascade,
+    foreign key (organization_id, user_id)
+      references public.organization_members(organization_id, user_id) on delete cascade
+);
+
 create table if not exists public.client_access_assignments (
     organization_id uuid not null,
     client_id uuid not null,
@@ -112,6 +125,7 @@ create index if not exists idx_team_jobs_job on public.recruitment_team_jobs(org
 create index if not exists idx_team_clients_client on public.recruitment_team_clients(organization_id, client_id);
 create index if not exists idx_candidate_access_user on public.candidate_access_assignments(organization_id, user_id);
 create index if not exists idx_client_access_user on public.client_access_assignments(organization_id, user_id);
+create index if not exists idx_application_access_user on public.application_access_assignments(organization_id, user_id);
 create index if not exists idx_jobs_recruiter_scope on public.jobs(organization_id, recruiter_id);
 create index if not exists idx_jobs_hiring_manager_scope on public.jobs(organization_id, hiring_manager_id);
 create index if not exists idx_applications_job_candidate_scope on public.applications(organization_id, job_id, candidate_id);
@@ -220,7 +234,12 @@ as $$
       where a.id = target_application and a.organization_id = target_org
         and (
           public.can_access_job(a.job_id, target_org, target_user)
-          or public.can_access_candidate(a.candidate_id, target_org, target_user)
+          or exists (
+            select 1 from public.application_access_assignments aa
+            where aa.organization_id = target_org
+              and aa.application_id = a.id
+              and aa.user_id = target_user
+          )
         )
     );
 $$;
@@ -482,6 +501,7 @@ alter table public.recruitment_team_jobs enable row level security;
 alter table public.recruitment_team_clients enable row level security;
 alter table public.candidate_access_assignments enable row level security;
 alter table public.client_access_assignments enable row level security;
+alter table public.application_access_assignments enable row level security;
 
 do $$
 declare t text;
@@ -489,7 +509,7 @@ begin
   foreach t in array array[
     'organization_member_access_scopes','recruitment_teams','recruitment_team_members',
     'recruitment_team_jobs','recruitment_team_clients','candidate_access_assignments',
-    'client_access_assignments'
+    'client_access_assignments','application_access_assignments'
   ] loop
     execute format('revoke all on public.%I from anon, authenticated', t);
   end loop;
@@ -498,7 +518,7 @@ end $$;
 grant select on public.organization_member_access_scopes, public.recruitment_teams,
   public.recruitment_team_members, public.recruitment_team_jobs,
   public.recruitment_team_clients, public.candidate_access_assignments,
-  public.client_access_assignments to authenticated;
+  public.client_access_assignments, public.application_access_assignments to authenticated;
 
 create policy access_scope_self_read on public.organization_member_access_scopes
 for select to authenticated using (user_id = auth.uid() or public.has_organization_wide_access(organization_id));
@@ -513,6 +533,8 @@ for select to authenticated using (public.is_org_member(organization_id));
 create policy candidate_access_assignments_member_read on public.candidate_access_assignments
 for select to authenticated using (user_id = auth.uid() or public.has_organization_wide_access(organization_id));
 create policy client_access_assignments_member_read on public.client_access_assignments
+for select to authenticated using (user_id = auth.uid() or public.has_organization_wide_access(organization_id));
+create policy application_access_assignments_member_read on public.application_access_assignments
 for select to authenticated using (user_id = auth.uid() or public.has_organization_wide_access(organization_id));
 
 -- Candidate communications inherit the candidate's resource boundary.
