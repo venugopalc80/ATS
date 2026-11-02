@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import assert_org_admin, assert_org_member, get_current_user_id
+from app.auth import assert_org_permission, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.candidates import CandidateCreate, CandidateOut, CandidateUpdate
 from app.services.candidate_service import CandidateService
@@ -22,7 +22,7 @@ async def list_candidates(
     search: str | None = Query(default=None, max_length=100),
     user_id: UUID = Depends(get_current_user_id),
 ) -> list[CandidateOut]:
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.read")
     try:
         rows = await service.list_candidates(organization_id, status, search)
         return [CandidateOut.model_validate(row) for row in rows]
@@ -35,7 +35,7 @@ async def create_candidate(
     payload: CandidateCreate,
     user_id: UUID = Depends(get_current_user_id),
 ) -> CandidateOut:
-    assert_org_member(user_id, payload.organization_id)
+    assert_org_permission(user_id, payload.organization_id, "candidates.create")
     try:
         row = await service.create_candidate(payload)
         return CandidateOut.model_validate(row)
@@ -54,7 +54,7 @@ async def get_candidate(
         raise db_unavailable(exc) from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Candidate not found")
-    assert_org_member(user_id, row["organization_id"])
+    assert_org_permission(user_id, row["organization_id"], "candidates.read")
     return CandidateOut.model_validate(row)
 
 
@@ -68,7 +68,7 @@ async def update_candidate(
         existing = await service.get_candidate(candidate_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
-        assert_org_member(user_id, existing["organization_id"])
+        assert_org_permission(user_id, existing["organization_id"], "candidates.update")
         row = await service.update_candidate(candidate_id, payload)
         return CandidateOut.model_validate(row)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -84,7 +84,7 @@ async def delete_candidate(
         existing = await service.get_candidate(candidate_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Candidate not found")
-        assert_org_admin(user_id, existing["organization_id"])
+        assert_org_permission(user_id, existing["organization_id"], "candidates.delete")
         deleted = await service.delete_candidate(candidate_id)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
