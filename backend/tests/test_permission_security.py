@@ -228,7 +228,7 @@ class ApplicationAssignmentBoundaryTests(unittest.TestCase):
             Path(__file__).resolve().parents[2]
             / "supabase"
             / "migrations"
-            / "20261102180000_resource_level_access_control_v2.sql"
+            / "20261102043721_resource_level_access_control_v2.sql"
         ).read_text()
         start = migration.index("create or replace function private.can_access_application")
         end = migration.index("$;", start)
@@ -250,7 +250,7 @@ class RelatedRecordBoundaryTests(unittest.TestCase):
             Path(__file__).resolve().parents[2]
             / "supabase"
             / "migrations"
-            / "20261102180000_resource_level_access_control_v2.sql"
+            / "20261102043721_resource_level_access_control_v2.sql"
         ).read_text().lower()
 
     def test_candidate_profile_access_includes_explicit_application_assignment(self):
@@ -350,7 +350,7 @@ class SharedTeamScaleBoundaryTests(unittest.TestCase):
             Path(__file__).resolve().parents[2]
             / "supabase"
             / "migrations"
-            / "20261102180000_resource_level_access_control_v2.sql"
+            / "20261102043721_resource_level_access_control_v2.sql"
         ).read_text().lower()
         cls.permissions = (
             Path(__file__).resolve().parents[1]
