@@ -29,7 +29,7 @@ async def list_clients(
 async def create_client(payload: ClientCreate, user_id: UUID = Depends(get_current_user_id)):
     assert_org_permission(user_id, payload.organization_id, "clients.create")
     try:
-        return ClientOut.model_validate(await service.create_client(payload))
+        return ClientOut.model_validate(await service.create_client(payload, user_id))
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
