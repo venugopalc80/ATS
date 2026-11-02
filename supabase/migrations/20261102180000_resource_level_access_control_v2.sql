@@ -237,70 +237,231 @@ grant execute on function public.can_access_client(uuid, uuid, uuid) to authenti
 grant execute on function public.can_access_candidate(uuid, uuid, uuid) to authenticated, service_role;
 grant execute on function public.can_access_application(uuid, uuid, uuid) to authenticated, service_role;
 
--- Resource-scoped RLS. API service-role access is separately guarded in the backend.
-drop policy if exists jobs_member_all on public.jobs;
-create policy jobs_resource_scope on public.jobs for all to authenticated
-using (public.is_org_member(organization_id) and public.can_access_job(id, organization_id))
-with check (public.is_org_member(organization_id) and public.has_organization_wide_access(organization_id));
 
-drop policy if exists candidates_member_all on public.candidates;
-create policy candidates_resource_scope on public.candidates for all to authenticated
-using (public.is_org_member(organization_id) and public.can_access_candidate(id, organization_id))
-with check (public.is_org_member(organization_id) and public.has_organization_wide_access(organization_id));
+-- Permission + resource scoped RLS. The API service role is separately guarded
+-- by the backend; direct authenticated Data API access must pass both controls.
+create or replace function public.has_effective_org_permission(
+  target_org uuid, target_permission text
+) returns boolean
+language sql stable security definer set search_path = public
+as $$
+  select exists (
+    select 1
+    from public.organization_members m
+    left join public.organization_roles role_template
+      on role_template.organization_id = m.organization_id
+     and ((m.custom_role_id is not null and role_template.id = m.custom_role_id)
+       or (m.custom_role_id is null and role_template.role_key = m.role))
+    left join public.organization_role_permissions rp
+      on rp.organization_id = m.organization_id
+     and rp.role_id = role_template.id
+     and rp.permission_key = target_permission
+    left join public.organization_member_permission_overrides ov
+      on ov.organization_id = m.organization_id
+     and ov.user_id = m.user_id
+     and ov.permission_key = target_permission
+     and (ov.expires_at is null or ov.expires_at > now())
+    where m.organization_id = target_org and m.user_id = auth.uid()
+      and case
+        when m.role = 'owner' then true
+        when m.role = 'admin' and target_permission = 'ownership.transfer' then false
+        when ov.effect is not null then ov.effect = 'allow'
+        else coalesce(rp.allowed, false)
+      end
+  );
+$$;
+revoke all on function public.has_effective_org_permission(uuid, text) from public, anon;
+grant execute on function public.has_effective_org_permission(uuid, text) to authenticated, service_role;
 
-drop policy if exists applications_member_all on public.applications;
-create policy applications_resource_scope on public.applications for all to authenticated
-using (public.is_org_member(organization_id) and public.can_access_application(id, organization_id))
+-- Jobs
+drop policy if exists jobs_resource_scope on public.jobs;
+create policy jobs_resource_select on public.jobs for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.read')
+  and public.can_access_job(id, organization_id));
+create policy jobs_resource_insert on public.jobs for insert to authenticated
 with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.create')
+  and public.has_organization_wide_access(organization_id));
+create policy jobs_resource_update on public.jobs for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and public.can_access_job(id, organization_id))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and public.can_access_job(id, organization_id));
+create policy jobs_resource_delete on public.jobs for delete to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.delete')
+  and public.can_access_job(id, organization_id));
+
+-- Candidates
+drop policy if exists candidates_resource_scope on public.candidates;
+create policy candidates_resource_select on public.candidates for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(id, organization_id));
+create policy candidates_resource_insert on public.candidates for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.create')
+  and public.has_organization_wide_access(organization_id));
+create policy candidates_resource_update on public.candidates for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.update')
+  and public.can_access_candidate(id, organization_id))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.update')
+  and public.can_access_candidate(id, organization_id));
+create policy candidates_resource_delete on public.candidates for delete to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.delete')
+  and public.can_access_candidate(id, organization_id));
+
+-- Applications
+drop policy if exists applications_resource_scope on public.applications;
+create policy applications_resource_select on public.applications for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'applications.read')
+  and public.can_access_application(id, organization_id));
+create policy applications_resource_insert on public.applications for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'applications.create')
   and public.can_access_job(job_id, organization_id)
   and public.can_access_candidate(candidate_id, organization_id));
+create policy applications_resource_update on public.applications for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'applications.update')
+  and public.can_access_application(id, organization_id))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'applications.update')
+  and public.can_access_job(job_id, organization_id)
+  and public.can_access_candidate(candidate_id, organization_id));
+create policy applications_resource_delete on public.applications for delete to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'applications.delete')
+  and public.can_access_application(id, organization_id));
 
-drop policy if exists clients_member_all on public.clients;
-create policy clients_resource_scope on public.clients for all to authenticated
-using (public.is_org_member(organization_id) and public.can_access_client(id, organization_id))
-with check (public.is_org_member(organization_id) and public.has_organization_wide_access(organization_id));
+-- Clients
+drop policy if exists clients_resource_scope on public.clients;
+create policy clients_resource_select on public.clients for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'clients.read')
+  and public.can_access_client(id, organization_id));
+create policy clients_resource_insert on public.clients for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'clients.create')
+  and public.has_organization_wide_access(organization_id));
+create policy clients_resource_update on public.clients for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'clients.update')
+  and public.can_access_client(id, organization_id))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'clients.update')
+  and public.can_access_client(id, organization_id));
+create policy clients_resource_delete on public.clients for delete to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'clients.delete')
+  and public.can_access_client(id, organization_id));
 
-drop policy if exists interviews_member_all on public.interviews;
-create policy interviews_resource_scope on public.interviews for all to authenticated
-using (public.is_org_member(organization_id) and exists (
-  select 1 from public.applications a
-  where a.id = interviews.application_id
-    and public.can_access_application(a.id, interviews.organization_id)
-))
-with check (public.is_org_member(organization_id) and exists (
-  select 1 from public.applications a
-  where a.id = interviews.application_id
-    and public.can_access_application(a.id, interviews.organization_id)
-));
+-- Interview, offer and placement records inherit application visibility.
+drop policy if exists interviews_resource_scope on public.interviews;
+create policy interviews_resource_select on public.interviews for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'interviews.read')
+  and exists (select 1 from public.applications a where a.id = interviews.application_id
+    and public.can_access_application(a.id, interviews.organization_id)));
+create policy interviews_resource_insert on public.interviews for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'interviews.create')
+  and exists (select 1 from public.applications a where a.id = interviews.application_id
+    and public.can_access_application(a.id, interviews.organization_id)));
+create policy interviews_resource_update on public.interviews for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'interviews.update')
+  and exists (select 1 from public.applications a where a.id = interviews.application_id
+    and public.can_access_application(a.id, interviews.organization_id)))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'interviews.update')
+  and exists (select 1 from public.applications a where a.id = interviews.application_id
+    and public.can_access_application(a.id, interviews.organization_id)));
+create policy interviews_resource_delete on public.interviews for delete to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'interviews.delete')
+  and exists (select 1 from public.applications a where a.id = interviews.application_id
+    and public.can_access_application(a.id, interviews.organization_id)));
 
-drop policy if exists offers_member_all on public.offers;
-create policy offers_resource_scope on public.offers for all to authenticated
-using (public.is_org_member(organization_id) and exists (
-  select 1 from public.applications a
-  where a.id = offers.application_id
-    and public.can_access_application(a.id, offers.organization_id)
-))
-with check (public.is_org_member(organization_id) and exists (
-  select 1 from public.applications a
-  where a.id = offers.application_id
-    and public.can_access_application(a.id, offers.organization_id)
-));
+drop policy if exists offers_resource_scope on public.offers;
+create policy offers_resource_select on public.offers for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'offers.read')
+  and exists (select 1 from public.applications a where a.id = offers.application_id
+    and public.can_access_application(a.id, offers.organization_id)));
+create policy offers_resource_insert on public.offers for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'offers.create')
+  and exists (select 1 from public.applications a where a.id = offers.application_id
+    and public.can_access_application(a.id, offers.organization_id)));
+create policy offers_resource_update on public.offers for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'offers.update')
+  and exists (select 1 from public.applications a where a.id = offers.application_id
+    and public.can_access_application(a.id, offers.organization_id)))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'offers.update')
+  and exists (select 1 from public.applications a where a.id = offers.application_id
+    and public.can_access_application(a.id, offers.organization_id)));
+create policy offers_resource_delete on public.offers for delete to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'offers.delete')
+  and exists (select 1 from public.applications a where a.id = offers.application_id
+    and public.can_access_application(a.id, offers.organization_id)));
 
-drop policy if exists placements_member_all on public.placements;
-create policy placements_resource_scope on public.placements for all to authenticated
-using (public.is_org_member(organization_id) and public.can_access_application(application_id, organization_id))
-with check (public.is_org_member(organization_id) and public.can_access_application(application_id, organization_id));
+drop policy if exists placements_resource_scope on public.placements;
+create policy placements_resource_select on public.placements for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'placements.read')
+  and public.can_access_application(application_id, organization_id));
+create policy placements_resource_insert on public.placements for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'placements.create')
+  and public.can_access_application(application_id, organization_id));
+create policy placements_resource_update on public.placements for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'placements.update')
+  and public.can_access_application(application_id, organization_id))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'placements.update')
+  and public.can_access_application(application_id, organization_id));
+create policy placements_resource_delete on public.placements for delete to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'placements.delete')
+  and public.can_access_application(application_id, organization_id));
 
+-- Candidate documents and communications inherit candidate access and their own permission.
 drop policy if exists candidate_documents_member_all on public.candidate_documents;
-create policy candidate_documents_resource_scope on public.candidate_documents for select to authenticated
-using (public.is_org_member(organization_id) and public.can_access_candidate(candidate_id, organization_id));
+drop policy if exists candidate_documents_resource_scope on public.candidate_documents;
+drop policy if exists candidate_documents_resource_insert on public.candidate_documents;
+drop policy if exists candidate_documents_resource_update on public.candidate_documents;
+drop policy if exists candidate_documents_resource_delete on public.candidate_documents;
+create policy candidate_documents_resource_select on public.candidate_documents for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.documents.read')
+  and public.can_access_candidate(candidate_id, organization_id));
 create policy candidate_documents_resource_insert on public.candidate_documents for insert to authenticated
-with check (public.is_org_member(organization_id) and public.has_organization_wide_access(organization_id));
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.documents.upload')
+  and public.can_access_candidate(candidate_id, organization_id));
 create policy candidate_documents_resource_update on public.candidate_documents for update to authenticated
-using (public.is_org_member(organization_id) and public.can_access_candidate(candidate_id, organization_id))
-with check (public.is_org_member(organization_id) and public.has_organization_wide_access(organization_id));
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.documents.upload')
+  and public.can_access_candidate(candidate_id, organization_id))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.documents.upload')
+  and public.can_access_candidate(candidate_id, organization_id));
 create policy candidate_documents_resource_delete on public.candidate_documents for delete to authenticated
-using (public.is_org_member(organization_id) and public.has_organization_wide_access(organization_id));
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.documents.delete')
+  and public.can_access_candidate(candidate_id, organization_id));
 
 -- Prevent direct authenticated writes to access-control metadata; mutations go through audited API routes.
 alter table public.organization_member_access_scopes enable row level security;
