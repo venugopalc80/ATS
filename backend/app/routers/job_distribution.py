@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_permission, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.schemas.job_distribution import DistributionChannelOut, DistributionSave
 
@@ -16,7 +16,7 @@ async def get_job_distribution(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "jobs.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -49,7 +49,7 @@ async def save_job_distribution(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "jobs.update")
     channel_ids = [item.channel_id for item in payload.channels]
     if len(channel_ids) != len(set(channel_ids)):
         raise HTTPException(status_code=422, detail="Each distribution channel can only appear once")
