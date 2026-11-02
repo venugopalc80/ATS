@@ -376,3 +376,431 @@ async def update_member_permission_override(
                    {"permission_key": permission_key, "effect": payload.effect,
                     "expires_at": payload.expires_at.isoformat() if payload.expires_at else None})
     return {"status": "updated", "member_id": str(member_id), "permission_key": permission_key, "effect": payload.effect}
+
+
+# Recruitment teams and resource assignments. These mutations are deliberately
+# routed through the authenticated API so every change is audited.
+class RecruitmentTeamCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=100)
+    description: str | None = Field(default=None, max_length=500)
+
+
+class TeamMemberChange(BaseModel):
+    user_id: UUID
+
+
+class TeamResourceChange(BaseModel):
+    resource_id: UUID
+
+
+class DirectResourceAssignment(BaseModel):
+    user_id: UUID
+
+
+class MemberAccessScopeUpdate(BaseModel):
+    scope: Literal["assigned", "organization"]
+
+
+def _assert_team_manager(user_id: UUID, organization_id: UUID) -> None:
+    assert_org_permission(user_id, organization_id, "team.manage_roles")
+
+
+@router.get("/{organization_id}/recruitment-teams")
+async def list_recruitment_teams(
+    organization_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_permission(user_id, organization_id, "team.read")
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select t.id, t.name, t.description, t.created_by, t.created_at, t.updated_at,
+                       count(distinct tm.user_id) as member_count,
+                       count(distinct tj.job_id) as job_count,
+                       count(distinct tc.client_id) as client_count
+                from public.recruitment_teams t
+                left join public.recruitment_team_members tm
+                  on tm.organization_id=t.organization_id and tm.team_id=t.id
+                left join public.recruitment_team_jobs tj
+                  on tj.organization_id=t.organization_id and tj.team_id=t.id
+                left join public.recruitment_team_clients tc
+                  on tc.organization_id=t.organization_id and tc.team_id=t.id
+                where t.organization_id=%s
+                group by t.id
+                order by t.name
+                """,
+                [organization_id],
+            )
+            teams = list(cursor.fetchall())
+    return {"teams": teams}
+
+
+@router.post("/{organization_id}/recruitment-teams", status_code=201)
+async def create_recruitment_team(
+    organization_id: UUID,
+    payload: RecruitmentTeamCreate,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    team_id = uuid4()
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into public.recruitment_teams
+                  (id, organization_id, name, description, created_by)
+                values (%s, %s, %s, %s, %s)
+                returning id, organization_id, name, description, created_by, created_at
+                """,
+                [team_id, organization_id, payload.name.strip(), payload.description, user_id],
+            )
+            team = cursor.fetchone()
+            _audit(cursor, organization_id, user_id, "recruitment_team_created",
+                   "recruitment_team", team_id, {"name": payload.name.strip()})
+    return {"team": team}
+
+
+@router.patch("/{organization_id}/recruitment-teams/{team_id}")
+async def update_recruitment_team(
+    organization_id: UUID,
+    team_id: UUID,
+    payload: RecruitmentTeamCreate,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                update public.recruitment_teams
+                set name=%s, description=%s, updated_at=now()
+                where organization_id=%s and id=%s
+                returning id, organization_id, name, description, created_by, created_at, updated_at
+                """,
+                [payload.name.strip(), payload.description, organization_id, team_id],
+            )
+            team = cursor.fetchone()
+            if team is None:
+                raise HTTPException(status_code=404, detail="Recruitment team not found")
+            _audit(cursor, organization_id, user_id, "recruitment_team_updated",
+                   "recruitment_team", team_id, {"name": payload.name.strip()})
+    return {"team": team}
+
+
+@router.delete("/{organization_id}/recruitment-teams/{team_id}", status_code=204)
+async def delete_recruitment_team(
+    organization_id: UUID,
+    team_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "delete from public.recruitment_teams where organization_id=%s and id=%s returning id",
+                [organization_id, team_id],
+            )
+            deleted = cursor.fetchone()
+            if deleted is None:
+                raise HTTPException(status_code=404, detail="Recruitment team not found")
+            _audit(cursor, organization_id, user_id, "recruitment_team_deleted",
+                   "recruitment_team", team_id, {})
+
+
+@router.put("/{organization_id}/recruitment-teams/{team_id}/members")
+async def add_recruitment_team_member(
+    organization_id: UUID,
+    team_id: UUID,
+    payload: TeamMemberChange,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select id from public.recruitment_teams where id=%s and organization_id=%s",
+                           [team_id, organization_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Recruitment team not found")
+            cursor.execute("select 1 from public.organization_members where organization_id=%s and user_id=%s",
+                           [organization_id, payload.user_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Organisation member not found")
+            cursor.execute(
+                """
+                insert into public.recruitment_team_members (organization_id, team_id, user_id)
+                values (%s, %s, %s) on conflict (team_id, user_id) do nothing
+                """,
+                [organization_id, team_id, payload.user_id],
+            )
+            _audit(cursor, organization_id, user_id, "recruitment_team_member_added",
+                   "recruitment_team", team_id, {"member_user_id": str(payload.user_id)})
+    return {"status": "assigned", "team_id": str(team_id), "user_id": str(payload.user_id)}
+
+
+@router.delete("/{organization_id}/recruitment-teams/{team_id}/members/{member_id}", status_code=204)
+async def remove_recruitment_team_member(
+    organization_id: UUID,
+    team_id: UUID,
+    member_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                delete from public.recruitment_team_members
+                where organization_id=%s and team_id=%s and user_id=%s returning user_id
+                """,
+                [organization_id, team_id, member_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Team membership not found")
+            _audit(cursor, organization_id, user_id, "recruitment_team_member_removed",
+                   "recruitment_team", team_id, {"member_user_id": str(member_id)})
+
+
+@router.put("/{organization_id}/recruitment-teams/{team_id}/jobs")
+async def assign_job_to_recruitment_team(
+    organization_id: UUID,
+    team_id: UUID,
+    payload: TeamResourceChange,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select id from public.recruitment_teams where id=%s and organization_id=%s",
+                           [team_id, organization_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Recruitment team not found")
+            cursor.execute("select id from public.jobs where id=%s and organization_id=%s",
+                           [payload.resource_id, organization_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Job not found")
+            cursor.execute(
+                """
+                insert into public.recruitment_team_jobs (organization_id, team_id, job_id)
+                values (%s, %s, %s) on conflict (team_id, job_id) do nothing
+                """,
+                [organization_id, team_id, payload.resource_id],
+            )
+            _audit(cursor, organization_id, user_id, "job_assigned_to_recruitment_team",
+                   "job", payload.resource_id, {"team_id": str(team_id)})
+    return {"status": "assigned", "team_id": str(team_id), "job_id": str(payload.resource_id)}
+
+
+@router.delete("/{organization_id}/recruitment-teams/{team_id}/jobs/{job_id}", status_code=204)
+async def remove_job_from_recruitment_team(
+    organization_id: UUID,
+    team_id: UUID,
+    job_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "delete from public.recruitment_team_jobs where organization_id=%s and team_id=%s and job_id=%s returning job_id",
+                [organization_id, team_id, job_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Team job assignment not found")
+            _audit(cursor, organization_id, user_id, "job_removed_from_recruitment_team",
+                   "job", job_id, {"team_id": str(team_id)})
+
+
+@router.put("/{organization_id}/recruitment-teams/{team_id}/clients")
+async def assign_client_to_recruitment_team(
+    organization_id: UUID,
+    team_id: UUID,
+    payload: TeamResourceChange,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select id from public.recruitment_teams where id=%s and organization_id=%s",
+                           [team_id, organization_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Recruitment team not found")
+            cursor.execute("select id from public.clients where id=%s and organization_id=%s",
+                           [payload.resource_id, organization_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Client not found")
+            cursor.execute(
+                """
+                insert into public.recruitment_team_clients (organization_id, team_id, client_id)
+                values (%s, %s, %s) on conflict (team_id, client_id) do nothing
+                """,
+                [organization_id, team_id, payload.resource_id],
+            )
+            _audit(cursor, organization_id, user_id, "client_assigned_to_recruitment_team",
+                   "client", payload.resource_id, {"team_id": str(team_id)})
+    return {"status": "assigned", "team_id": str(team_id), "client_id": str(payload.resource_id)}
+
+
+@router.delete("/{organization_id}/recruitment-teams/{team_id}/clients/{client_id}", status_code=204)
+async def remove_client_from_recruitment_team(
+    organization_id: UUID,
+    team_id: UUID,
+    client_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "delete from public.recruitment_team_clients where organization_id=%s and team_id=%s and client_id=%s returning client_id",
+                [organization_id, team_id, client_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Team client assignment not found")
+            _audit(cursor, organization_id, user_id, "client_removed_from_recruitment_team",
+                   "client", client_id, {"team_id": str(team_id)})
+
+
+@router.put("/{organization_id}/candidates/{candidate_id}/assignments")
+async def assign_candidate_to_member(
+    organization_id: UUID,
+    candidate_id: UUID,
+    payload: DirectResourceAssignment,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select id from public.candidates where id=%s and organization_id=%s",
+                           [candidate_id, organization_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Candidate not found")
+            cursor.execute("select 1 from public.organization_members where organization_id=%s and user_id=%s",
+                           [organization_id, payload.user_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Organisation member not found")
+            cursor.execute(
+                """
+                insert into public.candidate_access_assignments
+                  (organization_id, candidate_id, user_id, assigned_by)
+                values (%s, %s, %s, %s)
+                on conflict (candidate_id, user_id) do nothing
+                """,
+                [organization_id, candidate_id, payload.user_id, user_id],
+            )
+            _audit(cursor, organization_id, user_id, "candidate_assigned_to_member",
+                   "candidate", candidate_id, {"member_user_id": str(payload.user_id)})
+    return {"status": "assigned", "candidate_id": str(candidate_id), "user_id": str(payload.user_id)}
+
+
+@router.delete("/{organization_id}/candidates/{candidate_id}/assignments/{member_id}", status_code=204)
+async def remove_candidate_assignment(
+    organization_id: UUID,
+    candidate_id: UUID,
+    member_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                delete from public.candidate_access_assignments
+                where organization_id=%s and candidate_id=%s and user_id=%s returning user_id
+                """,
+                [organization_id, candidate_id, member_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Candidate assignment not found")
+            _audit(cursor, organization_id, user_id, "candidate_assignment_removed",
+                   "candidate", candidate_id, {"member_user_id": str(member_id)})
+
+
+@router.put("/{organization_id}/clients/{client_id}/assignments")
+async def assign_client_to_member(
+    organization_id: UUID,
+    client_id: UUID,
+    payload: DirectResourceAssignment,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select id from public.clients where id=%s and organization_id=%s",
+                           [client_id, organization_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Client not found")
+            cursor.execute("select 1 from public.organization_members where organization_id=%s and user_id=%s",
+                           [organization_id, payload.user_id])
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Organisation member not found")
+            cursor.execute(
+                """
+                insert into public.client_access_assignments
+                  (organization_id, client_id, user_id, assigned_by)
+                values (%s, %s, %s, %s)
+                on conflict (client_id, user_id) do nothing
+                """,
+                [organization_id, client_id, payload.user_id, user_id],
+            )
+            _audit(cursor, organization_id, user_id, "client_assigned_to_member",
+                   "client", client_id, {"member_user_id": str(payload.user_id)})
+    return {"status": "assigned", "client_id": str(client_id), "user_id": str(payload.user_id)}
+
+
+@router.delete("/{organization_id}/clients/{client_id}/assignments/{member_id}", status_code=204)
+async def remove_client_assignment(
+    organization_id: UUID,
+    client_id: UUID,
+    member_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                delete from public.client_access_assignments
+                where organization_id=%s and client_id=%s and user_id=%s returning user_id
+                """,
+                [organization_id, client_id, member_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Client assignment not found")
+            _audit(cursor, organization_id, user_id, "client_assignment_removed",
+                   "client", client_id, {"member_user_id": str(member_id)})
+
+
+@router.put("/{organization_id}/members/{member_id}/access-scope")
+async def update_member_access_scope(
+    organization_id: UUID,
+    member_id: UUID,
+    payload: MemberAccessScopeUpdate,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    actor_role = get_org_role(user_id, organization_id)
+    if payload.scope == "organization" and actor_role != "owner":
+        raise HTTPException(status_code=403, detail="Only the Owner can grant organisation-wide resource access")
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute("select role from public.organization_members where organization_id=%s and user_id=%s for update",
+                           [organization_id, member_id])
+            target = cursor.fetchone()
+            if target is None:
+                raise HTTPException(status_code=404, detail="Organisation member not found")
+            if target["role"] == "owner" and payload.scope != "organization":
+                raise HTTPException(status_code=409, detail="Owner access cannot be restricted")
+            cursor.execute(
+                """
+                insert into public.organization_member_access_scopes
+                  (organization_id, user_id, scope, updated_by, updated_at)
+                values (%s, %s, %s, %s, now())
+                on conflict (organization_id, user_id) do update
+                set scope=excluded.scope, updated_by=excluded.updated_by, updated_at=now()
+                """,
+                [organization_id, member_id, payload.scope, user_id],
+            )
+            _audit(cursor, organization_id, user_id, "member_access_scope_updated",
+                   "organization_member", member_id, {"scope": payload.scope})
+    return {"status": "updated", "member_id": str(member_id), "scope": payload.scope}
