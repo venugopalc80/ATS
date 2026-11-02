@@ -28,6 +28,14 @@ class CandidateEmailSend(BaseModel):
     body: str = Field(min_length=1, max_length=20000)
     template_key: str | None = Field(default=None, max_length=80)
 
+@router.get("/communications/templates")
+async def list_candidate_email_templates(
+    user_id: UUID = Depends(get_current_user_id),
+):
+    # Template definitions contain no tenant data. Candidate-level permission is
+    # checked again on send, where the organisation and candidate are known.
+    return {"templates": EMAIL_TEMPLATES}
+
 @router.get("/{candidate_id}/communications")
 async def list_candidate_communications(
     candidate_id: UUID,
@@ -54,14 +62,6 @@ async def list_candidate_communications(
             )
             rows = list(cursor.fetchall())
     return rows
-
-@router.get("/communications/templates")
-async def list_candidate_email_templates(
-    user_id: UUID = Depends(get_current_user_id),
-):
-    # Template definitions contain no tenant data. Candidate-level permission is
-    # checked again on send, where the organisation and candidate are known.
-    return {"templates": EMAIL_TEMPLATES}
 
 @router.post("/{candidate_id}/communications/email", status_code=201)
 async def send_candidate_email(
