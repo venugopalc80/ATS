@@ -64,6 +64,7 @@ async def save_job_distribution(
                 job = cursor.fetchone()
                 if job is None or job["organization_id"] != organization_id:
                     raise HTTPException(status_code=404, detail="Job not found")
+                assert_resource_access(user_id, organization_id, "job", job_id)
                 for item in payload.channels:
                     status = item.status
                     if not item.selected:
