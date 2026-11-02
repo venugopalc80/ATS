@@ -186,8 +186,22 @@ async def dashboard(
                 )
                 expiring_offers = list(cursor.fetchall())
 
-                activity_where = "ae.organization_id=%s"
-                activity_params = [organization_id]
+                activity_where = """ae.organization_id=%s and (
+                    (ae.entity_type='application' and public.can_access_application(ae.entity_id, ae.organization_id, %s))
+                    or (ae.entity_type='job' and public.can_access_job(ae.entity_id, ae.organization_id, %s))
+                    or (ae.entity_type='candidate' and public.can_access_candidate(ae.entity_id, ae.organization_id, %s))
+                    or (ae.entity_type='client' and public.can_access_client(ae.entity_id, ae.organization_id, %s))
+                    or (ae.entity_type='interview' and exists (
+                        select 1 from public.interviews i where i.id=ae.entity_id
+                          and public.can_access_application(i.application_id, i.organization_id, %s)))
+                    or (ae.entity_type='offer' and exists (
+                        select 1 from public.offers o where o.id=ae.entity_id
+                          and public.can_access_application(o.application_id, o.organization_id, %s)))
+                    or (ae.entity_type='placement' and exists (
+                        select 1 from public.placements pl where pl.id=ae.entity_id
+                          and public.can_access_application(pl.application_id, pl.organization_id, %s)))
+                )"""
+                activity_params = [organization_id, user_id, user_id, user_id, user_id, user_id, user_id, user_id]
                 if date_from:
                     activity_start_utc, _ = organisation_date_bounds_utc(organisation_timezone, date_from)
                     activity_where += " and ae.created_at >= %s"
