@@ -273,6 +273,17 @@ $$;
 revoke all on function public.has_effective_org_permission(uuid, text) from public, anon;
 grant execute on function public.has_effective_org_permission(uuid, text) to authenticated, service_role;
 
+-- Remove legacy organisation-wide member policies before installing scoped policies.
+-- PostgreSQL combines permissive policies with OR, so leaving any broad policy
+-- in place would silently bypass the resource-level checks below.
+drop policy if exists jobs_member_all on public.jobs;
+drop policy if exists candidates_member_all on public.candidates;
+drop policy if exists applications_member_all on public.applications;
+drop policy if exists clients_member_all on public.clients;
+drop policy if exists interviews_member_all on public.interviews;
+drop policy if exists offers_member_all on public.offers;
+drop policy if exists placements_member_all on public.placements;
+
 -- Jobs
 drop policy if exists jobs_resource_scope on public.jobs;
 create policy jobs_resource_select on public.jobs for select to authenticated
