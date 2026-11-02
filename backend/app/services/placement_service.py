@@ -85,11 +85,12 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
 
             assignments = ", ".join(f"{key}=%({key})s" for key in d)
             values = dict(d)
-            values.update({"placement_id": placement_id, "organization_id": organization_id})
+            values.update({"placement_id": placement_id, "organization_id": organization_id, "actor_user_id": actor_user_id})
 
             cur.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
             cur.execute(
-                f"update public.placements set {assignments},updated_at=now() where id=%(placement_id)s and organization_id=%(organization_id)s returning *",
+                f"update public.placements set {assignments},updated_at=now() where id=%(placement_id)s and organization_id=%(organization_id)s
+                and public.can_access_application(application_id, organization_id, %(actor_user_id)s) returning *",
                 values,
             )
             row = cur.fetchone()
