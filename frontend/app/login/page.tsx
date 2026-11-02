@@ -14,7 +14,7 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [busy, setBusy] = useState(false);
-  const [resending, setResending] = useState(false);
+  const [resending, setResending] = useState(false);\n  const [resetMode, setResetMode] = useState(false);
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
 
   async function submit(event: FormEvent) {
@@ -105,13 +105,13 @@ export default function LoginPage() {
           <div className="auth-tagline">THE INTELLIGENCE OF HUMAN POTENTIAL</div>
         </div>
         <div className="eyebrow">Recruitment intelligence</div>
-        <h1>{mode === "signin" ? "Welcome back" : "Create your workspace"}</h1>
+        <h1>{resetMode ? "Reset your password" : mode === "signin" ? "Welcome back" : "Create your workspace"}</h1>
         <p className="subtitle">
-          {mode === "signin" ? "Sign in to your AQERITH workspace." : "Start your recruitment workspace in minutes."}
+          {resetMode ? "Enter your account email and we will send a secure reset link." : mode === "signin" ? "Sign in to your AQERITH workspace." : "Start your recruitment workspace in minutes."}
         </p>
 
         <form onSubmit={submit} className="auth-form">
-          {mode === "signup" && <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>}
+          {!resetMode && mode === "signup" && <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>}
           <label>Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           <label>
             Password
@@ -127,7 +127,7 @@ export default function LoginPage() {
 
         {message && <div className={messageType === "error" ? "dashboard-error" : "notice"} role={messageType === "error" ? "alert" : "status"}>{message}</div>}
 
-        {mode === "signin" && (
+        {mode === "signin" && !resetMode && (
           <div className="auth-recovery-actions">
             <button type="button" className="auth-switch" onClick={resendConfirmation} disabled={resending}>
               {resending ? "Requesting email..." : "Resend confirmation email"}
