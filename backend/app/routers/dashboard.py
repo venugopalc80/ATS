@@ -69,31 +69,31 @@ async def dashboard(
                 )
 
                 cursor.execute(
-                    "select count(*)::int as total from public.jobs where organization_id=%s and status='open'",
-                    [organization_id],
+                    "select count(*)::int as total from public.jobs where organization_id=%s and status='open' and public.can_access_job(id, organization_id, %s)",
+                    [organization_id, user_id],
                 )
                 open_jobs = cursor.fetchone()["total"]
 
                 cursor.execute(
-                    "select count(*)::int as total from public.candidates where organization_id=%s and status='active'",
-                    [organization_id],
+                    "select count(*)::int as total from public.candidates where organization_id=%s and status='active' and public.can_access_application(application_id, organization_id, %s) and public.can_access_candidate(id, organization_id, %s)",
+                    [organization_id, user_id],
                 )
                 active_candidates = cursor.fetchone()["total"]
 
                 cursor.execute(
-                    "select count(*)::int as total from public.interviews where organization_id=%s and status in ('scheduled','rescheduled') and scheduled_at >= %s and scheduled_at < %s",
-                    [organization_id, today_start_utc, tomorrow_start_utc],
+                    "select count(*)::int as total from public.interviews where organization_id=%s and status in ('scheduled','rescheduled') and scheduled_at >= %s and scheduled_at < %s and public.can_access_application(application_id, organization_id, %s)",
+                    [organization_id, today_start_utc, tomorrow_start_utc, user_id],
                 )
                 interviews_today = cursor.fetchone()["total"]
 
                 cursor.execute(
                     "select count(*)::int as total from public.placements where organization_id=%s and status='active'",
-                    [organization_id],
+                    [organization_id, user_id],
                 )
                 active_placements = cursor.fetchone()["total"]
 
-                pipeline_params = [organization_id]
-                pipeline_where = "organization_id=%s"
+                pipeline_params = [organization_id, user_id]
+                pipeline_where = "organization_id=%s and public.can_access_application(id, organization_id, %s)"
                 if date_from:
                     range_start_utc, _ = organisation_date_bounds_utc(organisation_timezone, date_from)
                     pipeline_where += " and created_at >= %s"
@@ -110,16 +110,16 @@ async def dashboard(
 
                 cursor.execute(
                     """select j.id,j.title,coalesce(c.name,'Direct client') as client,j.status,
-                              count(a.id)::int as applicants,
+                              count(a.id) filter (where public.can_access_application(a.id, a.organization_id, %s))::int as applicants,
                               (%s::date - (coalesce(j.opened_at,j.created_at) at time zone %s)::date)::int as days_open
                        from public.jobs j
                        left join public.clients c on c.id=j.client_id and c.organization_id=j.organization_id
                        left join public.applications a on a.job_id=j.id and a.organization_id=j.organization_id
-                       where j.organization_id=%s and j.status in ('open','on_hold')
+                       where j.organization_id=%s and j.status in ('open','on_hold') and public.can_access_job(j.id, j.organization_id, %s)
                        group by j.id,j.title,c.name,j.status,j.created_at,j.opened_at
                        order by case when j.status='on_hold' then 0 else 1 end,
                                 coalesce(j.opened_at,j.created_at) asc limit 10""",
-                    [local_today, organisation_timezone, organization_id],
+                    [user_id, local_today, organisation_timezone, organization_id, user_id],
                 )
                 job_rows = list(cursor.fetchall())
                 jobs = []
@@ -157,8 +157,9 @@ async def dashboard(
                          and i.status in ('scheduled','rescheduled')
                          and i.scheduled_at >= %s
                          and i.scheduled_at < %s
+                         and public.can_access_application(i.application_id, i.organization_id, %s)
                        order by i.scheduled_at asc limit 10""",
-                    [organization_id, today_start_utc, tomorrow_start_utc],
+                    [organization_id, today_start_utc, tomorrow_start_utc, user_id],
                 )
                 todays_interviews = list(cursor.fetchall())
 
@@ -167,8 +168,9 @@ async def dashboard(
                        from public.interviews i
                        where i.organization_id=%s and i.status='completed'
                          and (i.feedback is null or btrim(i.feedback)='')
+                         and public.can_access_application(i.application_id, i.organization_id, %s)
                        order by i.scheduled_at desc limit 10""",
-                    [organization_id],
+                    [organization_id, user_id],
                 )
                 pending_feedback = list(cursor.fetchall())
 
@@ -176,10 +178,11 @@ async def dashboard(
                     """select o.id,o.application_id,o.title,o.expires_at,o.status
                        from public.offers o
                        where o.organization_id=%s and o.status='sent'
+                         and public.can_access_application(o.application_id, o.organization_id, %s)
                          and o.expires_at >= now()
                          and o.expires_at < now() + (%s * interval '1 day')
                        order by o.expires_at asc limit 10""",
-                    [organization_id, OFFER_EXPIRY_WINDOW_DAYS],
+                    [organization_id, user_id, OFFER_EXPIRY_WINDOW_DAYS],
                 )
                 expiring_offers = list(cursor.fetchall())
 
@@ -206,16 +209,17 @@ async def dashboard(
 
                 cursor.execute(
                     """select count(*)::int as total from public.placements
-                       where organization_id=%s and created_at >= %s""",
-                    [organization_id, month_start_utc],
+                       where organization_id=%s and created_at >= %s and public.can_access_application(application_id, organization_id, %s)""",
+                    [organization_id, month_start_utc, user_id],
                 )
                 placements_this_month = cursor.fetchone()["total"]
 
                 cursor.execute(
                     """select count(*)::int as total from public.applications
                        where organization_id=%s and status in ('submitted','interview','offer')
-                         and updated_at < now() - interval '3 days'""",
-                    [organization_id],
+                         and updated_at < now() - interval '3 days'
+                         and public.can_access_application(id, organization_id, %s)""",
+                    [organization_id, user_id],
                 )
                 awaiting_decision = cursor.fetchone()["total"]
 
