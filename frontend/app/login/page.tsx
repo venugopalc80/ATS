@@ -56,7 +56,7 @@ export default function LoginPage() {
       setMessage("Enter your email address first, then request another confirmation email.");
       return;
     }
-    if (Date.now() < resendAvailableAt) return;
+    if (Date.now() < resendAvailableAt) {\n      const seconds = Math.ceil((resendAvailableAt - Date.now()) / 1000);\n      setMessageType("error");\n      setMessage(`Please wait ${seconds} seconds before requesting another email.`);\n      return;\n    }
 
     setResending(true);
     setMessage("");
@@ -129,7 +129,7 @@ export default function LoginPage() {
 
         {mode === "signin" && (
           <div className="auth-recovery-actions">
-            <button type="button" className="auth-switch" onClick={resendConfirmation} disabled={resending || Date.now() < resendAvailableAt}>
+            <button type="button" className="auth-switch" onClick={resendConfirmation} disabled={resending}>
               {resending ? "Requesting email..." : "Resend confirmation email"}
             </button>
             <p className="muted-small">Use the email address entered above. Check your spam folder if the message is missing.</p>
