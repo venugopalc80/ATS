@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { apiFetch, API_BASE } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
 
@@ -96,7 +96,7 @@ export default function SettingsPage() {
 
   const canEdit = organization?.role === "owner" || organization?.role === "admin";
 
-  async function sendInvitation(event: React.FormEvent) {
+  async function sendInvitation(event: FormEvent) {
     event.preventDefault();
     if (!organization) return;
     setInviting(true);
