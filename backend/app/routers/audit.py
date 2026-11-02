@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.auth import assert_org_permission, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/audit", tags=["audit"])
@@ -21,6 +21,7 @@ async def application_audit(
                 if application is None:
                     raise HTTPException(status_code=404, detail="Application not found")
                 assert_org_permission(user_id, application["organization_id"], "organization.audit.read")
+                assert_resource_access(user_id, application["organization_id"], "application", application_id)
                 cursor.execute(
                     """select id, actor_user_id, action, entity_type, entity_id, metadata, created_at
                        from public.audit_events
