@@ -18,6 +18,10 @@ class DatabaseConnectionError(RuntimeError):
     """Raised when PostgreSQL cannot be reached or a database operation fails."""
 
 
+class DatabaseIntegrityError(DatabaseConnectionError):
+    """Raised when PostgreSQL rejects data because of a constraint violation."""
+
+
 @contextmanager
 def get_connection() -> Iterator[psycopg.Connection]:
     database_url = os.getenv("DATABASE_URL")
@@ -31,6 +35,9 @@ def get_connection() -> Iterator[psycopg.Connection]:
             connect_timeout=10,
         ) as connection:
             yield connection
+    except psycopg.IntegrityError as exc:
+        logger.warning("PostgreSQL integrity constraint rejected an operation", exc_info=True)
+        raise DatabaseIntegrityError("Database constraint violation") from exc
     except psycopg.Error as exc:
         logger.exception("PostgreSQL operation failed")
         raise DatabaseConnectionError("Database operation failed") from exc
