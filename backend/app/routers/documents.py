@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from pydantic import BaseModel
 from supabase import create_client
 
-from app.auth import assert_org_permission, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/documents", tags=["candidate documents"])
@@ -92,6 +92,7 @@ async def upload_candidate_document(
 ):
     assert_org_permission(user_id, organization_id, "candidates.documents.upload")
     verify_candidate(candidate_id, organization_id)
+    assert_resource_access(user_id, organization_id, "candidate", candidate_id)
 
     mime = (file.content_type or "").lower()
     data = await file.read(MAX_BYTES + 1)
@@ -168,6 +169,7 @@ async def list_candidate_documents(
     assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         verify_candidate(candidate_id, organization_id)
+        assert_resource_access(user_id, organization_id, "candidate", candidate_id)
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -200,7 +202,7 @@ async def create_document_download(
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select storage_bucket, storage_path, original_filename
+                    """select candidate_id, storage_bucket, storage_path, original_filename
                        from public.candidate_documents
                        where id=%s and organization_id=%s and deleted_at is null""",
                     [document_id, organization_id],
@@ -208,6 +210,7 @@ async def create_document_download(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                assert_resource_access(user_id, organization_id, "candidate", row["candidate_id"])
         result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": False})
         signed_url = result.get("signedURL") or result.get("signedUrl")
         if not signed_url:
@@ -239,6 +242,7 @@ async def preview_candidate_document(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                assert_resource_access(user_id, organization_id, "candidate", row["candidate_id"])
         if row["content_type"] == "application/pdf":
             result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(
                 row["storage_path"], 60, options={"download": False}
