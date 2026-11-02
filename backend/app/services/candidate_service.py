@@ -30,7 +30,7 @@ class CandidateService:
         params: list[Any] = [organization_id]
 
         if user_id is not None:
-            query += " and public.can_access_candidate(id, organization_id, %s)"
+            query += " and private.can_access_candidate(id, organization_id, %s)"
             params.append(user_id)
 
         query += """
