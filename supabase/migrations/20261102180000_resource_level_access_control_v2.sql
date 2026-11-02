@@ -648,7 +648,7 @@ drop policy if exists candidate_processing_member_read on public.candidate_proce
 create policy candidate_processing_resource_read on public.candidate_processing_records
 for select to authenticated
 using (public.is_org_member(organization_id)
-  and public.has_effective_org_permission(organization_id, 'privacy.read')
+  and public.has_effective_org_permission(organization_id, 'privacy.manage')
   and public.can_access_candidate(candidate_id, organization_id));
 
 drop policy if exists candidate_tag_assignments_member_read on public.candidate_tag_assignments;
@@ -712,8 +712,12 @@ create policy recruiter_tasks_resource_read on public.recruiter_tasks
 for select to authenticated
 using (public.is_org_member(organization_id)
   and (
-    (candidate_id is not null and public.can_access_candidate(candidate_id, organization_id))
-    or (job_id is not null and public.can_access_job(job_id, organization_id))
+    (candidate_id is not null
+      and public.has_effective_org_permission(organization_id, 'candidates.read')
+      and public.can_access_candidate(candidate_id, organization_id))
+    or (job_id is not null
+      and public.has_effective_org_permission(organization_id, 'jobs.read')
+      and public.can_access_job(job_id, organization_id))
     or (candidate_id is null and job_id is null
         and (assigned_to = auth.uid() or created_by = auth.uid()))
   ));
