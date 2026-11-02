@@ -85,7 +85,23 @@ async def send_candidate_email(
     if not api_key or not from_email:
         raise HTTPException(status_code=503, detail="Email sending is not configured. Set RESEND_API_KEY and RESEND_FROM_EMAIL on the staging API.")
 
-    response = None
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                insert into public.candidate_communications
+                  (organization_id, candidate_id, channel, direction, subject, body_text,
+                   recipient_email, sender_user_id, provider, delivery_status, template_key,
+                   metadata)
+                values (%s, %s, 'email', 'outbound', %s, %s, %s, %s, 'resend', 'queued', %s,
+                        '{"source":"candidate_profile"}')
+                returning id
+                """,
+                [organization_id, candidate_id, payload.subject.strip(), payload.body,
+                 recipient, user_id, payload.template_key],
+            )
+            communication_id = cursor.fetchone()["id"]
+
     provider_id = None
     delivery_status = "failed"
     error_detail = None
@@ -93,17 +109,11 @@ async def send_candidate_email(
         response = requests.post(
             "https://api.resend.com/emails",
             headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-            json={
-                "from": from_email,
-                "to": [recipient],
-                "subject": payload.subject.strip(),
-                "text": payload.body,
-            },
+            json={"from": from_email, "to": [recipient], "subject": payload.subject.strip(), "text": payload.body},
             timeout=20,
         )
         if response.ok:
-            provider_payload = response.json()
-            provider_id = provider_payload.get("id")
+            provider_id = response.json().get("id")
             delivery_status = "sent"
         else:
             error_detail = f"Email provider returned HTTP {response.status_code}"
@@ -114,18 +124,14 @@ async def send_candidate_email(
         with connection.cursor() as cursor:
             cursor.execute(
                 """
-                insert into public.candidate_communications
-                  (organization_id, candidate_id, channel, direction, subject, body_text,
-                   recipient_email, sender_user_id, provider, provider_message_id,
-                   delivery_status, template_key, metadata)
-                values (%s, %s, 'email', 'outbound', %s, %s, %s, %s, 'resend', %s, %s, %s, %s::jsonb)
+                update public.candidate_communications
+                set provider_message_id=%s, delivery_status=%s
+                where id=%s and organization_id=%s and candidate_id=%s
                 returning id, channel, direction, subject, body_text, recipient_email,
                           sender_user_id, provider, provider_message_id, delivery_status,
                           template_key, created_at
                 """,
-                [organization_id, candidate_id, payload.subject.strip(), payload.body,
-                 recipient, user_id, provider_id, delivery_status, payload.template_key,
-                 '{"source":"candidate_profile"}'],
+                [provider_id, delivery_status, communication_id, organization_id, candidate_id],
             )
             communication = cursor.fetchone()
 
