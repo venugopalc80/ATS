@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.auth import assert_org_permission, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.schemas.job_distribution import DistributionChannelOut, DistributionSave
 
@@ -27,6 +27,7 @@ async def get_job_distribution(
                 job = cursor.fetchone()
                 if job is None or job["organization_id"] != organization_id:
                     raise HTTPException(status_code=404, detail="Job not found")
+                assert_resource_access(user_id, organization_id, "job", job_id)
                 cursor.execute(
                     """select organization_id, job_id, channel_id, selected, status,
                               updated_by, created_at, updated_at
