@@ -111,7 +111,7 @@ class PermissionResolverTests(unittest.TestCase):
 class PermissionGrantGuardTests(unittest.TestCase):
     def test_admin_cannot_grant_permission_they_do_not_hold(self):
         user_id, organization_id = uuid4(), uuid4()
-        with patch("app.routers.permissions.get_org_role", return_value="admin"), \\
+        with patch("app.routers.permissions.get_org_role", return_value="admin"), \
              patch("app.routers.permissions.has_org_permission", return_value=False):
             with self.assertRaises(HTTPException) as caught:
                 _assert_can_grant(user_id, organization_id, "billing.manage")
@@ -119,7 +119,7 @@ class PermissionGrantGuardTests(unittest.TestCase):
 
     def test_admin_cannot_grant_ownership_transfer_even_if_permission_check_is_true(self):
         user_id, organization_id = uuid4(), uuid4()
-        with patch("app.routers.permissions.get_org_role", return_value="admin"), \\
+        with patch("app.routers.permissions.get_org_role", return_value="admin"), \
              patch("app.routers.permissions.has_org_permission", return_value=True):
             with self.assertRaises(HTTPException) as caught:
                 _assert_can_grant(user_id, organization_id, "ownership.transfer")
@@ -127,7 +127,7 @@ class PermissionGrantGuardTests(unittest.TestCase):
 
     def test_admin_can_grant_a_permission_they_already_hold(self):
         user_id, organization_id = uuid4(), uuid4()
-        with patch("app.routers.permissions.get_org_role", return_value="admin"), \\
+        with patch("app.routers.permissions.get_org_role", return_value="admin"), \
              patch("app.routers.permissions.has_org_permission", return_value=True):
             _assert_can_grant(user_id, organization_id, "candidates.read")
 
