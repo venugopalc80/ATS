@@ -19,9 +19,9 @@ def list_offers(organization_id: UUID, user_id: UUID, status: str | None = None)
     with get_connection() as c:
         with c.cursor() as cur:
             if status:
-                cur.execute("select o.* from public.offers o where o.organization_id=%s and public.can_access_application(o.application_id, o.organization_id, %s) and o.status=%s order by o.created_at desc", [organization_id, user_id, status])
+                cur.execute("select o.* from public.offers o where o.organization_id=%s and private.can_access_application(o.application_id, o.organization_id, %s) and o.status=%s order by o.created_at desc", [organization_id, user_id, status])
             else:
-                cur.execute("select o.* from public.offers o where o.organization_id=%s and public.can_access_application(o.application_id, o.organization_id, %s) order by o.created_at desc", [organization_id, user_id])
+                cur.execute("select o.* from public.offers o where o.organization_id=%s and private.can_access_application(o.application_id, o.organization_id, %s) order by o.created_at desc", [organization_id, user_id])
             return cur.fetchall()
 
 
@@ -93,7 +93,7 @@ def update_offer(organization_id: UUID, offer_id: UUID, payload: OfferUpdate, ac
                 where id=%(offer_id)s and organization_id=%(organization_id)s
                   and exists (select 1 from public.applications a where a.id=offers.application_id
                     and a.organization_id=offers.organization_id
-                    and public.can_access_application(a.id, a.organization_id, %(actor_user_id)s))
+                    and private.can_access_application(a.id, a.organization_id, %(actor_user_id)s))
                 returning *""",
                 values,
             )
