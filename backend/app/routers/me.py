@@ -93,11 +93,11 @@ def get_verified_user_email(
         raise HTTPException(status_code=401, detail="Invalid authentication token") from exc
 
 
-def _supabase_admin_invite(email: str, redirect_to: str, organization_name: str) -> None:
+def _supabase_admin_invite(email: str, redirect_to: str, organization_name: str) -> bool:
     supabase_url = os.getenv("SUPABASE_URL", "").rstrip("/")
     service_key = os.getenv("SUPABASE_SERVICE_ROLE_KEY")
     if not supabase_url or not service_key:
-        raise HTTPException(status_code=503, detail="Invitation email service is not configured")
+        return False
     url = supabase_url + "/auth/v1/invite?" + urlencode({"redirect_to": redirect_to})
     try:
         response = requests.post(
@@ -106,12 +106,9 @@ def _supabase_admin_invite(email: str, redirect_to: str, organization_name: str)
             json={"email": email, "data": {"invited_to_organization": organization_name}},
             timeout=15,
         )
-    except requests.RequestException as exc:
-        raise HTTPException(status_code=502, detail="Could not contact the invitation email service") from exc
-    if response.status_code >= 400:
-        # Do not return upstream details that may disclose account state or provider internals.
-        raise HTTPException(status_code=409, detail="The invitation email could not be sent. The address may already have an account or email delivery may be unavailable.")
-
+    except requests.RequestException:
+        return False
+    return response.status_code < 400
 
 @router.get("")
 async def get_context(user_id: UUID = Depends(get_current_user_id)):
@@ -266,14 +263,12 @@ async def create_organization_invitation(
                 cursor.execute("delete from public.organization_invitations where id = %s", [invitation_id])
         raise HTTPException(status_code=503, detail="Invitation redirect URL is not configured")
     redirect_to = frontend_url + "/accept-invitation?" + urlencode({"invitation_id": str(invitation_id), "token": token})
-    try:
-        _supabase_admin_invite(email, redirect_to, organization["name"])
-    except HTTPException:
-        with get_connection() as connection:
-            with connection.cursor() as cursor:
-                cursor.execute("delete from public.organization_invitations where id = %s", [invitation_id])
-        raise
-    return {"invitation": {"id": str(invitation_id), "email": email, "role": payload.role, "expires_at": expires_at}}
+    email_sent = _supabase_admin_invite(email, redirect_to, organization["name"])
+    return {
+        "invitation": {"id": str(invitation_id), "email": email, "role": payload.role, "expires_at": expires_at},
+        "email_sent": email_sent,
+        "invite_url": redirect_to,
+    }
 
 
 @router.post("/invitations/accept")
