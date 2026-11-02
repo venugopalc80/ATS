@@ -935,3 +935,8 @@ for select to authenticated
 using (public.is_org_member(organization_id)
   and public.has_effective_org_permission(organization_id, 'privacy.manage')
   and private.can_access_candidate(candidate_id, organization_id));
+
+-- Recovery drills are internal operational evidence, not tenant-facing ATS data.
+-- Keep the table fail-closed under RLS and remove direct Data API table privileges
+-- from public client roles. The service_role retains its existing operational grants.
+revoke all privileges on table public.recovery_drills from public, anon, authenticated;
