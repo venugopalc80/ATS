@@ -804,3 +804,63 @@ async def update_member_access_scope(
             _audit(cursor, organization_id, user_id, "member_access_scope_updated",
                    "organization_member", member_id, {"scope": payload.scope})
     return {"status": "updated", "member_id": str(member_id), "scope": payload.scope}
+
+
+@router.put("/{organization_id}/applications/{application_id}/assignments")
+async def assign_application_to_member(
+    organization_id: UUID,
+    application_id: UUID,
+    payload: DirectResourceAssignment,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                "select id from public.applications where id=%s and organization_id=%s",
+                [application_id, organization_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Application not found")
+            cursor.execute(
+                "select 1 from public.organization_members where organization_id=%s and user_id=%s",
+                [organization_id, payload.user_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Organisation member not found")
+            cursor.execute(
+                """
+                insert into public.application_access_assignments
+                  (organization_id, application_id, user_id, assigned_by)
+                values (%s, %s, %s, %s)
+                on conflict (application_id, user_id) do nothing
+                """,
+                [organization_id, application_id, payload.user_id, user_id],
+            )
+            _audit(cursor, organization_id, user_id, "application_assigned_to_member",
+                   "application", application_id, {"member_user_id": str(payload.user_id)})
+    return {"status": "assigned", "application_id": str(application_id), "user_id": str(payload.user_id)}
+
+
+@router.delete("/{organization_id}/applications/{application_id}/assignments/{member_id}", status_code=204)
+async def remove_application_assignment(
+    organization_id: UUID,
+    application_id: UUID,
+    member_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    _assert_team_manager(user_id, organization_id)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                delete from public.application_access_assignments
+                where organization_id=%s and application_id=%s and user_id=%s
+                returning user_id
+                """,
+                [organization_id, application_id, member_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Application assignment not found")
+            _audit(cursor, organization_id, user_id, "application_assignment_removed",
+                   "application", application_id, {"member_user_id": str(member_id)})
