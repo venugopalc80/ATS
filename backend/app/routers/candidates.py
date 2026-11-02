@@ -37,7 +37,7 @@ async def create_candidate(
 ) -> CandidateOut:
     assert_org_permission(user_id, payload.organization_id, "candidates.create")
     try:
-        row = await service.create_candidate(payload)
+        row = await service.create_candidate(payload, user_id)
         return CandidateOut.model_validate(row)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
