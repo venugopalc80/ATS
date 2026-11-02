@@ -1,6 +1,6 @@
 from uuid import UUID
 from fastapi import APIRouter,Depends,HTTPException,Query
-from app.auth import assert_org_permission,get_current_user_id
+from app.auth import assert_org_permission,assert_resource_access,get_current_user_id
 from app.db import DatabaseConfigurationError,DatabaseConnectionError,get_connection
 from app.schemas.notes import NoteCreate,NoteOut
 from app.services.note_service import NoteService
@@ -13,6 +13,7 @@ async def list_notes(candidate_id:UUID,organization_id:UUID,user_id:UUID=Depends
             with connection.cursor() as cursor:
                 cursor.execute("select organization_id from public.candidates where id=%s",[candidate_id]);row=cursor.fetchone()
         if row is None or row["organization_id"]!=organization_id: raise HTTPException(status_code=404,detail="Candidate not found")
+        assert_resource_access(user_id, organization_id, "candidate", candidate_id)
         return [NoteOut.model_validate(x) for x in await service.list_candidate_notes(organization_id,candidate_id)]
     except HTTPException: raise
     except (DatabaseConfigurationError,DatabaseConnectionError) as exc: raise HTTPException(status_code=503,detail="Database operation failed") from exc
@@ -24,6 +25,7 @@ async def create_note(payload:NoteCreate,user_id:UUID=Depends(get_current_user_i
             with connection.cursor() as cursor:
                 cursor.execute("select organization_id from public.candidates where id=%s",[payload.candidate_id]);row=cursor.fetchone()
         if row is None or row["organization_id"]!=payload.organization_id: raise HTTPException(status_code=404,detail="Candidate not found")
+        assert_resource_access(user_id, payload.organization_id, "candidate", payload.candidate_id)
         return NoteOut.model_validate(await service.create_note(payload,user_id))
     except HTTPException: raise
     except (DatabaseConfigurationError,DatabaseConnectionError) as exc: raise HTTPException(status_code=503,detail="Database operation failed") from exc
@@ -47,9 +49,10 @@ async def latest_notes(
                     where rn.organization_id = %s
                       and c.organization_id = %s
                       and rn.candidate_id = any(%s)
+                      and public.can_access_candidate(c.id, c.organization_id, %s)
                     order by rn.candidate_id, rn.created_at desc
                     """,
-                    [organization_id, organization_id, candidate_ids],
+                    [organization_id, organization_id, candidate_ids, user_id],
                 )
                 return list(cursor.fetchall())
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
