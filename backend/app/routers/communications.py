@@ -6,7 +6,7 @@ import requests
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
-from app.auth import assert_org_permission, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import get_connection
 from app.services.candidate_service import CandidateService
 
@@ -46,6 +46,7 @@ async def list_candidate_communications(
     if candidate is None or str(candidate["organization_id"]) != str(organization_id):
         raise HTTPException(status_code=404, detail="Candidate not found")
     assert_org_permission(user_id, organization_id, "candidates.communicate")
+    assert_resource_access(user_id, organization_id, "candidate", candidate_id)
     with get_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
