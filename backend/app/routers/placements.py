@@ -1,20 +1,27 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, Query, status, HTTPException
-from app.auth import assert_org_permission, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.schemas.placements import PlacementCreate, PlacementOut, PlacementUpdate
 from app.services.placement_service import create_placement,get_placement,list_placements,update_placement
 router=APIRouter(prefix="/api/placements",tags=["placements"])
 @router.get("",response_model=list[PlacementOut])
 def get_placements(organization_id: UUID,status_filter: str|None=Query(None,alias="status"),user_id: UUID=Depends(get_current_user_id)):
-    assert_org_permission(user_id,organization_id, "placements.read"); return list_placements(organization_id,status_filter)
+    assert_org_permission(user_id,organization_id, "placements.read"); return list_placements(organization_id,user_id,status_filter)
 @router.post("",response_model=PlacementOut,status_code=status.HTTP_201_CREATED)
 def post_placement(payload: PlacementCreate,user_id: UUID=Depends(get_current_user_id)):
     assert_org_permission(user_id,payload.organization_id, "placements.create")
+    assert_resource_access(user_id, payload.organization_id, "application", payload.application_id)
     try:return create_placement(payload,user_id)
     except ValueError as exc:raise HTTPException(409,str(exc)) from exc
 @router.get("/{placement_id}",response_model=PlacementOut)
 def get_one(placement_id: UUID,organization_id: UUID,user_id: UUID=Depends(get_current_user_id)):
-    assert_org_permission(user_id,organization_id, "placements.read"); return get_placement(organization_id,placement_id)
+    assert_org_permission(user_id,organization_id, "placements.read")
+    row = get_placement(organization_id,placement_id)
+    assert_resource_access(user_id, organization_id, "application", row["application_id"])
+    return row
 @router.patch("/{placement_id}",response_model=PlacementOut)
 def patch_placement(placement_id: UUID,payload: PlacementUpdate,organization_id: UUID,user_id: UUID=Depends(get_current_user_id)):
-    assert_org_permission(user_id,organization_id, "placements.update"); return update_placement(organization_id,placement_id,payload,user_id)
+    assert_org_permission(user_id,organization_id, "placements.update")
+    row = get_placement(organization_id, placement_id)
+    assert_resource_access(user_id, organization_id, "application", row["application_id"])
+    return update_placement(organization_id,placement_id,payload,user_id)
