@@ -156,7 +156,7 @@ class ResourceAccessResolverTests(unittest.TestCase):
         with patch("app.auth.get_connection", fake_connection):
             self.assertTrue(has_resource_access(user_id, organization_id, "candidate", resource_id))
 
-        self.assertIn("public.can_access_candidate", connection.cursor_instance.sql)
+        self.assertIn("private.can_access_candidate", connection.cursor_instance.sql)
         self.assertEqual(connection.cursor_instance.params, [resource_id, organization_id, user_id])
 
     def test_inaccessible_resource_returns_same_not_found_response(self):
@@ -201,7 +201,7 @@ class ResourceScopedListQueryTests(unittest.TestCase):
         connection, fake_connection = self._connection()
         with patch("app.services.interview_service.get_connection", fake_connection):
             asyncio.run(InterviewService().list_interviews(organization_id, user_id))
-        self.assertIn("public.can_access_application", connection.cursor_instance.sql)
+        self.assertIn("private.can_access_application", connection.cursor_instance.sql)
         self.assertEqual(connection.cursor_instance.params, [organization_id, user_id])
 
     def test_offer_list_is_filtered_by_application_access(self):
@@ -209,7 +209,7 @@ class ResourceScopedListQueryTests(unittest.TestCase):
         connection, fake_connection = self._connection()
         with patch("app.services.offer_service.get_connection", fake_connection):
             list_offers(organization_id, user_id)
-        self.assertIn("public.can_access_application", connection.cursor_instance.sql)
+        self.assertIn("private.can_access_application", connection.cursor_instance.sql)
         self.assertEqual(connection.cursor_instance.params, [organization_id, user_id])
 
     def test_placement_list_is_filtered_by_application_access(self):
@@ -217,7 +217,7 @@ class ResourceScopedListQueryTests(unittest.TestCase):
         connection, fake_connection = self._connection()
         with patch("app.services.placement_service.get_connection", fake_connection):
             list_placements(organization_id, user_id)
-        self.assertIn("public.can_access_application", connection.cursor_instance.sql)
+        self.assertIn("private.can_access_application", connection.cursor_instance.sql)
         self.assertEqual(connection.cursor_instance.params, [organization_id, user_id])
 
 
@@ -230,12 +230,12 @@ class ApplicationAssignmentBoundaryTests(unittest.TestCase):
             / "migrations"
             / "20261102180000_resource_level_access_control_v2.sql"
         ).read_text()
-        start = migration.index("create or replace function public.can_access_application")
+        start = migration.index("create or replace function private.can_access_application")
         end = migration.index("$;", start)
         function_sql = migration[start:end]
         self.assertIn("public.application_access_assignments", function_sql)
-        self.assertIn("public.can_access_job", function_sql)
-        self.assertNotIn("public.can_access_candidate", function_sql)
+        self.assertIn("private.can_access_job", function_sql)
+        self.assertNotIn("private.can_access_candidate", function_sql)
 
 
 if __name__ == "__main__":
@@ -254,7 +254,7 @@ class RelatedRecordBoundaryTests(unittest.TestCase):
         ).read_text().lower()
 
     def test_candidate_profile_access_includes_explicit_application_assignment(self):
-        start = self.migration.index("create or replace function public.can_access_candidate")
+        start = self.migration.index("create or replace function private.can_access_candidate")
         end = self.migration.index("$;", start)
         function_sql = self.migration[start:end]
         self.assertIn("public.application_access_assignments", function_sql)
@@ -359,8 +359,20 @@ class SharedTeamScaleBoundaryTests(unittest.TestCase):
             / "permissions.py"
         ).read_text()
 
+    def test_resource_access_helpers_are_private_and_caller_bound(self):
+        self.assertIn("create schema if not exists private", self.migration)
+        self.assertIn("revoke all on schema private from public, anon", self.migration)
+        for fn in ("has_organization_wide_access", "can_access_job", "can_access_client", "can_access_candidate", "can_access_application"):
+            self.assertIn(f"create or replace function private.{fn}", self.migration)
+            start = self.migration.index(f"create or replace function private.{fn}")
+            end = self.migration.index("$;", start)
+            body = self.migration[start:end]
+            self.assertIn("auth.uid() is null or target_user = auth.uid()", body)
+        self.assertNotIn("create or replace function public.can_access_", self.migration)
+        self.assertIn("grant usage on schema private to authenticated, service_role", self.migration)
+
     def test_team_members_share_jobs_assigned_to_their_team(self):
-        start = self.migration.index("create or replace function public.can_access_job")
+        start = self.migration.index("create or replace function private.can_access_job")
         end = self.migration.index("$;", start)
         fn = self.migration[start:end]
         self.assertIn("public.recruitment_team_jobs", fn)
@@ -368,7 +380,7 @@ class SharedTeamScaleBoundaryTests(unittest.TestCase):
         self.assertIn("tm.user_id = target_user", fn)
 
     def test_team_membership_removal_revokes_team_derived_access(self):
-        start = self.migration.index("create or replace function public.can_access_job")
+        start = self.migration.index("create or replace function private.can_access_job")
         end = self.migration.index("$;", start)
         fn = self.migration[start:end]
         self.assertIn("join public.recruitment_team_members tm", fn)
@@ -376,12 +388,12 @@ class SharedTeamScaleBoundaryTests(unittest.TestCase):
         self.assertNotIn("team_member_access_cache", fn)
 
     def test_team_access_flows_to_clients_and_candidate_applications(self):
-        client_start = self.migration.index("create or replace function public.can_access_client")
-        candidate_start = self.migration.index("create or replace function public.can_access_candidate")
-        app_start = self.migration.index("create or replace function public.can_access_application")
-        self.assertIn("public.can_access_job", self.migration[client_start:candidate_start])
-        self.assertIn("public.can_access_job", self.migration[candidate_start:app_start])
-        self.assertIn("public.can_access_job", self.migration[app_start:])
+        client_start = self.migration.index("create or replace function private.can_access_client")
+        candidate_start = self.migration.index("create or replace function private.can_access_candidate")
+        app_start = self.migration.index("create or replace function private.can_access_application")
+        self.assertIn("private.can_access_job", self.migration[client_start:candidate_start])
+        self.assertIn("private.can_access_job", self.migration[candidate_start:app_start])
+        self.assertIn("private.can_access_job", self.migration[app_start:])
 
     def test_assignment_reverse_lookup_indexes_exist_for_scale(self):
         for index_name in (
