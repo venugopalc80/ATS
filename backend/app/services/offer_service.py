@@ -89,10 +89,12 @@ def update_offer(organization_id: UUID, offer_id: UUID, payload: OfferUpdate, ac
 
             cur.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
             cur.execute(
-                f"update public.offers set {', '.join(assignments)},updated_at=now() where id=%(offer_id)s and organization_id=%(organization_id)s
-                and exists (select 1 from public.applications a where a.id=offers.application_id
-                  and a.organization_id=offers.organization_id
-                  and public.can_access_application(a.id, a.organization_id, %(actor_user_id)s)) returning *",
+                f"""update public.offers set {', '.join(assignments)},updated_at=now()
+                where id=%(offer_id)s and organization_id=%(organization_id)s
+                  and exists (select 1 from public.applications a where a.id=offers.application_id
+                    and a.organization_id=offers.organization_id
+                    and public.can_access_application(a.id, a.organization_id, %(actor_user_id)s))
+                returning *""",
                 values,
             )
             row = cur.fetchone()
