@@ -314,3 +314,29 @@ class RelatedRecordBoundaryTests(unittest.TestCase):
         self.assertIn("public.has_effective_org_permission(organization_id, 'jobs.create')", self.migration)
         self.assertIn("privacy_requests_resource_read", self.migration)
         self.assertIn("public.has_effective_org_permission(organization_id, 'privacy.manage')", self.migration)
+
+
+class DocumentRouteBoundaryTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        cls.source = (
+            Path(__file__).resolve().parents[1]
+            / "app"
+            / "routers"
+            / "documents.py"
+        ).read_text()
+
+    def test_bulk_cv_import_assigns_new_candidate_to_uploader(self):
+        self.assertIn("insert into public.candidate_access_assignments", self.source)
+        self.assertIn("[organization_id, candidate_id, user_id, user_id]", self.source)
+
+    def test_application_document_upload_checks_application_scope(self):
+        marker = 'if application_id:'
+        start = self.source.index(marker)
+        end = self.source.index('document_id = uuid4()', start)
+        block = self.source[start:end]
+        self.assertIn('assert_resource_access(user_id, organization_id, "application", application_id)', block)
+
+    def test_bulk_duplicate_response_does_not_expose_candidate_id(self):
+        self.assertNotIn('"candidate_id": str(existing["id"])', self.source)
