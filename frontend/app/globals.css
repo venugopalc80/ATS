@@ -315,3 +315,14 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
 .dashboard-user-dropdown button { width:100%; text-align:left; border:0; border-radius:7px; background:transparent; padding:10px; color:var(--ink); font-size:13px; }
 .dashboard-user-dropdown button:hover { background:var(--bg); }
 .dashboard-user-dropdown button:disabled { opacity:.6; cursor:wait; }
+
+
+/* AQERITH authentication controls */
+.auth-password-control{position:relative;display:flex;align-items:center}
+.auth-password-control input{padding-right:66px!important}
+.auth-password-toggle{position:absolute;right:10px;top:50%;transform:translateY(-50%);border:0;background:transparent;color:#3157d5;font-size:12px;font-weight:700;padding:7px;cursor:pointer}
+.auth-password-toggle:focus-visible,.auth-recovery-actions button:focus-visible,.auth-switch:focus-visible{outline:2px solid #3157d5;outline-offset:3px;border-radius:5px}
+.auth-recovery-actions{margin-top:8px;text-align:center}
+.auth-recovery-actions .auth-switch{padding-top:8px}
+.auth-recovery-actions .muted-small{margin:5px 0 0;line-height:1.5}
+.auth-recovery-actions button:disabled{opacity:.6;cursor:wait}
