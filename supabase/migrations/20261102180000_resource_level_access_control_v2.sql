@@ -2,6 +2,20 @@
 -- Existing members default to assigned-resource scope; owners/admins retain
 -- organisation-wide access. Organisation-wide scope can be granted explicitly.
 
+-- Composite keys keep every assignment tenant-bound at the database level.
+do $
+begin
+  if not exists (select 1 from pg_constraint where conname = 'jobs_id_organization_unique') then
+    alter table public.jobs add constraint jobs_id_organization_unique unique (id, organization_id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'clients_id_organization_unique') then
+    alter table public.clients add constraint clients_id_organization_unique unique (id, organization_id);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'candidates_id_organization_unique') then
+    alter table public.candidates add constraint candidates_id_organization_unique unique (id, organization_id);
+  end if;
+end $;
+
 create table if not exists public.organization_member_access_scopes (
     organization_id uuid not null references public.organizations(id) on delete cascade,
     user_id uuid not null references public.profiles(id) on delete cascade,
@@ -331,6 +345,7 @@ for select to authenticated using (user_id = auth.uid() or public.has_organizati
 
 -- Candidate communications inherit the candidate's resource boundary.
 drop policy if exists candidate_communications_member_read on public.candidate_communications;
+drop policy if exists candidate_communications_permission_read on public.candidate_communications;
 create policy candidate_communications_resource_read on public.candidate_communications
 for select to authenticated
 using (public.is_org_member(organization_id) and public.can_access_candidate(candidate_id, organization_id));
