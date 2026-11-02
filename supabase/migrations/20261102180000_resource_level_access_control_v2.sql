@@ -130,6 +130,20 @@ create index if not exists idx_jobs_recruiter_scope on public.jobs(organization_
 create index if not exists idx_jobs_hiring_manager_scope on public.jobs(organization_id, hiring_manager_id);
 create index if not exists idx_applications_job_candidate_scope on public.applications(organization_id, job_id, candidate_id);
 
+-- Reverse-lookup indexes keep access checks efficient as teams and assignment
+-- tables grow. The resource functions filter by organisation + resource first.
+create index if not exists idx_applications_candidate_scope
+  on public.applications(organization_id, candidate_id, job_id);
+create index if not exists idx_jobs_client_scope
+  on public.jobs(organization_id, client_id) where client_id is not null;
+create index if not exists idx_candidate_assignments_resource_user
+  on public.candidate_access_assignments(organization_id, candidate_id, user_id);
+create index if not exists idx_client_assignments_resource_user
+  on public.client_access_assignments(organization_id, client_id, user_id);
+create index if not exists idx_application_assignments_resource_user
+  on public.application_access_assignments(organization_id, application_id, user_id);
+
+
 create or replace function public.has_organization_wide_access(target_org uuid, target_user uuid default auth.uid())
 returns boolean
 language sql
