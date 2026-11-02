@@ -71,7 +71,7 @@ export default function AcceptInvitationPage() {
         <h1>Join your team</h1>
         {status && <p className="subtitle" role="status">{status}</p>}
         {error && <div className="dashboard-error" role="alert">{error}</div>}
-        {error && <button className="btn primary auth-submit" onClick={() => router.replace("/login")}>Go to sign in</button>}
+        {error && <button className="btn primary auth-submit" onClick={() => router.replace("/login?next=" + encodeURIComponent(window.location.pathname + window.location.search))}>Go to sign in</button>}
       </section>
     </main>
   );
