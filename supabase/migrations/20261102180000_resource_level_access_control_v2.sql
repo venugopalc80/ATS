@@ -532,5 +532,40 @@ for insert to authenticated
 with check (
   bucket_id = 'candidate-documents'
   and array_length(storage.foldername(name), 1) >= 2
-  and public.has_organization_wide_access((storage.foldername(name))[1]::uuid)
+  and public.has_effective_org_permission((storage.foldername(name))[1]::uuid, 'candidates.documents.upload')
+  and public.can_access_candidate(
+    (storage.foldername(name))[2]::uuid,
+    (storage.foldername(name))[1]::uuid
+  )
+);
+create policy candidate_documents_scoped_update on storage.objects
+for update to authenticated
+using (
+  bucket_id = 'candidate-documents'
+  and array_length(storage.foldername(name), 1) >= 2
+  and public.has_effective_org_permission((storage.foldername(name))[1]::uuid, 'candidates.documents.upload')
+  and public.can_access_candidate(
+    (storage.foldername(name))[2]::uuid,
+    (storage.foldername(name))[1]::uuid
+  )
+)
+with check (
+  bucket_id = 'candidate-documents'
+  and array_length(storage.foldername(name), 1) >= 2
+  and public.has_effective_org_permission((storage.foldername(name))[1]::uuid, 'candidates.documents.upload')
+  and public.can_access_candidate(
+    (storage.foldername(name))[2]::uuid,
+    (storage.foldername(name))[1]::uuid
+  )
+);
+create policy candidate_documents_scoped_delete on storage.objects
+for delete to authenticated
+using (
+  bucket_id = 'candidate-documents'
+  and array_length(storage.foldername(name), 1) >= 2
+  and public.has_effective_org_permission((storage.foldername(name))[1]::uuid, 'candidates.documents.delete')
+  and public.can_access_candidate(
+    (storage.foldername(name))[2]::uuid,
+    (storage.foldername(name))[1]::uuid
+  )
 );
