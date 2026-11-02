@@ -118,7 +118,7 @@ begin
       add constraint organization_members_custom_role_fkey
       foreign key (organization_id, custom_role_id)
       references public.organization_roles(organization_id, id)
-      on delete set null;
+      on delete restrict;
   end if;
 end $$;
 
