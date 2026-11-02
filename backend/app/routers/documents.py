@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from pydantic import BaseModel
 from supabase import create_client
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_permission, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/documents", tags=["candidate documents"])
@@ -90,7 +90,7 @@ async def upload_candidate_document(
     application_id: UUID | None = Query(default=None),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.upload")
     verify_candidate(candidate_id, organization_id)
 
     mime = (file.content_type or "").lower()
@@ -165,7 +165,7 @@ async def list_candidate_documents(
     candidate_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         verify_candidate(candidate_id, organization_id)
         with get_connection() as connection:
@@ -195,7 +195,7 @@ async def create_document_download(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -226,7 +226,7 @@ async def preview_candidate_document(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Return a short-lived inline PDF URL or extracted DOCX text for an authorised recruiter."""
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -335,7 +335,7 @@ async def bulk_upload_cvs(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.upload")
     if not files:
         raise HTTPException(status_code=422, detail="Choose at least one CV to upload")
     if len(files) > MAX_BULK_FILES:
