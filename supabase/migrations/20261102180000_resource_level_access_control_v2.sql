@@ -784,12 +784,23 @@ using (public.is_org_member(organization_id)
   and private.can_access_job(job_id, organization_id));
 
 drop policy if exists job_distribution_member_write on public.job_distribution_channels;
-create policy job_distribution_resource_write on public.job_distribution_channels
-for all to authenticated
+drop policy if exists job_distribution_resource_write on public.job_distribution_channels;
+create policy job_distribution_resource_insert on public.job_distribution_channels
+for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and private.can_access_job(job_id, organization_id));
+create policy job_distribution_resource_update on public.job_distribution_channels
+for update to authenticated
 using (public.is_org_member(organization_id)
   and public.has_effective_org_permission(organization_id, 'jobs.update')
   and private.can_access_job(job_id, organization_id))
 with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and private.can_access_job(job_id, organization_id));
+create policy job_distribution_resource_delete on public.job_distribution_channels
+for delete to authenticated
+using (public.is_org_member(organization_id)
   and public.has_effective_org_permission(organization_id, 'jobs.update')
   and private.can_access_job(job_id, organization_id));
 
