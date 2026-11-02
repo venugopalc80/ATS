@@ -12,7 +12,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from app.auth import assert_org_permission, has_org_permission, has_resource_access, assert_resource_access
-from app.routers.permissions import _assert_can_grant
+from app.routers.permissions import _assert_can_grant, _assert_team_manager
 
 
 class FakeCursor:
@@ -170,6 +170,15 @@ class ResourceAccessResolverTests(unittest.TestCase):
     def test_unknown_resource_type_is_rejected(self):
         with self.assertRaises(ValueError):
             has_resource_access(uuid4(), uuid4(), "invoice", uuid4())
+
+
+
+class TeamManagementGuardTests(unittest.TestCase):
+    def test_team_management_requires_team_manage_roles(self):
+        user_id, organization_id = uuid4(), uuid4()
+        with patch("app.routers.permissions.assert_org_permission") as permission_check:
+            _assert_team_manager(user_id, organization_id)
+        permission_check.assert_called_once_with(user_id, organization_id, "team.manage_roles")
 
 
 if __name__ == "__main__":
