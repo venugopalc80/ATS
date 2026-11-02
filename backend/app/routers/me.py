@@ -12,7 +12,7 @@ from fastapi.security import HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 from typing import Annotated
 
-from app.auth import assert_org_admin, get_current_user_id, bearer, _auth_client
+from app.auth import assert_org_permission, get_current_user_id, get_org_role, bearer, _auth_client
 from app.db import get_connection
 
 router = APIRouter(prefix="/api/me", tags=["me"])
@@ -168,7 +168,7 @@ async def update_organization_settings(
     payload: OrganizationSettingsUpdate,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_admin(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "organization.settings.manage")
     with get_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -191,7 +191,7 @@ async def list_organization_invitations(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_admin(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "team.invite")
     with get_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -213,7 +213,9 @@ async def create_organization_invitation(
     payload: OrganizationInviteCreate,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_admin(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "team.invite")
+    if payload.role == "admin" and get_org_role(user_id, organization_id) != "owner":
+        raise HTTPException(status_code=403, detail="Only the Owner can invite an Administrator")
     email = str(payload.email).strip().lower()
     invitation_id = UUID(bytes=secrets.token_bytes(16), version=4)
     token = secrets.token_urlsafe(36)
