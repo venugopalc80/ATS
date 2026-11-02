@@ -384,6 +384,10 @@ class RecruitmentTeamCreate(BaseModel):
     name: str = Field(min_length=2, max_length=100)
     description: str | None = Field(default=None, max_length=500)
 
+class RecruitmentTeamUpdate(BaseModel):
+    name: str | None = Field(default=None, min_length=2, max_length=100)
+    description: str | None = Field(default=None, max_length=500)
+
 
 class TeamMemberChange(BaseModel):
     user_id: UUID
@@ -465,26 +469,34 @@ async def create_recruitment_team(
 async def update_recruitment_team(
     organization_id: UUID,
     team_id: UUID,
-    payload: RecruitmentTeamCreate,
+    payload: RecruitmentTeamUpdate,
     user_id: UUID = Depends(get_current_user_id),
 ):
     _assert_team_manager(user_id, organization_id)
+    changes = payload.model_dump(exclude_unset=True)
+    if not changes:
+        raise HTTPException(status_code=422, detail="At least one team field must be supplied")
+    if "name" in changes:
+        changes["name"] = changes["name"].strip()
+    assignments = [f"{field}=%s" for field in changes]
+    values = list(changes.values())
+    assignments.append("updated_at=now()")
     with get_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
-                """
+                f"""
                 update public.recruitment_teams
-                set name=%s, description=%s, updated_at=now()
+                set {", ".join(assignments)}
                 where organization_id=%s and id=%s
                 returning id, organization_id, name, description, created_by, created_at, updated_at
                 """,
-                [payload.name.strip(), payload.description, organization_id, team_id],
+                values + [organization_id, team_id],
             )
             team = cursor.fetchone()
             if team is None:
                 raise HTTPException(status_code=404, detail="Recruitment team not found")
             _audit(cursor, organization_id, user_id, "recruitment_team_updated",
-                   "recruitment_team", team_id, {"name": payload.name.strip()})
+                   "recruitment_team", team_id, changes)
     return {"team": team}
 
 
