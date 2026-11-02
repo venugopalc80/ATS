@@ -34,6 +34,7 @@ export default function SettingsPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState("recruiter");
   const [inviting, setInviting] = useState(false);
+  const [inviteActionId, setInviteActionId] = useState<string | null>(null);
   const [inviteMessage, setInviteMessage] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviteLink, setInviteLink] = useState("");
@@ -244,6 +245,36 @@ export default function SettingsPage() {
     }
   }
 
+  async function manageInvitation(invite: Invitation, action: "resend" | "revoke") {
+    if (!organization) return;
+    setInviteActionId(invite.id);
+    setInviteError("");
+    setInviteMessage("");
+    setInviteLink("");
+    try {
+      const url = API_BASE + "/api/me/organizations/" + organization.id + "/invitations/" + invite.id;
+      const response = await apiFetch(action === "resend" ? url + "/resend" : url, {
+        method: action === "resend" ? "POST" : "DELETE",
+      });
+      const body = action === "resend" ? await response.json().catch(() => null) : null;
+      if (!response.ok) throw new Error(body?.detail || (action === "resend" ? "Unable to resend invitation." : "Unable to revoke invitation."));
+      if (action === "resend") {
+        setInviteLink(body?.email_sent ? "" : (body?.invite_url || ""));
+        setInviteMessage(body?.email_sent
+          ? "A fresh invitation email was sent to " + invite.email + ". The previous invitation token is no longer valid."
+          : "The invitation token was refreshed, but email delivery was unavailable. Copy the new secure link below and share it with the invited person.");
+      } else {
+        setInviteMessage("Invitation for " + invite.email + " was revoked. Its token can no longer be used.");
+      }
+      const refreshed = await apiFetch(API_BASE + "/api/me/organizations/" + organization.id + "/invitations");
+      if (refreshed.ok) { const data = await refreshed.json(); setInvitations(data.invitations || []); }
+    } catch (cause) {
+      setInviteError(cause instanceof Error ? cause.message : "Unable to update invitation.");
+    } finally {
+      setInviteActionId(null);
+    }
+  }
+
   const visiblePermissions = (permissionData?.permissions || []).filter((permission) => {
     const query = permissionSearch.trim().toLowerCase();
     return !query || [permission.label, permission.description, permission.category, permission.permission_key].some((value) => value.toLowerCase().includes(query));
@@ -320,7 +351,17 @@ export default function SettingsPage() {
                     {invitations.map((invite) => (
                       <div key={invite.id} style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", borderTop: "1px solid var(--border, #e5e7eb)", paddingTop: 12 }}>
                         <div><strong>{invite.email}</strong><div className="muted-small">{invite.role.replace("_", " ")} · Expires {new Date(invite.expires_at).toLocaleDateString()}</div></div>
-                        <span className="badge">Pending</span>
+                        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                          <span className="badge">Pending</span>
+                          <button type="button" className="btn" disabled={inviteActionId === invite.id} onClick={() => manageInvitation(invite, "resend")}>
+                            {inviteActionId === invite.id ? "Please wait…" : "Resend"}
+                          </button>
+                          <button type="button" className="btn" disabled={inviteActionId === invite.id} onClick={() => {
+                            if (window.confirm("Revoke the pending invitation for " + invite.email + "? The current invitation link will stop working.")) {
+                              void manageInvitation(invite, "revoke");
+                            }
+                          }}>Revoke</button>
+                        </div>
                       </div>
                     ))}
                   </div>
