@@ -100,6 +100,16 @@ create table if not exists public.candidate_access_assignments (
       references public.organization_members(organization_id, user_id) on delete cascade
 );
 
+-- Preserve access to candidates that already existed before resource-level
+-- assignments were introduced. New candidates are assigned by candidate_service.
+insert into public.candidate_access_assignments
+    (organization_id, candidate_id, user_id, assigned_by)
+select c.organization_id, c.id, m.user_id, null
+from public.candidates c
+join public.organization_members m
+  on m.organization_id = c.organization_id
+on conflict (candidate_id, user_id) do nothing;
+
 create table if not exists public.application_access_assignments (
     organization_id uuid not null,
     application_id uuid not null,
