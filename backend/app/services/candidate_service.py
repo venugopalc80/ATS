@@ -20,6 +20,7 @@ class CandidateService:
         organization_id: UUID,
         status: str | None = None,
         search: str | None = None,
+        user_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         query = f"""
             select {CANDIDATE_COLUMNS}
@@ -28,6 +29,12 @@ class CandidateService:
         """
         params: list[Any] = [organization_id]
 
+        if user_id is not None:
+            query += " and public.can_access_candidate(id, organization_id, %s)"
+            params.append(user_id)
+
+        query += """
+        """
         if status:
             query += " and status = %s"
             params.append(status)
