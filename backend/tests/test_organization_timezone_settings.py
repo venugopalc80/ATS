@@ -95,7 +95,7 @@ class OrganizationTimezoneSettingsTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(error.exception.status_code, 403)
-        admin_check.assert_called_once_with(USER, ORG)
+        admin_check.assert_called_once_with(USER, ORG, "organization.settings.manage")
         connection.assert_not_called()
 
 
