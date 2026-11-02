@@ -51,6 +51,8 @@ export default function SettingsPage() {
   const [selectedPermissionKey, setSelectedPermissionKey] = useState("");
   const [overrideEffect, setOverrideEffect] = useState<"allow" | "deny" | "inherit">("inherit");
   const [overrideReason, setOverrideReason] = useState("");
+  const [overrideExpiresAt, setOverrideExpiresAt] = useState("");
+  const [permissionSearch, setPermissionSearch] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -203,12 +205,13 @@ export default function SettingsPage() {
     try {
       const response = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/members/" + selectedMember.user_id + "/permissions/" + encodeURIComponent(selectedPermissionKey), {
         method: "PUT", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ effect: overrideEffect, reason: overrideReason || null }),
+        body: JSON.stringify({ effect: overrideEffect, reason: overrideReason || null, expires_at: overrideEffect === "inherit" || !overrideExpiresAt ? null : new Date(overrideExpiresAt).toISOString() }),
       });
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.detail || "Unable to update member permission.");
       const refreshed = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/permissions");
       if (refreshed.ok) setPermissionData(await refreshed.json() as PermissionData);
+      setOverrideExpiresAt("");
       setPermissionMessage("Individual permission updated.");
     } catch (cause) {
       setPermissionError(cause instanceof Error ? cause.message : "Unable to update member permission.");
@@ -240,6 +243,15 @@ export default function SettingsPage() {
       setInviting(false);
     }
   }
+
+  const visiblePermissions = (permissionData?.permissions || []).filter((permission) => {
+    const query = permissionSearch.trim().toLowerCase();
+    return !query || [permission.label, permission.description, permission.category, permission.permission_key].some((value) => value.toLowerCase().includes(query));
+  });
+  const groupedPermissions = visiblePermissions.reduce<Record<string, Permission[]>>((groups, permission) => {
+    (groups[permission.category] ||= []).push(permission);
+    return groups;
+  }, {});
 
   return (
     <div className="shell">
@@ -338,13 +350,25 @@ export default function SettingsPage() {
                   </form>
                 </div>
                 <div>
-                  {selectedRole && <div style={{ display: "grid", gap: 8 }}>
-                    {permissionData.permissions.map((permission) => (
+                  {selectedRole && <div style={{ display: "grid", gap: 14 }}>
+                    <label style={{ display: "grid", gap: 6, fontSize: 13, fontWeight: 650 }}>Search permissions
+                      <input className="filter" type="search" value={permissionSearch} onChange={(event) => setPermissionSearch(event.target.value)} placeholder="Search by permission, module or action…" />
+                    </label>
+                    <p className="muted-small">{visiblePermissions.length} of {permissionData.permissions.length} permissions shown. Sensitive permissions require particular care.</p>
+                    {Object.entries(groupedPermissions).map(([category, permissions]) => (
+                      <details key={category} open style={{ border: "1px solid var(--border, #e5e7eb)", borderRadius: 10, padding: "10px 14px" }}>
+                        <summary style={{ cursor: "pointer", fontWeight: 700, textTransform: "capitalize" }}>{category.replaceAll("_", " ")} <span className="muted-small">({permissions.length})</span></summary>
+                        <div style={{ display: "grid", gap: 0, marginTop: 8 }}>
+                          {permissions.map((permission) => (
                       <label key={permission.permission_key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 0", borderBottom: "1px solid var(--border, #e5e7eb)", fontSize: 13 }}>
                         <input type="checkbox" checked={Boolean(selectedRole.permissions[permission.permission_key])} disabled={selectedRole.role_key === "owner" || selectedRole.role_key === "admin" && organization.role !== "owner"} onChange={(event) => setPermissionData((current) => current ? ({ ...current, roles: current.roles.map((role) => role.id === selectedRole.id ? { ...role, permissions: { ...role.permissions, [permission.permission_key]: event.target.checked } } : role) }) : current)} />
                         <span style={{ display: "grid", gap: 2 }}><strong>{permission.label}{permission.sensitive ? " · Sensitive" : ""}</strong><span className="muted-small">{permission.description}</span><span className="muted-small">{permission.category}</span></span>
                       </label>
+                          ))}
+                        </div>
+                      </details>
                     ))}
+                    {visiblePermissions.length === 0 && <p className="muted-small">No permissions match that search.</p>}
                     <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
                       <button className="btn primary" disabled={permissionSaving || selectedRole.role_key === "owner" || selectedRole.role_key === "admin" && organization.role !== "owner"} onClick={saveRolePermissions}>{permissionSaving ? "Saving…" : "Save role permissions"}</button>
                     </div>
@@ -388,6 +412,10 @@ export default function SettingsPage() {
                   </label>
                   <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Reason (optional)
                     <input className="filter" maxLength={500} value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Why is this access changing?" />
+                  </label>
+                  <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Access expiry (optional)
+                    <input className="filter" type="datetime-local" value={overrideExpiresAt} min={new Date(Date.now() + 60000).toISOString().slice(0, 16)} disabled={overrideEffect === "inherit"} onChange={(event) => setOverrideExpiresAt(event.target.value)} />
+                    <span className="muted-small">Leave blank for ongoing access. Expiry automatically restores the role default.</span>
                   </label>
                   <div style={{ display: "flex", alignItems: "end" }}><button className="btn primary" disabled={permissionSaving || !selectedMember || selectedMember.role === "owner"} onClick={saveMemberOverride}>Save individual access</button></div>
                 </div>
