@@ -41,6 +41,12 @@ class RecruiterTaskTenantMigrationTests(unittest.TestCase):
                     organization_id uuid not null references public.organizations(id) on delete cascade,
                     candidate_id uuid references public.candidates(id) on delete cascade,
                     job_id uuid references public.jobs(id) on delete set null)""")
+                cur.execute("create table if not exists public.profiles (id uuid primary key)")
+                cur.execute("""create table if not exists public.organization_members (
+                    organization_id uuid not null references public.organizations(id) on delete cascade,
+                    user_id uuid not null references public.profiles(id) on delete cascade,
+                    primary key (organization_id, user_id))""")
+                cur.execute("alter table public.recruiter_tasks add column if not exists assigned_to uuid references public.profiles(id) on delete set null")
 
         cls.org_a, cls.org_b = uuid4(), uuid4()
         cls.candidate_a, cls.job_a = uuid4(), uuid4()
@@ -77,6 +83,10 @@ class RecruiterTaskTenantMigrationTests(unittest.TestCase):
             with conn.cursor() as cur:
                 cur.execute("delete from public.recruiter_tasks where id=%s", [cls.bad_task])
                 cur.execute(cls.sql)
+        assignee_migration = Path(__file__).resolve().parents[2] / "supabase/migrations/025_recruiter_tasks_assignee_tenant_integrity.sql"
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute(assignee_migration.read_text(encoding="utf-8"))
 
     def setUp(self):
         self.org_a, self.org_b = uuid4(), uuid4()
@@ -94,6 +104,48 @@ class RecruiterTaskTenantMigrationTests(unittest.TestCase):
                 cur.execute("delete from public.candidates where organization_id in (%s, %s)", [self.org_a, self.org_b])
                 cur.execute("delete from public.jobs where organization_id in (%s, %s)", [self.org_a, self.org_b])
                 cur.execute("delete from public.organizations where id in (%s, %s)", [self.org_a, self.org_b])
+
+    def test_same_tenant_assignee_is_allowed(self):
+        member = uuid4()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("insert into public.profiles (id) values (%s)", [member])
+                cur.execute("insert into public.organization_members (organization_id, user_id) values (%s, %s)", [self.org_a, member])
+                cur.execute(
+                    "insert into public.recruiter_tasks (id, organization_id, assigned_to) values (%s, %s, %s)",
+                    [self.task, self.org_a, member],
+                )
+
+    def test_cross_tenant_assignee_is_rejected(self):
+        member = uuid4()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("insert into public.profiles (id) values (%s)", [member])
+                cur.execute("insert into public.organization_members (organization_id, user_id) values (%s, %s)", [self.org_a, member])
+        with self.assertRaises(DatabaseConnectionError):
+            with get_connection() as conn:
+                with conn.cursor() as cur:
+                    cur.execute(
+                        "insert into public.recruiter_tasks (id, organization_id, assigned_to) values (%s, %s, %s)",
+                        [self.task, self.org_b, member],
+                    )
+
+    def test_membership_deletion_clears_only_assignee(self):
+        member = uuid4()
+        with get_connection() as conn:
+            with conn.cursor() as cur:
+                cur.execute("insert into public.profiles (id) values (%s)", [member])
+                cur.execute("insert into public.organization_members (organization_id, user_id) values (%s, %s)", [self.org_a, member])
+                cur.execute(
+                    "insert into public.recruiter_tasks (id, organization_id, assigned_to) values (%s, %s, %s)",
+                    [self.task, self.org_a, member],
+                )
+                cur.execute("delete from public.organization_members where organization_id=%s and user_id=%s", [self.org_a, member])
+                cur.execute("select id, organization_id, assigned_to from public.recruiter_tasks where id=%s", [self.task])
+                row = cur.fetchone()
+                self.assertIsNotNone(row)
+                self.assertEqual(row["organization_id"], self.org_a)
+                self.assertIsNone(row["assigned_to"])
 
     def test_same_tenant_references_are_allowed(self):
         with get_connection() as conn:

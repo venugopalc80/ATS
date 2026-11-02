@@ -463,7 +463,7 @@ export default function Dashboard() {
             {tasksLoading ? <div className="dashboard-loading-lines"><span /><span /></div> : tasksError ? <div className="dashboard-empty"><strong>Tasks unavailable</strong><p>We could not verify open tasks. Retry before assuming there is nothing to do.</p><button className="btn" type="button" onClick={() => void loadTasks()}>Retry tasks</button></div> : tasks.length === 0 ? <div className="dashboard-empty"><strong>No open tasks</strong><p>Add a recruiter task or candidate follow-up to track the next action.</p></div> : (
               <div className="dashboard-task-list">
                 {tasks.map((task) => <div key={task.id} className="dashboard-task-row">
-                  <div className="dashboard-task-copy"><strong>{task.title}</strong><span>{task.task_type === "candidate_follow_up" ? "Candidate follow-up" : "Recruiter task"} · {task.priority} priority · {formatDate(task.due_at)}</span></div>
+                  <div className="dashboard-task-copy"><strong>{task.title}</strong><span>{task.task_type === "candidate_follow_up" ? "Candidate follow-up" : "Recruiter task"} · {task.priority} priority · {formatDate(task.due_at, data?.timezone)}</span></div>
                   {task.candidate_id && <Link className="link" href={"/candidates/" + task.candidate_id}>Candidate</Link>}
                   {task.job_id && <Link className="link" href={"/jobs?job_id=" + task.job_id}>Vacancy</Link>}
                   <button className="btn" type="button" onClick={() => void completeTask(task)}>Complete</button>
