@@ -87,6 +87,10 @@ export default function LoginPage() {
           <button className="btn primary auth-submit" disabled={busy}>{busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}</button>
         </form>
 
+        {mode === "signin" && (
+          <a href="/forgot-password" className="auth-switch">Forgot your password?</a>
+        )}
+
         {message && <div className="notice" role="status">{message}</div>}
 
         <button type="button" className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}>
