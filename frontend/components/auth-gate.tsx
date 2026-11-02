@@ -18,6 +18,7 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
       pathname === "/" ||
       pathname === "/login" ||
       pathname === "/reset-password" ||
+      pathname === "/accept-invitation" ||
       pathname === "/careers" ||
       pathname.startsWith("/careers/");
 
