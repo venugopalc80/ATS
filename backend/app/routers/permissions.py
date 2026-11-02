@@ -194,8 +194,8 @@ async def update_member_role(
             if target is None:
                 raise HTTPException(status_code=404, detail="Team member not found")
             actor_role = get_org_role(user_id, organization_id)
-            if target["role"] == "owner" and actor_role != "owner":
-                raise HTTPException(status_code=403, detail="Only the Owner can change the Owner membership")
+            if target["role"] in {"owner", "admin"} and actor_role != "owner":
+                raise HTTPException(status_code=403, detail="Only the Owner can change an Owner or Administrator membership")
             if payload.role == "admin" and actor_role != "owner":
                 raise HTTPException(status_code=403, detail="Only the Owner can grant Administrator access")
 
