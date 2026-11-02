@@ -11,7 +11,7 @@ from uuid import uuid4
 
 from fastapi import HTTPException
 
-from app.auth import assert_org_permission, has_org_permission
+from app.auth import assert_org_permission, has_org_permission, has_resource_access, assert_resource_access
 from app.routers.permissions import _assert_can_grant
 
 
@@ -135,6 +135,42 @@ class PermissionGrantGuardTests(unittest.TestCase):
         user_id, organization_id = uuid4(), uuid4()
         with patch("app.routers.permissions.get_org_role", return_value="owner"):
             _assert_can_grant(user_id, organization_id, "ownership.transfer")
+
+
+class ResourceAccessResolverTests(unittest.TestCase):
+    def test_resource_access_uses_fixed_query_and_user_context(self):
+        user_id, organization_id, resource_id = uuid4(), uuid4(), uuid4()
+        connection = FakeConnection({"allowed": True})
+
+        @contextmanager
+        def fake_connection():
+            yield connection
+
+        with patch("app.auth.get_connection", fake_connection):
+            self.assertTrue(has_resource_access(user_id, organization_id, "candidate", resource_id))
+
+        self.assertIn("public.can_access_candidate", connection.cursor_instance.sql)
+        self.assertEqual(connection.cursor_instance.params, [resource_id, organization_id, user_id])
+
+    def test_inaccessible_resource_returns_same_not_found_response(self):
+        user_id, organization_id, resource_id = uuid4(), uuid4(), uuid4()
+        connection = FakeConnection({"allowed": False})
+
+        @contextmanager
+        def fake_connection():
+            yield connection
+
+        with patch("app.auth.get_connection", fake_connection):
+            with self.assertRaises(HTTPException) as caught:
+                assert_resource_access(user_id, organization_id, "job", resource_id)
+
+        self.assertEqual(caught.exception.status_code, 404)
+        self.assertEqual(caught.exception.detail, "Job not found")
+
+    def test_unknown_resource_type_is_rejected(self):
+        with self.assertRaises(ValueError):
+            has_resource_access(uuid4(), uuid4(), "invoice", uuid4())
+
 
 if __name__ == "__main__":
     unittest.main()
