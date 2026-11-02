@@ -803,3 +803,77 @@ with check (public.is_org_member(organization_id)
     or (client_id is not null and public.can_access_client(client_id, organization_id))
     or (job_id is not null and public.can_access_job(job_id, organization_id))
   ));
+
+
+-- Additional sensitive records discovered in the staging RLS inventory.
+-- AI interview material and JD history inherit the vacancy boundary.
+drop policy if exists ai_interview_kits_member_read on public.ai_interview_kits;
+create policy ai_interview_kits_resource_read on public.ai_interview_kits
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'ai.use')
+  and public.can_access_job(job_id, organization_id));
+
+drop policy if exists ai_jd_versions_member_read on public.ai_job_description_versions;
+create policy ai_jd_versions_resource_read on public.ai_job_description_versions
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'ai.use')
+  and public.can_access_job(job_id, organization_id));
+
+drop policy if exists campaign_memberships_member_read on public.campaign_memberships;
+create policy campaign_memberships_resource_read on public.campaign_memberships
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and (
+    (candidate_id is not null and public.has_effective_org_permission(organization_id, 'candidates.read')
+      and public.can_access_candidate(candidate_id, organization_id))
+    or (application_id is not null and public.has_effective_org_permission(organization_id, 'applications.read')
+      and public.can_access_application(application_id, organization_id))
+  ));
+
+drop policy if exists campaign_events_member_read on public.campaign_events;
+create policy campaign_events_resource_read on public.campaign_events
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and (
+    (candidate_id is not null and public.has_effective_org_permission(organization_id, 'candidates.read')
+      and public.can_access_candidate(candidate_id, organization_id))
+    or (application_id is not null and public.has_effective_org_permission(organization_id, 'applications.read')
+      and public.can_access_application(application_id, organization_id))
+  ));
+
+drop policy if exists referrals_member_read on public.referrals;
+create policy referrals_resource_read on public.referrals
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and (
+    (candidate_id is not null and public.has_effective_org_permission(organization_id, 'candidates.read')
+      and public.can_access_candidate(candidate_id, organization_id))
+    or (application_id is not null and public.has_effective_org_permission(organization_id, 'applications.read')
+      and public.can_access_application(application_id, organization_id))
+  ));
+
+-- Import result payloads can contain full CV-derived data. Keep them with the
+-- batch uploader or organisation-wide administrators, and scope linked rows.
+drop policy if exists import_batches_member_read on public.import_batches;
+create policy import_batches_scoped_read on public.import_batches
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and (uploaded_by = auth.uid() or public.has_organization_wide_access(organization_id)));
+
+drop policy if exists import_row_results_member_read on public.import_row_results;
+create policy import_row_results_scoped_read on public.import_row_results
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and exists (
+    select 1 from public.import_batches b
+    where b.id = import_row_results.batch_id
+      and b.organization_id = import_row_results.organization_id
+      and (b.uploaded_by = auth.uid() or public.has_organization_wide_access(b.organization_id))
+  )
+  and (
+    (candidate_id is null and duplicate_candidate_id is null)
+    or (candidate_id is not null and public.can_access_candidate(candidate_id, organization_id))
+    or (duplicate_candidate_id is not null and public.can_access_candidate(duplicate_candidate_id, organization_id))
+  ));
