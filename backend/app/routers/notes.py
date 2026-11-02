@@ -49,7 +49,7 @@ async def latest_notes(
                     where rn.organization_id = %s
                       and c.organization_id = %s
                       and rn.candidate_id = any(%s)
-                      and public.can_access_candidate(c.id, c.organization_id, %s)
+                      and private.can_access_candidate(c.id, c.organization_id, %s)
                     order by rn.candidate_id, rn.created_at desc
                     """,
                     [organization_id, organization_id, candidate_ids, user_id],
