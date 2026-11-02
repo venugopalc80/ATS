@@ -9,7 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 import requests
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPAuthorizationCredentials
-from pydantic import BaseModel, EmailStr, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from typing import Annotated
 
 from app.auth import assert_org_admin, get_current_user_id, bearer, _auth_client
@@ -48,8 +48,17 @@ class OrganizationSettingsUpdate(BaseModel):
 
 
 class OrganizationInviteCreate(BaseModel):
-    email: EmailStr
+    email: str = Field(min_length=5, max_length=320)
     role: str = "recruiter"
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        value = value.strip().lower()
+        import re
+        if not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", value):
+            raise ValueError("Enter a valid email address")
+        return value
 
     @field_validator("role")
     @classmethod
