@@ -2,7 +2,7 @@ from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
-from app.auth import assert_org_permission, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.jobs import JobCreate, JobOut, JobUpdate
 from app.services.google_indexing import notify_google_indexing
@@ -24,7 +24,7 @@ async def list_jobs(
 ) -> list[JobOut]:
     assert_org_permission(user_id, organization_id, "jobs.read")
     try:
-        rows = await service.list_jobs(organization_id, status)
+        rows = await service.list_jobs(organization_id, status, user_id)
         return [JobOut.model_validate(row) for row in rows]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
@@ -38,7 +38,7 @@ async def create_job(
 ) -> JobOut:
     assert_org_permission(user_id, payload.organization_id, "jobs.create")
     try:
-        row = await service.create_job(payload)
+        row = await service.create_job(payload, user_id)
         if row.get("status") == "open":
             background_tasks.add_task(notify_google_indexing, str(row["id"]), "URL_UPDATED")
         return JobOut.model_validate(row)
@@ -58,6 +58,7 @@ async def get_job(
     if row is None:
         raise HTTPException(status_code=404, detail="Job not found")
     assert_org_permission(user_id, row["organization_id"], "jobs.read")
+    assert_resource_access(user_id, row["organization_id"], "job", job_id)
     return JobOut.model_validate(row)
 
 
@@ -73,6 +74,7 @@ async def update_job(
         if existing is None:
             raise HTTPException(status_code=404, detail="Job not found")
         assert_org_permission(user_id, existing["organization_id"], "jobs.update")
+        assert_resource_access(user_id, existing["organization_id"], "job", job_id)
         row = await service.update_job(job_id, payload)
         if row is not None:
             if row.get("status") == "open":
@@ -95,6 +97,7 @@ async def delete_job(
         if existing is None:
             raise HTTPException(status_code=404, detail="Job not found")
         assert_org_permission(user_id, existing["organization_id"], "jobs.delete")
+        assert_resource_access(user_id, existing["organization_id"], "job", job_id)
         deleted = await service.delete_job(job_id)
         if deleted and existing.get("status") == "open":
             background_tasks.add_task(notify_google_indexing, str(job_id), "URL_DELETED")
