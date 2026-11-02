@@ -118,3 +118,37 @@ def assert_org_permission(user_id: UUID, organization_id: UUID, permission_key: 
     """Raise 403 unless the user has the requested effective permission."""
     if not has_org_permission(user_id, organization_id, permission_key):
         raise HTTPException(status_code=403, detail=f"Permission required: {permission_key}")
+
+
+def has_resource_access(
+    user_id: UUID,
+    organization_id: UUID,
+    resource_type: str,
+    resource_id: UUID,
+) -> bool:
+    """Resolve record-level access using the database's canonical scope functions."""
+    checks = {
+        "job": "select public.can_access_job(%s, %s, %s) as allowed",
+        "candidate": "select public.can_access_candidate(%s, %s, %s) as allowed",
+        "client": "select public.can_access_client(%s, %s, %s) as allowed",
+        "application": "select public.can_access_application(%s, %s, %s) as allowed",
+    }
+    query = checks.get(resource_type)
+    if query is None:
+        raise ValueError(f"Unsupported resource type: {resource_type}")
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(query, [resource_id, organization_id, user_id])
+            row = cursor.fetchone()
+            return bool(row and row["allowed"])
+
+
+def assert_resource_access(
+    user_id: UUID,
+    organization_id: UUID,
+    resource_type: str,
+    resource_id: UUID,
+) -> None:
+    if not has_resource_access(user_id, organization_id, resource_type, resource_id):
+        # Return the same response for missing and inaccessible resources.
+        raise HTTPException(status_code=404, detail=f"{resource_type.title()} not found")
