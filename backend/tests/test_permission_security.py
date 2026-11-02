@@ -340,3 +340,66 @@ class DocumentRouteBoundaryTests(unittest.TestCase):
 
     def test_bulk_duplicate_response_does_not_expose_candidate_id(self):
         self.assertNotIn('"candidate_id": str(existing["id"])', self.source)
+
+
+class SharedTeamScaleBoundaryTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        cls.migration = (
+            Path(__file__).resolve().parents[2]
+            / "supabase"
+            / "migrations"
+            / "20261102180000_resource_level_access_control_v2.sql"
+        ).read_text().lower()
+        cls.permissions = (
+            Path(__file__).resolve().parents[1]
+            / "app"
+            / "routers"
+            / "permissions.py"
+        ).read_text()
+
+    def test_team_members_share_jobs_assigned_to_their_team(self):
+        start = self.migration.index("create or replace function public.can_access_job")
+        end = self.migration.index("$;", start)
+        fn = self.migration[start:end]
+        self.assertIn("public.recruitment_team_jobs", fn)
+        self.assertIn("public.recruitment_team_members", fn)
+        self.assertIn("tm.user_id = target_user", fn)
+
+    def test_team_membership_removal_revokes_team_derived_access(self):
+        start = self.migration.index("create or replace function public.can_access_job")
+        end = self.migration.index("$;", start)
+        fn = self.migration[start:end]
+        self.assertIn("join public.recruitment_team_members tm", fn)
+        # Access is resolved from live membership rows, not a cached grant.
+        self.assertNotIn("team_member_access_cache", fn)
+
+    def test_team_access_flows_to_clients_and_candidate_applications(self):
+        client_start = self.migration.index("create or replace function public.can_access_client")
+        candidate_start = self.migration.index("create or replace function public.can_access_candidate")
+        app_start = self.migration.index("create or replace function public.can_access_application")
+        self.assertIn("public.can_access_job", self.migration[client_start:candidate_start])
+        self.assertIn("public.can_access_job", self.migration[candidate_start:app_start])
+        self.assertIn("public.can_access_job", self.migration[app_start:])
+
+    def test_assignment_reverse_lookup_indexes_exist_for_scale(self):
+        for index_name in (
+            "idx_applications_candidate_scope",
+            "idx_jobs_client_scope",
+            "idx_candidate_assignments_resource_user",
+            "idx_client_assignments_resource_user",
+            "idx_application_assignments_resource_user",
+        ):
+            with self.subTest(index=index_name):
+                self.assertIn(index_name, self.migration)
+
+    def test_team_removal_endpoint_deletes_live_membership(self):
+        self.assertIn(
+            "delete from public.recruitment_team_members",
+            self.permissions.lower(),
+        )
+        self.assertIn(
+            "where organization_id=%s and team_id=%s and user_id=%s returning user_id",
+            self.permissions.lower(),
+        )
