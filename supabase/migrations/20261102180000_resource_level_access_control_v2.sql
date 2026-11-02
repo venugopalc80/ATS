@@ -877,3 +877,28 @@ using (public.is_org_member(organization_id)
     or (candidate_id is not null and public.can_access_candidate(candidate_id, organization_id))
     or (duplicate_candidate_id is not null and public.can_access_candidate(duplicate_candidate_id, organization_id))
   ));
+
+
+-- Close the remaining insert/read gaps found in the staging policy inventory.
+drop policy if exists job_requisitions_member_insert on public.job_requisitions;
+create policy job_requisitions_resource_insert on public.job_requisitions
+for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.create')
+  and requested_by = auth.uid()
+  and (client_id is null or public.can_access_client(client_id, organization_id))
+  and (hiring_manager_id is null or exists (
+    select 1 from public.organization_members m
+    where m.organization_id = job_requisitions.organization_id and m.user_id = job_requisitions.hiring_manager_id
+  ))
+  and (recruiter_id is null or exists (
+    select 1 from public.organization_members m
+    where m.organization_id = job_requisitions.organization_id and m.user_id = job_requisitions.recruiter_id
+  )));
+
+drop policy if exists privacy_requests_admin_read on public.privacy_rights_requests;
+create policy privacy_requests_resource_read on public.privacy_rights_requests
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'privacy.manage')
+  and public.can_access_candidate(candidate_id, organization_id));
