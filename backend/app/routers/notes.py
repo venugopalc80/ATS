@@ -1,13 +1,13 @@
 from uuid import UUID
 from fastapi import APIRouter,Depends,HTTPException,Query
-from app.auth import assert_org_member,get_current_user_id
+from app.auth import assert_org_permission,get_current_user_id
 from app.db import DatabaseConfigurationError,DatabaseConnectionError,get_connection
 from app.schemas.notes import NoteCreate,NoteOut
 from app.services.note_service import NoteService
 router=APIRouter(prefix="/api/notes",tags=["notes"]);service=NoteService()
 @router.get("/candidate/{candidate_id}",response_model=list[NoteOut])
 async def list_notes(candidate_id:UUID,organization_id:UUID,user_id:UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,organization_id)
+    assert_org_permission(user_id,organization_id, "candidates.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -18,7 +18,7 @@ async def list_notes(candidate_id:UUID,organization_id:UUID,user_id:UUID=Depends
     except (DatabaseConfigurationError,DatabaseConnectionError) as exc: raise HTTPException(status_code=503,detail="Database operation failed") from exc
 @router.post("",response_model=NoteOut,status_code=201)
 async def create_note(payload:NoteCreate,user_id:UUID=Depends(get_current_user_id)):
-    assert_org_member(user_id,payload.organization_id)
+    assert_org_permission(user_id,payload.organization_id, "candidates.update")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -34,7 +34,7 @@ async def latest_notes(
     candidate_ids: list[UUID] = Query(..., min_length=1, max_length=50),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
