@@ -97,6 +97,14 @@ function formatDate(value: string | null | undefined, timeZone?: string) {
   return new Intl.DateTimeFormat(undefined, { dateStyle: "medium", timeStyle: "short", ...(timeZone ? { timeZone } : {}) }).format(date);
 }
 
+function toDateTimeLocal(value: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
+  return local.toISOString().slice(0, 16);
+}
+
 function friendlyActivityTitle(action: string, entityType: string) {
   const key = action.trim().toLowerCase().replace(/[\s-]+/g, "_");
   const entity = entityType.trim().toLowerCase();
@@ -155,6 +163,13 @@ export default function Dashboard() {
   const [taskPriority, setTaskPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
   const [taskSaving, setTaskSaving] = useState(false);
   const [taskMessage, setTaskMessage] = useState("");
+  const [editingTaskId, setEditingTaskId] = useState<string | null>(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editDescription, setEditDescription] = useState("");
+  const [editDueAt, setEditDueAt] = useState("");
+  const [editPriority, setEditPriority] = useState<"low" | "normal" | "high" | "urgent">("normal");
+  const [editCandidateId, setEditCandidateId] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const loadTasks = useCallback(async () => {
     const org = getActiveOrganizationId();
@@ -225,6 +240,55 @@ export default function Dashboard() {
       setTasksError(cause instanceof Error ? cause.message : "Unable to create task.");
     } finally {
       setTaskSaving(false);
+    }
+  }
+
+  function beginEditTask(task: RecruiterTask) {
+    setEditingTaskId(task.id);
+    setEditTitle(task.title);
+    setEditDescription(task.description ?? "");
+    setEditDueAt(toDateTimeLocal(task.due_at));
+    setEditPriority(task.priority);
+    setEditCandidateId(task.candidate_id ?? "");
+    setTasksError("");
+    setTaskMessage("");
+  }
+
+  async function saveTaskEdits(event: FormEvent<HTMLFormElement>, task: RecruiterTask) {
+    event.preventDefault();
+    if (task.task_type === "candidate_follow_up" && !editCandidateId) {
+      setTasksError("Choose a candidate for this follow-up.");
+      return;
+    }
+    setEditSaving(true);
+    setTasksError("");
+    setTaskMessage("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/tasks/" + task.id, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          title: editTitle.trim(),
+          description: editDescription.trim() || null,
+          due_at: editDueAt ? new Date(editDueAt).toISOString() : null,
+          priority: editPriority,
+          candidate_id: editCandidateId || null,
+        }),
+      });
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.detail || "Task could not be updated (HTTP " + response.status + ").");
+      }
+      const updated = await response.json() as RecruiterTask;
+      setTasks((current) => current.map((item) => item.id === updated.id ? updated : item));
+      setEditingTaskId(null);
+      setTaskMessage("Task updated.");
+      await loadTasks();
+      await loadDashboard();
+    } catch (cause) {
+      setTasksError(cause instanceof Error ? cause.message : "Unable to update task.");
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -463,10 +527,27 @@ export default function Dashboard() {
             {tasksLoading ? <div className="dashboard-loading-lines"><span /><span /></div> : tasksError ? <div className="dashboard-empty"><strong>Tasks unavailable</strong><p>We could not verify open tasks. Retry before assuming there is nothing to do.</p><button className="btn" type="button" onClick={() => void loadTasks()}>Retry tasks</button></div> : tasks.length === 0 ? <div className="dashboard-empty"><strong>No open tasks</strong><p>Add a recruiter task or candidate follow-up to track the next action.</p></div> : (
               <div className="dashboard-task-list">
                 {tasks.map((task) => <div key={task.id} className="dashboard-task-row">
-                  <div className="dashboard-task-copy"><strong>{task.title}</strong><span>{task.task_type === "candidate_follow_up" ? "Candidate follow-up" : "Recruiter task"} · {task.priority} priority · {formatDate(task.due_at, data?.timezone)}</span></div>
-                  {task.candidate_id && <Link className="link" href={"/candidates/" + task.candidate_id}>Candidate</Link>}
-                  {task.job_id && <Link className="link" href={"/jobs?job_id=" + task.job_id}>Vacancy</Link>}
-                  <button className="btn" type="button" onClick={() => void completeTask(task)}>Complete</button>
+                  {editingTaskId === task.id ? (
+                    <form className="dashboard-task-edit-form" onSubmit={(event) => void saveTaskEdits(event, task)}>
+                      <label>Task title<input value={editTitle} onChange={(event) => setEditTitle(event.target.value)} required maxLength={240} /></label>
+                      <label>Description<textarea value={editDescription} onChange={(event) => setEditDescription(event.target.value)} maxLength={5000} rows={2} /></label>
+                      <label>Due date<input type="datetime-local" value={editDueAt} onChange={(event) => setEditDueAt(event.target.value)} /></label>
+                      <label>Priority<select value={editPriority} onChange={(event) => setEditPriority(event.target.value as "low" | "normal" | "high" | "urgent")}><option value="low">Low</option><option value="normal">Normal</option><option value="high">High</option><option value="urgent">Urgent</option></select></label>
+                      <label>Candidate<select value={editCandidateId} onChange={(event) => setEditCandidateId(event.target.value)} required={task.task_type === "candidate_follow_up"}><option value="">No candidate linked</option>{taskCandidates.map((candidate) => <option key={candidate.id} value={candidate.id}>{[candidate.first_name, candidate.last_name].filter(Boolean).join(" ")}{candidate.email ? " · " + candidate.email : ""}</option>)}</select></label>
+                      <div className="dashboard-task-edit-actions">
+                        <button className="btn primary" type="submit" disabled={editSaving || !editTitle.trim()}>{editSaving ? "Saving…" : "Save changes"}</button>
+                        <button className="btn" type="button" disabled={editSaving} onClick={() => setEditingTaskId(null)}>Cancel</button>
+                      </div>
+                    </form>
+                  ) : (
+                    <>
+                      <div className="dashboard-task-copy"><strong>{task.title}</strong><span>{task.task_type === "candidate_follow_up" ? "Candidate follow-up" : "Recruiter task"} · {task.priority} priority · {formatDate(task.due_at, data?.timezone)}{task.description ? " · " + task.description : ""}</span></div>
+                      {task.candidate_id && <Link className="link" href={"/candidates/" + task.candidate_id}>Candidate</Link>}
+                      {task.job_id && <Link className="link" href={"/jobs?job_id=" + task.job_id}>Vacancy</Link>}
+                      <button className="btn" type="button" onClick={() => beginEditTask(task)}>Edit</button>
+                      <button className="btn" type="button" onClick={() => void completeTask(task)}>Complete</button>
+                    </>
+                  )}
                 </div>)}
               </div>
             )}
