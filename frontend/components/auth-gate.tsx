@@ -14,6 +14,38 @@ export default function AuthGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
+
+    // Supabase recovery links may return to the configured Site URL ("/")
+    // with the recovery session in the URL fragment. Initialise Supabase
+    // before treating the homepage as public, then move the verified session
+    // to the dedicated password-reset screen.
+    if (pathname === "/" && typeof window !== "undefined" && window.location.hash.includes("type=recovery")) {
+      setReady(false);
+      setAuthorized(false);
+      setAuthError("");
+
+      void (async () => {
+        try {
+          const { data, error } = await supabase.auth.getSession();
+          if (error) throw error;
+          if (!data.session) {
+            throw new Error("This password-reset link is invalid or has expired. Please request a new one.");
+          }
+          if (!active) return;
+          // The recovery session is now stored by Supabase. Remove the token
+          // fragment from the address bar before navigating to the form.
+          window.history.replaceState({}, document.title, window.location.pathname + window.location.search);
+          router.replace("/reset-password");
+        } catch (error) {
+          if (!active) return;
+          setAuthError(error instanceof Error ? error.message : "Unable to verify this password-reset link.");
+          setReady(true);
+        }
+      })();
+
+      return () => { active = false; };
+    }
+
     const publicRoute =
       pathname === "/" ||
       pathname === "/login" ||
