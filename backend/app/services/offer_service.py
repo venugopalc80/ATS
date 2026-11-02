@@ -15,13 +15,13 @@ ALLOWED_OFFER_TRANSITIONS = {
 }
 
 
-def list_offers(organization_id: UUID, status: str | None = None):
+def list_offers(organization_id: UUID, user_id: UUID, status: str | None = None):
     with get_connection() as c:
         with c.cursor() as cur:
             if status:
-                cur.execute("select * from public.offers where organization_id=%s and status=%s order by created_at desc", [organization_id, status])
+                cur.execute("select o.* from public.offers o where o.organization_id=%s and public.can_access_application(o.application_id, o.organization_id, %s) and o.status=%s order by o.created_at desc", [organization_id, user_id, status])
             else:
-                cur.execute("select * from public.offers where organization_id=%s order by created_at desc", [organization_id])
+                cur.execute("select o.* from public.offers o where o.organization_id=%s and public.can_access_application(o.application_id, o.organization_id, %s) order by o.created_at desc", [organization_id, user_id])
             return cur.fetchall()
 
 
