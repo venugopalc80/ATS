@@ -17,7 +17,7 @@ ALLOWED_INTERVIEW_TRANSITIONS = {
 
 class InterviewService:
     async def list_interviews(self, organization_id: UUID, user_id: UUID, status: str | None = None):
-        query = f"select i.{COLUMNS.replace(', ', ', i.')} from public.interviews i where i.organization_id=%s and public.can_access_application(i.application_id, i.organization_id, %s)"
+        query = f"select i.{COLUMNS.replace(', ', ', i.')} from public.interviews i where i.organization_id=%s and private.can_access_application(i.application_id, i.organization_id, %s)"
         params: list[Any] = [organization_id, user_id]
         if status:
             query += " and i.status=%s"
@@ -79,7 +79,7 @@ class InterviewService:
                     [str(actor_user_id)],
                 )
                 cur.execute(
-                    f"update public.interviews set {','.join(f'{k}=%s' for k in d)},updated_at=now() where id=%s and exists (select 1 from public.applications a where a.id=interviews.application_id and a.organization_id=interviews.organization_id and public.can_access_application(a.id, a.organization_id, %s)) returning {COLUMNS}",
+                    f"update public.interviews set {','.join(f'{k}=%s' for k in d)},updated_at=now() where id=%s and exists (select 1 from public.applications a where a.id=interviews.application_id and a.organization_id=interviews.organization_id and private.can_access_application(a.id, a.organization_id, %s)) returning {COLUMNS}",
                     list(d.values()) + [interview_id, actor_user_id],
                 )
                 return cur.fetchone()
