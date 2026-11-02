@@ -306,13 +306,23 @@ async def accept_organization_invitation(
                 insert into public.organization_members (organization_id, user_id, role)
                 values (%s, %s, %s)
                 on conflict (organization_id, user_id) do nothing
+                returning user_id
                 """,
                 [invitation["organization_id"], user_id, invitation["role"]],
             )
+            membership_created = cursor.fetchone()
+            if membership_created is None:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Your account is already a member of this organisation. Ask an administrator if your access needs to change.",
+                )
             cursor.execute(
-                "update public.organization_invitations set accepted_at = now(), updated_at = now() where id = %s",
+                "update public.organization_invitations set accepted_at = now(), updated_at = now() where id = %s and accepted_at is null",
                 [payload.invitation_id],
             )
+            if cursor.rowcount != 1:
+                raise HTTPException(status_code=409, detail="This invitation has already been accepted.")
+
             cursor.execute(
                 "select id, name, country_code, timezone from public.organizations where id = %s",
                 [invitation["organization_id"]],
