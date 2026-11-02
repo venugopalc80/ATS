@@ -16,7 +16,7 @@ ALLOWED_PLACEMENT_TRANSITIONS = {
 def list_placements(organization_id: UUID, user_id: UUID, status: str | None = None):
     with get_connection() as c:
         with c.cursor() as cur:
-            q = "select p.* from public.placements p where p.organization_id=%s and public.can_access_application(p.application_id, p.organization_id, %s)"
+            q = "select p.* from public.placements p where p.organization_id=%s and private.can_access_application(p.application_id, p.organization_id, %s)"
             args = [organization_id, user_id]
             if status:
                 q += " and p.status=%s"
@@ -113,7 +113,7 @@ def update_placement(organization_id: UUID, placement_id: UUID, payload: Placeme
             cur.execute(
                 f"""update public.placements set {assignments},updated_at=now()
                 where id=%(placement_id)s and organization_id=%(organization_id)s
-                  and public.can_access_application(application_id, organization_id, %(actor_user_id)s)
+                  and private.can_access_application(application_id, organization_id, %(actor_user_id)s)
                 returning *""",
                 values,
             )
