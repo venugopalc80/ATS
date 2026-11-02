@@ -207,7 +207,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $$
+as $
   select public.has_organization_wide_access(target_org, target_user)
     or exists (
       select 1 from public.candidate_access_assignments ca
@@ -217,9 +217,17 @@ as $$
       select 1
       from public.applications a
       where a.organization_id = target_org and a.candidate_id = target_candidate
-        and public.can_access_job(a.job_id, target_org, target_user)
+        and (
+          public.can_access_job(a.job_id, target_org, target_user)
+          or exists (
+            select 1 from public.application_access_assignments aa
+            where aa.organization_id = target_org
+              and aa.application_id = a.id
+              and aa.user_id = target_user
+          )
+        )
     );
-$$;
+$;
 
 create or replace function public.can_access_application(target_application uuid, target_org uuid, target_user uuid default auth.uid())
 returns boolean
@@ -602,3 +610,192 @@ using (
     (storage.foldername(name))[1]::uuid
   )
 );
+
+
+-- Extend resource boundaries to candidate child records and operational records.
+-- These tables contain candidate PII or recruitment activity and must not retain
+-- organisation-wide member policies after the parent records become scoped.
+
+drop policy if exists candidate_education_member_read on public.candidate_education;
+create policy candidate_education_resource_read on public.candidate_education
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists candidate_employment_member_read on public.candidate_employment_history;
+create policy candidate_employment_resource_read on public.candidate_employment_history
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists candidate_languages_member_read on public.candidate_languages;
+create policy candidate_languages_resource_read on public.candidate_languages
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists candidate_certifications_member_read on public.candidate_certifications;
+create policy candidate_certifications_resource_read on public.candidate_certifications
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists candidate_processing_member_read on public.candidate_processing_records;
+create policy candidate_processing_resource_read on public.candidate_processing_records
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'privacy.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists candidate_tag_assignments_member_read on public.candidate_tag_assignments;
+create policy candidate_tag_assignments_resource_read on public.candidate_tag_assignments
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists talent_pool_memberships_member_read on public.talent_pool_memberships;
+create policy talent_pool_memberships_resource_read on public.talent_pool_memberships
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists talent_pool_membership_events_member_read on public.talent_pool_membership_events;
+create policy talent_pool_membership_events_resource_read on public.talent_pool_membership_events
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and exists (
+    select 1 from public.talent_pool_memberships tm
+    where tm.id = talent_pool_membership_events.membership_id
+      and tm.organization_id = talent_pool_membership_events.organization_id
+      and public.can_access_candidate(tm.candidate_id, tm.organization_id)
+  ));
+
+drop policy if exists application_stage_history_member_read on public.application_stage_history;
+create policy application_stage_history_resource_read on public.application_stage_history
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'applications.read')
+  and public.can_access_application(application_id, organization_id));
+
+drop policy if exists application_stage_history_member_insert on public.application_stage_history;
+create policy application_stage_history_resource_insert on public.application_stage_history
+for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'applications.update')
+  and (actor_user_id is null or actor_user_id = auth.uid())
+  and public.can_access_application(application_id, organization_id));
+
+drop policy if exists recruiter_notes_member_select on public.recruiter_notes;
+create policy recruiter_notes_resource_read on public.recruiter_notes
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists recruiter_notes_member_insert on public.recruiter_notes;
+create policy recruiter_notes_resource_insert on public.recruiter_notes
+for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.update')
+  and author_user_id = auth.uid()
+  and public.can_access_candidate(candidate_id, organization_id));
+
+drop policy if exists recruiter_tasks_member_select on public.recruiter_tasks;
+create policy recruiter_tasks_resource_read on public.recruiter_tasks
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and (
+    (candidate_id is not null and public.can_access_candidate(candidate_id, organization_id))
+    or (job_id is not null and public.can_access_job(job_id, organization_id))
+    or (candidate_id is null and job_id is null
+        and (assigned_to = auth.uid() or created_by = auth.uid()))
+  ));
+
+drop policy if exists recruiter_tasks_member_insert on public.recruiter_tasks;
+create policy recruiter_tasks_resource_insert on public.recruiter_tasks
+for insert to authenticated
+with check (public.is_org_member(organization_id)
+  and created_by = auth.uid()
+  and (assigned_to is null or exists (
+    select 1 from public.organization_members m
+    where m.organization_id = recruiter_tasks.organization_id and m.user_id = recruiter_tasks.assigned_to
+  ))
+  and (candidate_id is null or public.can_access_candidate(candidate_id, organization_id))
+  and (job_id is null or public.can_access_job(job_id, organization_id)));
+
+drop policy if exists recruiter_tasks_member_update on public.recruiter_tasks;
+create policy recruiter_tasks_resource_update on public.recruiter_tasks
+for update to authenticated
+using (public.is_org_member(organization_id)
+  and (assigned_to = auth.uid() or created_by = auth.uid())
+  and (candidate_id is null or public.can_access_candidate(candidate_id, organization_id))
+  and (job_id is null or public.can_access_job(job_id, organization_id)))
+with check (public.is_org_member(organization_id)
+  and (assigned_to = auth.uid() or created_by = auth.uid())
+  and (candidate_id is null or public.can_access_candidate(candidate_id, organization_id))
+  and (job_id is null or public.can_access_job(job_id, organization_id)));
+
+drop policy if exists recruiter_tasks_member_delete on public.recruiter_tasks;
+create policy recruiter_tasks_resource_delete on public.recruiter_tasks
+for delete to authenticated
+using (public.is_org_member(organization_id)
+  and created_by = auth.uid()
+  and (candidate_id is null or public.can_access_candidate(candidate_id, organization_id))
+  and (job_id is null or public.can_access_job(job_id, organization_id)));
+
+drop policy if exists job_distribution_member_read on public.job_distribution_channels;
+create policy job_distribution_resource_read on public.job_distribution_channels
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.read')
+  and public.can_access_job(job_id, organization_id));
+
+drop policy if exists job_distribution_member_write on public.job_distribution_channels;
+create policy job_distribution_resource_write on public.job_distribution_channels
+for all to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and public.can_access_job(job_id, organization_id))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and public.can_access_job(job_id, organization_id));
+
+-- Job requisitions are visible only to their requester/approver or users who
+-- can access the linked client or resulting vacancy.
+drop policy if exists job_requisitions_member_select on public.job_requisitions;
+create policy job_requisitions_resource_read on public.job_requisitions
+for select to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.read')
+  and (
+    requested_by = auth.uid()
+    or approved_by = auth.uid()
+    or rejected_by = auth.uid()
+    or (client_id is not null and public.can_access_client(client_id, organization_id))
+    or (job_id is not null and public.can_access_job(job_id, organization_id))
+  ));
+
+drop policy if exists job_requisitions_member_update on public.job_requisitions;
+create policy job_requisitions_resource_update on public.job_requisitions
+for update to authenticated
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and (
+    requested_by = auth.uid()
+    or (client_id is not null and public.can_access_client(client_id, organization_id))
+    or (job_id is not null and public.can_access_job(job_id, organization_id))
+  ))
+with check (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'jobs.update')
+  and (
+    requested_by = auth.uid()
+    or (client_id is not null and public.can_access_client(client_id, organization_id))
+    or (job_id is not null and public.can_access_job(job_id, organization_id))
+  ));
