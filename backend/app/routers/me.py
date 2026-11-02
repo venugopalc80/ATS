@@ -273,6 +273,76 @@ async def create_organization_invitation(
     }
 
 
+@router.post("/organizations/{organization_id}/invitations/{invitation_id}/resend")
+async def resend_organization_invitation(
+    organization_id: UUID,
+    invitation_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_permission(user_id, organization_id, "team.invite")
+    frontend_url = os.getenv("FRONTEND_URL", "").rstrip("/")
+    if not frontend_url:
+        raise HTTPException(status_code=503, detail="Invitation redirect URL is not configured")
+
+    token = secrets.token_urlsafe(36)
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    expires_at = datetime.now(timezone.utc) + timedelta(days=7)
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                select i.email, o.name
+                from public.organization_invitations i
+                join public.organizations o on o.id = i.organization_id
+                where i.id = %s and i.organization_id = %s
+                  and i.accepted_at is null and i.expires_at > now()
+                for update of i
+                """,
+                [invitation_id, organization_id],
+            )
+            invitation = cursor.fetchone()
+            if invitation is None:
+                raise HTTPException(status_code=404, detail="Pending invitation not found or expired")
+            cursor.execute(
+                """
+                update public.organization_invitations
+                set token_hash = %s, expires_at = %s, updated_at = now()
+                where id = %s and organization_id = %s
+                """,
+                [token_hash, expires_at, invitation_id, organization_id],
+            )
+
+    redirect_to = frontend_url + "/accept-invitation?" + urlencode({"invitation_id": str(invitation_id), "token": token})
+    email_sent = _supabase_admin_invite(invitation["email"], redirect_to, invitation["name"])
+    return {
+        "invitation": {"id": str(invitation_id), "email": invitation["email"], "expires_at": expires_at},
+        "email_sent": email_sent,
+        "invite_url": redirect_to,
+    }
+
+
+@router.delete("/organizations/{organization_id}/invitations/{invitation_id}", status_code=204)
+async def revoke_organization_invitation(
+    organization_id: UUID,
+    invitation_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+):
+    assert_org_permission(user_id, organization_id, "team.invite")
+    with get_connection() as connection:
+        with connection.cursor() as cursor:
+            cursor.execute(
+                """
+                delete from public.organization_invitations
+                where id = %s and organization_id = %s
+                  and accepted_at is null
+                returning id
+                """,
+                [invitation_id, organization_id],
+            )
+            if cursor.fetchone() is None:
+                raise HTTPException(status_code=404, detail="Pending invitation not found")
+
+
 @router.post("/invitations/accept")
 async def accept_organization_invitation(
     payload: OrganizationInviteAccept,
