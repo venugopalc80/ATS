@@ -6,6 +6,7 @@ import { apiFetch, API_BASE } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
 
 type Organization = { id: string; name: string; timezone: string; role: string };
+type Invitation = { id: string; email: string; role: string; expires_at: string; created_at: string };
 const timezones = [
   ["Europe/London", "Europe/London (UK)"],
   ["America/New_York", "America/New_York (US Eastern)"],
@@ -25,6 +26,12 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [error, setError] = useState("");
+  const [invitations, setInvitations] = useState<Invitation[]>([]);
+  const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState("recruiter");
+  const [inviting, setInviting] = useState(false);
+  const [inviteMessage, setInviteMessage] = useState("");
+  const [inviteError, setInviteError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -44,6 +51,13 @@ export default function SettingsPage() {
         if (!cancelled) {
           setOrganization(active);
           setTimezone(active.timezone || "UTC");
+          if (active.role === "owner" || active.role === "admin") {
+            const inviteResponse = await apiFetch(API_BASE + "/api/me/organizations/" + active.id + "/invitations");
+            if (inviteResponse.ok) {
+              const inviteData = await inviteResponse.json();
+              setInvitations(inviteData.invitations || []);
+            }
+          }
         }
       } catch (cause) {
         if (!cancelled) setError(cause instanceof Error ? cause.message : "Unable to load settings.");
@@ -82,6 +96,31 @@ export default function SettingsPage() {
 
   const canEdit = organization?.role === "owner" || organization?.role === "admin";
 
+  async function sendInvitation(event: React.FormEvent) {
+    event.preventDefault();
+    if (!organization) return;
+    setInviting(true);
+    setInviteMessage("");
+    setInviteError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/me/organizations/" + organization.id + "/invitations", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: inviteEmail, role: inviteRole }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Unable to send invitation.");
+      setInviteEmail("");
+      setInviteMessage("Invitation sent to " + body.invitation.email + ". The link expires in 7 days.");
+      const refreshed = await apiFetch(API_BASE + "/api/me/organizations/" + organization.id + "/invitations");
+      if (refreshed.ok) { const data = await refreshed.json(); setInvitations(data.invitations || []); }
+    } catch (cause) {
+      setInviteError(cause instanceof Error ? cause.message : "Unable to send invitation.");
+    } finally {
+      setInviting(false);
+    }
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -119,6 +158,41 @@ export default function SettingsPage() {
               {message && <p className="notice" role="status">{message}</p>}
               {error && <p className="dashboard-error" role="alert">{error}</p>}
               {canEdit && <div className="modal-actions" style={{ justifyContent: "flex-start" }}><button className="btn primary" disabled={saving || timezone === organization.timezone} onClick={save}>{saving ? "Saving…" : "Save settings"}</button></div>}
+            </section>
+          )}
+          {canEdit && organization && (
+            <section className="card" style={{ maxWidth: 900, marginTop: 20 }}>
+              <div className="card-head"><span className="card-title">Team members</span><span className="badge blue">Owner / Admin</span></div>
+              <p className="muted-small" style={{ lineHeight: 1.6 }}>Invite colleagues into this organisation. They will share its recruitment workspace, with permissions determined by the role you assign.</p>
+              <form onSubmit={sendInvitation} style={{ display: "grid", gridTemplateColumns: "minmax(220px, 1fr) 180px auto", gap: 12, alignItems: "end", marginTop: 16 }}>
+                <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Work email
+                  <input className="filter" type="email" required value={inviteEmail} onChange={(event) => setInviteEmail(event.target.value)} placeholder="colleague@agency.com" />
+                </label>
+                <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Workspace role
+                  <select className="filter" value={inviteRole} onChange={(event) => setInviteRole(event.target.value)}>
+                    <option value="recruiter">Recruiter</option>
+                    <option value="hiring_manager">Hiring manager</option>
+                    <option value="viewer">Viewer</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </label>
+                <button className="btn primary" disabled={inviting}>{inviting ? "Sending…" : "Send invitation"}</button>
+              </form>
+              {inviteMessage && <p className="notice" role="status">{inviteMessage}</p>}
+              {inviteError && <p className="dashboard-error" role="alert">{inviteError}</p>}
+              <div style={{ marginTop: 22 }}>
+                <div className="card-title" style={{ marginBottom: 12 }}>Pending invitations</div>
+                {invitations.length === 0 ? <p className="muted-small">No pending invitations.</p> : (
+                  <div style={{ display: "grid", gap: 10 }}>
+                    {invitations.map((invite) => (
+                      <div key={invite.id} style={{ display: "flex", justifyContent: "space-between", gap: 16, alignItems: "center", borderTop: "1px solid var(--border, #e5e7eb)", paddingTop: 12 }}>
+                        <div><strong>{invite.email}</strong><div className="muted-small">{invite.role.replace("_", " ")} · Expires {new Date(invite.expires_at).toLocaleDateString()}</div></div>
+                        <span className="badge">Pending</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </section>
           )}
         </section>
