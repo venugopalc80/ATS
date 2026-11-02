@@ -308,3 +308,9 @@ class RelatedRecordBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(policy=policy):
                 self.assertIn(policy, self.migration)
+
+    def test_requisition_creation_and_privacy_requests_are_scoped(self):
+        self.assertIn("job_requisitions_resource_insert", self.migration)
+        self.assertIn("public.has_effective_org_permission(organization_id, 'jobs.create')", self.migration)
+        self.assertIn("privacy_requests_resource_read", self.migration)
+        self.assertIn("public.has_effective_org_permission(organization_id, 'privacy.manage')", self.migration)
