@@ -32,6 +32,7 @@ export default function SettingsPage() {
   const [inviting, setInviting] = useState(false);
   const [inviteMessage, setInviteMessage] = useState("");
   const [inviteError, setInviteError] = useState("");
+  const [inviteLink, setInviteLink] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -111,7 +112,8 @@ export default function SettingsPage() {
       const body = await response.json().catch(() => null);
       if (!response.ok) throw new Error(body?.detail || "Unable to send invitation.");
       setInviteEmail("");
-      setInviteMessage("Invitation sent to " + body.invitation.email + ". The link expires in 7 days.");
+      setInviteLink(body.email_sent ? "" : (body.invite_url || ""));
+      setInviteMessage(body.email_sent ? "Invitation email sent to " + body.invitation.email + ". The link expires in 7 days." : "The invitation is ready, but email delivery was unavailable. Copy the secure link below and share it with the invited person. They must sign in with the invited email address.");
       const refreshed = await apiFetch(API_BASE + "/api/me/organizations/" + organization.id + "/invitations");
       if (refreshed.ok) { const data = await refreshed.json(); setInvitations(data.invitations || []); }
     } catch (cause) {
@@ -180,6 +182,7 @@ export default function SettingsPage() {
               </form>
               {inviteMessage && <p className="notice" role="status">{inviteMessage}</p>}
               {inviteError && <p className="dashboard-error" role="alert">{inviteError}</p>}
+              {inviteLink && <div style={{ display: "grid", gap: 8, marginTop: 12 }}><input className="filter" readOnly value={inviteLink} aria-label="Secure invitation link" /><button type="button" className="btn" onClick={() => navigator.clipboard.writeText(inviteLink)}>Copy invitation link</button></div>}
               <div style={{ marginTop: 22 }}>
                 <div className="card-title" style={{ marginBottom: 12 }}>Pending invitations</div>
                 {invitations.length === 0 ? <p className="muted-small">No pending invitations.</p> : (
