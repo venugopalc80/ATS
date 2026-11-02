@@ -128,10 +128,10 @@ def has_resource_access(
 ) -> bool:
     """Resolve record-level access using the database's canonical scope functions."""
     checks = {
-        "job": "select public.can_access_job(%s, %s, %s) as allowed",
-        "candidate": "select public.can_access_candidate(%s, %s, %s) as allowed",
-        "client": "select public.can_access_client(%s, %s, %s) as allowed",
-        "application": "select public.can_access_application(%s, %s, %s) as allowed",
+        "job": "select private.can_access_job(%s, %s, %s) as allowed",
+        "candidate": "select private.can_access_candidate(%s, %s, %s) as allowed",
+        "client": "select private.can_access_client(%s, %s, %s) as allowed",
+        "application": "select private.can_access_application(%s, %s, %s) as allowed",
     }
     query = checks.get(resource_type)
     if query is None:
