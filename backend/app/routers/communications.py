@@ -47,6 +47,7 @@ async def list_candidate_communications(
         raise HTTPException(status_code=404, detail="Candidate not found")
     assert_org_permission(user_id, organization_id, "candidates.communicate")
     assert_resource_access(user_id, organization_id, "candidate", candidate_id)
+    assert_resource_access(user_id, organization_id, "candidate", candidate_id)
     with get_connection() as connection:
         with connection.cursor() as cursor:
             cursor.execute(
@@ -75,6 +76,7 @@ async def send_candidate_email(
     if candidate is None or str(candidate["organization_id"]) != str(organization_id):
         raise HTTPException(status_code=404, detail="Candidate not found")
     assert_org_permission(user_id, organization_id, "candidates.communicate")
+    assert_resource_access(user_id, organization_id, "candidate", candidate_id)
     if candidate.get("status") == "do_not_contact":
         raise HTTPException(status_code=409, detail="This candidate is marked Do not contact. Change the candidate's contact status only after verifying the appropriate permission and lawful basis.")
     recipient = (candidate.get("email") or "").strip()
