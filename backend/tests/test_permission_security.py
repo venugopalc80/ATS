@@ -295,3 +295,16 @@ class RelatedRecordBoundaryTests(unittest.TestCase):
         ):
             with self.subTest(policy=policy):
                 self.assertIn(policy, self.migration)
+
+    def test_ai_campaign_and_import_records_have_scoped_policies(self):
+        for policy in (
+            "ai_interview_kits_resource_read",
+            "ai_jd_versions_resource_read",
+            "campaign_memberships_resource_read",
+            "campaign_events_resource_read",
+            "referrals_resource_read",
+            "import_batches_scoped_read",
+            "import_row_results_scoped_read",
+        ):
+            with self.subTest(policy=policy):
+                self.assertIn(policy, self.migration)
