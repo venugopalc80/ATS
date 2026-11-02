@@ -108,6 +108,7 @@ async def upload_candidate_document(
                 )
                 if cursor.fetchone() is None:
                     raise HTTPException(status_code=404, detail="Application not found for this candidate")
+        assert_resource_access(user_id, organization_id, "application", application_id)
 
     document_id = uuid4()
     path = f"{organization_id}/{candidate_id}/{document_id}{extension}"
@@ -372,7 +373,7 @@ async def bulk_upload_cvs(
                         )
                         existing = cursor.fetchone()
                         if existing:
-                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists", "candidate_id": str(existing["id"])})
+                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists in this organisation"})
                             continue
                     cursor.execute(
                         "select id from public.candidate_documents where organization_id=%s and sha256=%s and deleted_at is null limit 1",
@@ -398,6 +399,12 @@ async def bulk_upload_cvs(
                                values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
                             [candidate_id, organization_id, fields["first_name"], fields["last_name"],
                              fields["email"], fields["phone"], fields["skills"], path, text or None],
+                        )
+                        cursor.execute(
+                            """insert into public.candidate_access_assignments
+                               (organization_id, candidate_id, user_id, assigned_by)
+                               values (%s, %s, %s, %s) on conflict do nothing""",
+                            [organization_id, candidate_id, user_id, user_id],
                         )
                         cursor.execute(
                             """insert into public.candidate_documents
