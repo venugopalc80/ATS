@@ -20,6 +20,7 @@ class CandidateService:
         organization_id: UUID,
         status: str | None = None,
         search: str | None = None,
+        user_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         query = f"""
             select {CANDIDATE_COLUMNS}
@@ -28,6 +29,12 @@ class CandidateService:
         """
         params: list[Any] = [organization_id]
 
+        if user_id is not None:
+            query += " and private.can_access_candidate(id, organization_id, %s)"
+            params.append(user_id)
+
+        query += """
+        """
         if status:
             query += " and status = %s"
             params.append(status)
@@ -52,7 +59,7 @@ class CandidateService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
-    async def create_candidate(self, payload: CandidateCreate) -> dict[str, Any]:
+    async def create_candidate(self, payload: CandidateCreate, creator_user_id: UUID | None = None) -> dict[str, Any]:
         data = payload.model_dump(mode="python")
         columns = list(data.keys())
         values = [data[column] for column in columns]
@@ -71,6 +78,13 @@ class CandidateService:
                 row = cursor.fetchone()
                 if row is None:
                     raise RuntimeError("Candidate was not created")
+                if creator_user_id is not None:
+                    cursor.execute(
+                        """insert into public.candidate_access_assignments
+                           (organization_id, candidate_id, user_id, assigned_by)
+                           values (%s, %s, %s, %s) on conflict do nothing""",
+                        [row["organization_id"], row["id"], creator_user_id, creator_user_id],
+                    )
                 return row
 
     async def get_candidate(self, candidate_id: UUID) -> dict[str, Any] | None:

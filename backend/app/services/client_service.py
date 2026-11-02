@@ -9,9 +9,12 @@ CLIENT_COLUMNS = """
 """
 
 class ClientService:
-    async def list_clients(self, organization_id: UUID, status: str | None = None, search: str | None = None) -> list[dict[str, Any]]:
+    async def list_clients(self, organization_id: UUID, status: str | None = None, search: str | None = None, user_id: UUID | None = None) -> list[dict[str, Any]]:
         query = f"select {CLIENT_COLUMNS} from public.clients where organization_id = %s"
         params: list[Any] = [organization_id]
+        if user_id is not None:
+            query += " and private.can_access_client(id, organization_id, %s)"
+            params.append(user_id)
         if status:
             query += " and status = %s"
             params.append(status)
@@ -25,7 +28,7 @@ class ClientService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
-    async def create_client(self, payload: ClientCreate) -> dict[str, Any]:
+    async def create_client(self, payload: ClientCreate, creator_user_id: UUID | None = None) -> dict[str, Any]:
         data = payload.model_dump(mode="python")
         columns = list(data.keys())
         values = [data[c] for c in columns]
@@ -39,6 +42,16 @@ class ClientService:
                 row = cursor.fetchone()
                 if row is None:
                     raise RuntimeError("Client was not created")
+                if creator_user_id is not None:
+                    cursor.execute(
+                        """
+                        insert into public.client_access_assignments
+                            (organization_id, client_id, user_id, assigned_by)
+                        values (%s, %s, %s, %s)
+                        on conflict (client_id, user_id) do nothing
+                        """,
+                        [row["organization_id"], row["id"], creator_user_id, creator_user_id],
+                    )
                 return row
 
     async def get_client(self, client_id: UUID) -> dict[str, Any] | None:

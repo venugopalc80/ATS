@@ -13,7 +13,7 @@ from pypdf import PdfReader
 from pydantic import BaseModel
 from supabase import create_client
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/documents", tags=["candidate documents"])
@@ -90,8 +90,9 @@ async def upload_candidate_document(
     application_id: UUID | None = Query(default=None),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.upload")
     verify_candidate(candidate_id, organization_id)
+    assert_resource_access(user_id, organization_id, "candidate", candidate_id)
 
     mime = (file.content_type or "").lower()
     data = await file.read(MAX_BYTES + 1)
@@ -107,6 +108,7 @@ async def upload_candidate_document(
                 )
                 if cursor.fetchone() is None:
                     raise HTTPException(status_code=404, detail="Application not found for this candidate")
+        assert_resource_access(user_id, organization_id, "application", application_id)
 
     document_id = uuid4()
     path = f"{organization_id}/{candidate_id}/{document_id}{extension}"
@@ -165,9 +167,10 @@ async def list_candidate_documents(
     candidate_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         verify_candidate(candidate_id, organization_id)
+        assert_resource_access(user_id, organization_id, "candidate", candidate_id)
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
@@ -195,12 +198,12 @@ async def create_document_download(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select storage_bucket, storage_path, original_filename
+                    """select candidate_id, storage_bucket, storage_path, original_filename
                        from public.candidate_documents
                        where id=%s and organization_id=%s and deleted_at is null""",
                     [document_id, organization_id],
@@ -208,6 +211,7 @@ async def create_document_download(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                assert_resource_access(user_id, organization_id, "candidate", row["candidate_id"])
         result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": False})
         signed_url = result.get("signedURL") or result.get("signedUrl")
         if not signed_url:
@@ -226,7 +230,7 @@ async def preview_candidate_document(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Return a short-lived inline PDF URL or extracted DOCX text for an authorised recruiter."""
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -239,6 +243,7 @@ async def preview_candidate_document(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                assert_resource_access(user_id, organization_id, "candidate", row["candidate_id"])
         if row["content_type"] == "application/pdf":
             result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(
                 row["storage_path"], 60, options={"download": False}
@@ -335,7 +340,7 @@ async def bulk_upload_cvs(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.upload")
     if not files:
         raise HTTPException(status_code=422, detail="Choose at least one CV to upload")
     if len(files) > MAX_BULK_FILES:
@@ -368,7 +373,7 @@ async def bulk_upload_cvs(
                         )
                         existing = cursor.fetchone()
                         if existing:
-                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists", "candidate_id": str(existing["id"])})
+                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists in this organisation"})
                             continue
                     cursor.execute(
                         "select id from public.candidate_documents where organization_id=%s and sha256=%s and deleted_at is null limit 1",
@@ -394,6 +399,12 @@ async def bulk_upload_cvs(
                                values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
                             [candidate_id, organization_id, fields["first_name"], fields["last_name"],
                              fields["email"], fields["phone"], fields["skills"], path, text or None],
+                        )
+                        cursor.execute(
+                            """insert into public.candidate_access_assignments
+                               (organization_id, candidate_id, user_id, assigned_by)
+                               values (%s, %s, %s, %s) on conflict do nothing""",
+                            [organization_id, candidate_id, user_id, user_id],
                         )
                         cursor.execute(
                             """insert into public.candidate_documents

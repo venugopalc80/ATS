@@ -1,6 +1,6 @@
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError
 from app.schemas.clients import ClientCreate, ClientOut, ClientUpdate
 from app.services.client_service import ClientService
@@ -18,18 +18,18 @@ async def list_clients(
     search: str | None = Query(default=None, max_length=100),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "clients.read")
     try:
-        rows = await service.list_clients(organization_id, status, search)
+        rows = await service.list_clients(organization_id, status, search, user_id)
         return [ClientOut.model_validate(row) for row in rows]
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
 @router.post("", response_model=ClientOut, status_code=201)
 async def create_client(payload: ClientCreate, user_id: UUID = Depends(get_current_user_id)):
-    assert_org_member(user_id, payload.organization_id)
+    assert_org_permission(user_id, payload.organization_id, "clients.create")
     try:
-        return ClientOut.model_validate(await service.create_client(payload))
+        return ClientOut.model_validate(await service.create_client(payload, user_id))
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
@@ -41,7 +41,8 @@ async def get_client(client_id: UUID, user_id: UUID = Depends(get_current_user_i
         raise db_unavailable(exc) from exc
     if row is None:
         raise HTTPException(status_code=404, detail="Client not found")
-    assert_org_member(user_id, row["organization_id"])
+    assert_org_permission(user_id, row["organization_id"], "clients.read")
+    assert_resource_access(user_id, row["organization_id"], "client", client_id)
     return ClientOut.model_validate(row)
 
 @router.patch("/{client_id}", response_model=ClientOut)
@@ -50,7 +51,8 @@ async def update_client(client_id: UUID, payload: ClientUpdate, user_id: UUID = 
         existing = await service.get_client(client_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Client not found")
-        assert_org_member(user_id, existing["organization_id"])
+        assert_org_permission(user_id, existing["organization_id"], "clients.update")
+        assert_resource_access(user_id, existing["organization_id"], "client", client_id)
         row = await service.update_client(client_id, payload)
         return ClientOut.model_validate(row)
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -62,7 +64,8 @@ async def delete_client(client_id: UUID, user_id: UUID = Depends(get_current_use
         existing = await service.get_client(client_id)
         if existing is None:
             raise HTTPException(status_code=404, detail="Client not found")
-        assert_org_member(user_id, existing["organization_id"])
+        assert_org_permission(user_id, existing["organization_id"], "clients.delete")
+        assert_resource_access(user_id, existing["organization_id"], "client", client_id)
         if not await service.delete_client(client_id):
             raise HTTPException(status_code=404, detail="Client not found")
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
