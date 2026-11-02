@@ -19,7 +19,7 @@ class ApplicationService:
         query = "select " + APPLICATION_COLUMNS + " from public.applications where organization_id = %s"
         params: list[Any] = [organization_id]
         if user_id is not None:
-            query += " and public.can_access_application(id, organization_id, %s)"
+            query += " and private.can_access_application(id, organization_id, %s)"
             params.append(user_id)
         if status: query += " and status = %s"; params.append(status)
         if job_id: query += " and job_id = %s"; params.append(job_id)
