@@ -10,8 +10,12 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [message, setMessage] = useState("");
+  const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [busy, setBusy] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resendAvailableAt, setResendAvailableAt] = useState(0);
 
   async function submit(event: FormEvent) {
     event.preventDefault();
@@ -28,7 +32,8 @@ export default function LoginPage() {
         if (error) throw error;
 
         if (!data.session) {
-          setMessage("Account created. Check your email to confirm your account, then sign in.");
+          setMessageType("success");
+          setMessage("Account created. Check your inbox for the confirmation email. If it doesn't arrive, use Resend confirmation email below.");
         } else {
           router.replace("/onboarding");
         }
@@ -38,9 +43,34 @@ export default function LoginPage() {
         router.replace("/dashboard");
       }
     } catch (error) {
+      setMessageType("error");
       setMessage(error instanceof Error ? error.message : "Authentication failed.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function resendConfirmation() {
+    if (!email.trim()) {
+      setMessageType("error");
+      setMessage("Enter your email address first, then request another confirmation email.");
+      return;
+    }
+    if (Date.now() < resendAvailableAt) return;
+
+    setResending(true);
+    setMessage("");
+    try {
+      const { error } = await supabase.auth.resend({ type: "signup", email: email.trim() });
+      if (error) throw error;
+      setResendAvailableAt(Date.now() + 60000);
+      setMessageType("success");
+      setMessage("If this address has an account awaiting confirmation, a new confirmation email has been requested. Check your inbox and spam folder.");
+    } catch (error) {
+      setMessageType("error");
+      setMessage(error instanceof Error ? error.message : "Unable to request a confirmation email. Please try again later.");
+    } finally {
+      setResending(false);
     }
   }
 
@@ -81,15 +111,32 @@ export default function LoginPage() {
         </p>
 
         <form onSubmit={submit} className="auth-form">
-          {mode === "signup" && <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} /></label>}
+          {mode === "signup" && <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>}
           <label>Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <label>Password<input required minLength={8} type="password" autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+          <label>
+            Password
+            <span className="auth-password-control">
+              <input required minLength={8} type={showPassword ? "text" : "password"} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
+              <button type="button" className="auth-password-toggle" onClick={() => setShowPassword((visible) => !visible)} aria-label={showPassword ? "Hide password" : "Show password"} aria-pressed={showPassword}>
+                {showPassword ? "Hide" : "Show"}
+              </button>
+            </span>
+          </label>
           <button className="btn primary auth-submit" disabled={busy}>{busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}</button>
         </form>
 
-        {message && <div className="notice" role="status">{message}</div>}
+        {message && <div className={messageType === "error" ? "dashboard-error" : "notice"} role={messageType === "error" ? "alert" : "status"}>{message}</div>}
 
-        <button type="button" className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); }}>
+        {mode === "signin" && (
+          <div className="auth-recovery-actions">
+            <button type="button" className="auth-switch" onClick={resendConfirmation} disabled={resending || Date.now() < resendAvailableAt}>
+              {resending ? "Requesting email..." : "Resend confirmation email"}
+            </button>
+            <p className="muted-small">Use the email address entered above. Check your spam folder if the message is missing.</p>
+          </div>
+        )}
+
+        <button type="button" className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); setShowPassword(false); }}>
           {mode === "signin" ? "Need an account? Create one" : "Already have an account? Sign in"}
         </button>
       </section>
