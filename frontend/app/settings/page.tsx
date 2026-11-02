@@ -84,7 +84,7 @@ export default function SettingsPage() {
             if (initialRole) setSelectedRoleId(initialRole.id);
             if (permissionResult.members[0]) {
               setSelectedMemberId(permissionResult.members[0].user_id);
-              setSelectedMemberRole(permissionResult.members[0].custom_role_id || permissionResult.members[0].role);
+              setSelectedMemberRole(permissionResult.members[0].custom_role_id ? "custom:" + permissionResult.members[0].custom_role_id : permissionResult.members[0].role);
             }
             if (permissionResult.permissions[0]) setSelectedPermissionKey(permissionResult.permissions[0].permission_key);
           }
