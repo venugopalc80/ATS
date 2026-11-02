@@ -79,7 +79,7 @@ class InterviewService:
                     [str(actor_user_id)],
                 )
                 cur.execute(
-                    f"update public.interviews set {','.join(f'{k}=%s' for k in d)},updated_at=now() where id=%s returning {COLUMNS}",
-                    list(d.values()) + [interview_id],
+                    f"update public.interviews set {','.join(f'{k}=%s' for k in d)},updated_at=now() where id=%s and exists (select 1 from public.applications a where a.id=interviews.application_id and a.organization_id=interviews.organization_id and public.can_access_application(a.id, a.organization_id, %s)) returning {COLUMNS}",
+                    list(d.values()) + [interview_id, actor_user_id],
                 )
                 return cur.fetchone()
