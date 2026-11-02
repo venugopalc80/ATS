@@ -18,6 +18,11 @@ export default function LoginPage() {
   const [resetMode, setResetMode] = useState(false);
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
 
+  function getSafeNextPath() {
+    const candidate = new URLSearchParams(window.location.search).get("next");
+    return candidate && candidate.startsWith("/") && !candidate.startsWith("//") ? candidate : "";
+  }
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
@@ -33,7 +38,7 @@ export default function LoginPage() {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
-          options: { data: { full_name: name } },
+          options: { data: { full_name: name }, emailRedirectTo: getSafeNextPath() ? window.location.origin + getSafeNextPath() : undefined },
         });
         if (error) throw error;
 
@@ -46,7 +51,7 @@ export default function LoginPage() {
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.replace("/dashboard");
+        router.replace(getSafeNextPath() || "/dashboard");
       }
     } catch (error) {
       setMessageType("error");
