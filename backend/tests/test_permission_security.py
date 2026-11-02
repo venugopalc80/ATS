@@ -240,3 +240,58 @@ class ApplicationAssignmentBoundaryTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class RelatedRecordBoundaryTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        from pathlib import Path
+        cls.migration = (
+            Path(__file__).resolve().parents[2]
+            / "supabase"
+            / "migrations"
+            / "20261102180000_resource_level_access_control_v2.sql"
+        ).read_text().lower()
+
+    def test_candidate_profile_access_includes_explicit_application_assignment(self):
+        start = self.migration.index("create or replace function public.can_access_candidate")
+        end = self.migration.index("$;", start)
+        function_sql = self.migration[start:end]
+        self.assertIn("public.application_access_assignments", function_sql)
+        self.assertIn("aa.application_id = a.id", function_sql)
+
+    def test_candidate_child_tables_have_scoped_policies(self):
+        for policy in (
+            "candidate_education_resource_read",
+            "candidate_employment_resource_read",
+            "candidate_languages_resource_read",
+            "candidate_certifications_resource_read",
+            "candidate_processing_resource_read",
+            "candidate_tag_assignments_resource_read",
+            "talent_pool_memberships_resource_read",
+            "talent_pool_membership_events_resource_read",
+        ):
+            with self.subTest(policy=policy):
+                self.assertIn(policy, self.migration)
+
+    def test_activity_and_operational_records_are_resource_scoped(self):
+        for policy in (
+            "application_stage_history_resource_read",
+            "recruiter_notes_resource_read",
+            "recruiter_tasks_resource_read",
+            "job_distribution_resource_read",
+            "job_requisitions_resource_read",
+        ):
+            with self.subTest(policy=policy):
+                self.assertIn(policy, self.migration)
+
+    def test_legacy_broad_child_policies_are_removed(self):
+        for policy in (
+            "drop policy if exists candidate_education_member_read",
+            "drop policy if exists recruiter_notes_member_select",
+            "drop policy if exists recruiter_tasks_member_select",
+            "drop policy if exists application_stage_history_member_read",
+            "drop policy if exists job_distribution_member_read",
+        ):
+            with self.subTest(policy=policy):
+                self.assertIn(policy, self.migration)
