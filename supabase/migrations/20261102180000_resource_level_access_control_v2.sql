@@ -509,7 +509,9 @@ drop policy if exists candidate_communications_member_read on public.candidate_c
 drop policy if exists candidate_communications_permission_read on public.candidate_communications;
 create policy candidate_communications_resource_read on public.candidate_communications
 for select to authenticated
-using (public.is_org_member(organization_id) and public.can_access_candidate(candidate_id, organization_id));
+using (public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.communicate')
+  and public.can_access_candidate(candidate_id, organization_id));
 
 -- Private bucket policies: object paths are organization_id/candidate_id/document_id.ext.
 drop policy if exists candidate_documents_authenticated_read on storage.objects;
@@ -519,6 +521,7 @@ for select to authenticated
 using (
   bucket_id = 'candidate-documents'
   and array_length(storage.foldername(name), 1) >= 2
+  and public.has_effective_org_permission((storage.foldername(name))[1]::uuid, 'candidates.documents.read')
   and public.can_access_candidate(
     (storage.foldername(name))[2]::uuid,
     (storage.foldername(name))[1]::uuid
