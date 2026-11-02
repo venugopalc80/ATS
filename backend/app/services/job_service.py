@@ -42,8 +42,10 @@ class JobService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
-    async def create_job(self, payload: JobCreate) -> dict[str, Any]:
+    async def create_job(self, payload: JobCreate, creator_user_id: UUID | None = None) -> dict[str, Any]:
         data = payload.model_dump(mode="python")
+        if creator_user_id is not None and not data.get("recruiter_id") and not data.get("hiring_manager_id"):
+            data["recruiter_id"] = creator_user_id
         columns = list(data.keys())
         values = [data[column] for column in columns]
         placeholders = ", ".join(["%s"] * len(columns))
