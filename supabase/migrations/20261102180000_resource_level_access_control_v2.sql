@@ -966,3 +966,164 @@ using (
   and public.has_effective_org_permission(organization_id, 'organization.audit.read')
   and private.can_access_application(organization_id, entity_id, auth.uid())
 );
+
+-- Candidate metadata is organisation configuration, but still requires the
+-- relevant candidate-read capability. Candidate-linked tag assignments remain
+-- additionally scoped to the candidate resource above.
+drop policy if exists candidate_sources_member_read on public.candidate_sources;
+create policy candidate_sources_permission_read on public.candidate_sources
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+);
+
+drop policy if exists candidate_tags_member_read on public.candidate_tags;
+create policy candidate_tags_permission_read on public.candidate_tags
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+);
+
+-- Talent pools distinguish organisation-visible pools from restricted pools.
+-- Restricted pools are visible only to their owner; membership rows and their
+-- history require both pool visibility and candidate resource access.
+drop policy if exists talent_pools_member_read on public.talent_pools;
+create policy talent_pools_visibility_read on public.talent_pools
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and (
+    visibility = 'organisation'
+    or (visibility = 'restricted' and owner_user_id = auth.uid())
+  )
+);
+
+drop policy if exists talent_pool_memberships_resource_read on public.talent_pool_memberships;
+create policy talent_pool_memberships_scoped_read on public.talent_pool_memberships
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and private.can_access_candidate(candidate_id, organization_id)
+  and exists (
+    select 1 from public.talent_pools tp
+    where tp.id = talent_pool_memberships.pool_id
+      and tp.organization_id = talent_pool_memberships.organization_id
+      and (
+        tp.visibility = 'organisation'
+        or (tp.visibility = 'restricted' and tp.owner_user_id = auth.uid())
+      )
+  )
+);
+
+drop policy if exists talent_pool_membership_events_resource_read on public.talent_pool_membership_events;
+create policy talent_pool_membership_events_scoped_read on public.talent_pool_membership_events
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and public.has_effective_org_permission(organization_id, 'candidates.read')
+  and exists (
+    select 1
+    from public.talent_pool_memberships tm
+    join public.talent_pools tp
+      on tp.id = tm.pool_id and tp.organization_id = tm.organization_id
+    where tm.id = talent_pool_membership_events.membership_id
+      and tm.organization_id = talent_pool_membership_events.organization_id
+      and private.can_access_candidate(tm.candidate_id, tm.organization_id)
+      and (
+        tp.visibility = 'organisation'
+        or (tp.visibility = 'restricted' and tp.owner_user_id = auth.uid())
+      )
+  )
+);
+
+-- Campaign budgets and channel spend are not organisation-wide metadata.
+-- A campaign is visible to its owner when it has no target job; otherwise it
+-- follows the target job's resource scope. Channel data inherits that rule.
+drop policy if exists recruitment_campaigns_member_read on public.recruitment_campaigns;
+create policy recruitment_campaigns_scoped_read on public.recruitment_campaigns
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and (
+    (target_job_id is not null
+      and public.has_effective_org_permission(organization_id, 'jobs.read')
+      and private.can_access_job(target_job_id, organization_id))
+    or (target_job_id is null and owner_user_id = auth.uid())
+  )
+);
+
+drop policy if exists campaign_channels_member_read on public.campaign_channels;
+create policy campaign_channels_scoped_read on public.campaign_channels
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and exists (
+    select 1 from public.recruitment_campaigns rc
+    where rc.id = campaign_channels.campaign_id
+      and rc.organization_id = campaign_channels.organization_id
+      and (
+        (rc.target_job_id is not null
+          and public.has_effective_org_permission(rc.organization_id, 'jobs.read')
+          and private.can_access_job(rc.target_job_id, rc.organization_id))
+        or (rc.target_job_id is null and rc.owner_user_id = auth.uid())
+      )
+  )
+);
+
+-- Membership and event rows also require visibility of their parent campaign,
+-- in addition to candidate/application scope.
+drop policy if exists campaign_memberships_resource_read on public.campaign_memberships;
+create policy campaign_memberships_scoped_read on public.campaign_memberships
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and exists (
+    select 1 from public.recruitment_campaigns rc
+    where rc.id = campaign_memberships.campaign_id
+      and rc.organization_id = campaign_memberships.organization_id
+      and (
+        (rc.target_job_id is not null
+          and public.has_effective_org_permission(rc.organization_id, 'jobs.read')
+          and private.can_access_job(rc.target_job_id, rc.organization_id))
+        or (rc.target_job_id is null and rc.owner_user_id = auth.uid())
+      )
+  )
+  and (
+    (candidate_id is not null
+      and public.has_effective_org_permission(organization_id, 'candidates.read')
+      and private.can_access_candidate(candidate_id, organization_id))
+    or (application_id is not null
+      and public.has_effective_org_permission(organization_id, 'applications.read')
+      and private.can_access_application(application_id, organization_id))
+  )
+);
+
+drop policy if exists campaign_events_resource_read on public.campaign_events;
+create policy campaign_events_scoped_read on public.campaign_events
+for select to authenticated
+using (
+  public.is_org_member(organization_id)
+  and exists (
+    select 1 from public.recruitment_campaigns rc
+    where rc.id = campaign_events.campaign_id
+      and rc.organization_id = campaign_events.organization_id
+      and (
+        (rc.target_job_id is not null
+          and public.has_effective_org_permission(rc.organization_id, 'jobs.read')
+          and private.can_access_job(rc.target_job_id, rc.organization_id))
+        or (rc.target_job_id is null and rc.owner_user_id = auth.uid())
+      )
+  )
+  and (
+    (candidate_id is not null
+      and public.has_effective_org_permission(organization_id, 'candidates.read')
+      and private.can_access_candidate(candidate_id, organization_id))
+    or (application_id is not null
+      and public.has_effective_org_permission(organization_id, 'applications.read')
+      and private.can_access_application(application_id, organization_id))
+  )
+);
