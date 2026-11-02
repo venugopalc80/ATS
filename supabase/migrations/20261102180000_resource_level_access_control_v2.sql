@@ -207,7 +207,7 @@ language sql
 stable
 security definer
 set search_path = public
-as $
+as $$
   select public.has_organization_wide_access(target_org, target_user)
     or exists (
       select 1 from public.candidate_access_assignments ca
@@ -227,7 +227,7 @@ as $
           )
         )
     );
-$;
+$$;
 
 create or replace function public.can_access_application(target_application uuid, target_org uuid, target_user uuid default auth.uid())
 returns boolean
