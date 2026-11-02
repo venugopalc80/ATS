@@ -204,19 +204,40 @@ async def update_member_role(
                     "select id from public.organization_roles where id=%s and organization_id=%s and is_active=true and is_system=false",
                     [payload.custom_role_id, organization_id],
                 )
-                if cursor.fetchone() is None:
+                selected_role = cursor.fetchone()
+                if selected_role is None:
                     raise HTTPException(status_code=404, detail="Custom role not found")
+                selected_role_id = selected_role["id"]
+                role_value = str(payload.custom_role_id)
+            else:
+                cursor.execute(
+                    "select id from public.organization_roles where organization_id=%s and role_key=%s and is_active=true",
+                    [organization_id, payload.role],
+                )
+                selected_role = cursor.fetchone()
+                if selected_role is None:
+                    raise HTTPException(status_code=409, detail="The standard role template is not configured")
+                selected_role_id = selected_role["id"]
+                role_value = payload.role
+
+            if actor_role != "owner":
+                cursor.execute(
+                    "select permission_key from public.organization_role_permissions where role_id=%s and allowed=true",
+                    [selected_role_id],
+                )
+                for granted in cursor.fetchall():
+                    _assert_can_grant(user_id, organization_id, granted["permission_key"])
+
+            if payload.custom_role_id is not None:
                 cursor.execute(
                     "update public.organization_members set custom_role_id=%s where organization_id=%s and user_id=%s",
                     [payload.custom_role_id, organization_id, member_id],
                 )
-                role_value = str(payload.custom_role_id)
             else:
                 cursor.execute(
                     "update public.organization_members set role=%s, custom_role_id=null where organization_id=%s and user_id=%s",
                     [payload.role, organization_id, member_id],
                 )
-                role_value = payload.role
             _audit(cursor, organization_id, user_id, "member_role_updated", "organization_member", member_id,
                    {"previous_role": target["role"], "new_role": role_value})
     return {"status": "updated", "member_id": str(member_id), "role": role_value}
