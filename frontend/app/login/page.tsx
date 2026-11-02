@@ -14,7 +14,8 @@ export default function LoginPage() {
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [busy, setBusy] = useState(false);
-  const [resending, setResending] = useState(false);\n  const [resetMode, setResetMode] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resetMode, setResetMode] = useState(false);
   const [resendAvailableAt, setResendAvailableAt] = useState(0);
 
   async function submit(event: FormEvent) {
@@ -23,7 +24,12 @@ export default function LoginPage() {
     setMessage("");
 
     try {
-      if (mode === "signup") {
+      if (resetMode) {
+        const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin + "/reset-password" });
+        if (error) throw error;
+        setMessageType("success");
+        setMessage("If an account exists for this email, a password-reset link has been requested. Check your inbox and spam folder.");
+      } else if (mode === "signup") {
         const { data, error } = await supabase.auth.signUp({
           email,
           password,
@@ -56,7 +62,12 @@ export default function LoginPage() {
       setMessage("Enter your email address first, then request another confirmation email.");
       return;
     }
-    if (Date.now() < resendAvailableAt) {\n      const seconds = Math.ceil((resendAvailableAt - Date.now()) / 1000);\n      setMessageType("error");\n      setMessage(`Please wait ${seconds} seconds before requesting another email.`);\n      return;\n    }
+    if (Date.now() < resendAvailableAt) {
+      const seconds = Math.ceil((resendAvailableAt - Date.now()) / 1000);
+      setMessageType("error");
+      setMessage(`Please wait ${seconds} seconds before requesting another email.`);
+      return;
+    }
 
     setResending(true);
     setMessage("");
@@ -113,7 +124,7 @@ export default function LoginPage() {
         <form onSubmit={submit} className="auth-form">
           {!resetMode && mode === "signup" && <label>Full name<input required value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" /></label>}
           <label>Email<input required type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <label>
+          {!resetMode && <label>
             Password
             <span className="auth-password-control">
               <input required minLength={8} type={showPassword ? "text" : "password"} autoComplete={mode === "signin" ? "current-password" : "new-password"} value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -121,8 +132,8 @@ export default function LoginPage() {
                 {showPassword ? "Hide" : "Show"}
               </button>
             </span>
-          </label>
-          <button className="btn primary auth-submit" disabled={busy}>{busy ? "Please wait..." : mode === "signin" ? "Sign in" : "Create account"}</button>
+          </label>}
+          <button className="btn primary auth-submit" disabled={busy}>{busy ? "Please wait..." : resetMode ? "Send reset link" : mode === "signin" ? "Sign in" : "Create account"}</button>
         </form>
 
         {message && <div className={messageType === "error" ? "dashboard-error" : "notice"} role={messageType === "error" ? "alert" : "status"}>{message}</div>}
@@ -136,8 +147,9 @@ export default function LoginPage() {
           </div>
         )}
 
-        <button type="button" className="auth-switch" onClick={() => { setMode(mode === "signin" ? "signup" : "signin"); setMessage(""); setShowPassword(false); }}>
-          {mode === "signin" ? "Need an account? Create one" : "Already have an account? Sign in"}
+        {mode === "signin" && !resetMode && <button type="button" className="auth-switch" onClick={() => { setResetMode(true); setMessage(""); }}>Forgot password?</button>}
+        <button type="button" className="auth-switch" onClick={() => { if (resetMode) { setResetMode(false); setMode("signin"); } else { setMode(mode === "signin" ? "signup" : "signin"); } setMessage(""); setShowPassword(false); }}>
+          {resetMode ? "Back to sign in" : mode === "signin" ? "Need an account? Create one" : "Already have an account? Sign in"}
         </button>
       </section>
     </main>
