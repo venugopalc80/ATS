@@ -16,13 +16,13 @@ ALLOWED_INTERVIEW_TRANSITIONS = {
 
 
 class InterviewService:
-    async def list_interviews(self, organization_id: UUID, status: str | None = None):
-        query = f"select {COLUMNS} from public.interviews where organization_id=%s"
-        params: list[Any] = [organization_id]
+    async def list_interviews(self, organization_id: UUID, user_id: UUID, status: str | None = None):
+        query = f"select i.{COLUMNS.replace(', ', ', i.')} from public.interviews i where i.organization_id=%s and public.can_access_application(i.application_id, i.organization_id, %s)"
+        params: list[Any] = [organization_id, user_id]
         if status:
-            query += " and status=%s"
+            query += " and i.status=%s"
             params.append(status)
-        query += " order by scheduled_at asc"
+        query += " order by i.scheduled_at asc"
         with get_connection() as c:
             with c.cursor() as cur:
                 cur.execute(query, params)
