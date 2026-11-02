@@ -3,7 +3,7 @@
 -- organisation-wide access. Organisation-wide scope can be granted explicitly.
 
 -- Composite keys keep every assignment tenant-bound at the database level.
-do $
+do $$
 begin
   if not exists (select 1 from pg_constraint where conname = 'jobs_id_organization_unique') then
     alter table public.jobs add constraint jobs_id_organization_unique unique (id, organization_id);
@@ -14,7 +14,7 @@ begin
   if not exists (select 1 from pg_constraint where conname = 'candidates_id_organization_unique') then
     alter table public.candidates add constraint candidates_id_organization_unique unique (id, organization_id);
   end if;
-end $;
+end $$;
 
 create table if not exists public.organization_member_access_scopes (
     organization_id uuid not null references public.organizations(id) on delete cascade,
