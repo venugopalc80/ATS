@@ -94,7 +94,38 @@ async def get_organisation_permissions(
                 [organization_id],
             )
             roles = list(cursor.fetchall())
-    return {"permissions": catalog, "roles": roles}
+            cursor.execute(
+                """
+                select m.user_id, p.email, p.full_name, m.role, m.custom_role_id,
+                       custom_role.name as custom_role_name,
+                       coalesce(
+                         jsonb_object_agg(
+                           overrides.permission_key,
+                           jsonb_build_object(
+                             'effect', overrides.effect,
+                             'reason', overrides.reason,
+                             'expires_at', overrides.expires_at
+                           )
+                         ) filter (where overrides.permission_key is not null),
+                         '{}'::jsonb
+                       ) as overrides
+                from public.organization_members m
+                left join public.profiles p on p.id = m.user_id
+                left join public.organization_roles custom_role
+                  on custom_role.id = m.custom_role_id
+                 and custom_role.organization_id = m.organization_id
+                left join public.organization_member_permission_overrides overrides
+                  on overrides.organization_id = m.organization_id
+                 and overrides.user_id = m.user_id
+                 and (overrides.expires_at is null or overrides.expires_at > now())
+                where m.organization_id = %s
+                group by m.user_id, p.email, p.full_name, m.role, m.custom_role_id, custom_role.name
+                order by p.full_name nulls last, p.email
+                """,
+                [organization_id],
+            )
+            members = list(cursor.fetchall())
+    return {"permissions": catalog, "roles": roles, "members": members}
 
 
 @router.post("/{organization_id}/roles", status_code=201)
