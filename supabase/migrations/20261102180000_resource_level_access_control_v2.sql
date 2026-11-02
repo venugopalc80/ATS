@@ -940,3 +940,29 @@ using (public.is_org_member(organization_id)
 -- Keep the table fail-closed under RLS and remove direct Data API table privileges
 -- from public client roles. The service_role retains its existing operational grants.
 revoke all privileges on table public.recovery_drills from public, anon, authenticated;
+
+-- AI execution payloads and recommendations can contain candidate personal data.
+-- Keep these records fail-closed until their APIs enforce per-resource access.
+drop policy if exists ai_runs_member_read on public.ai_runs;
+drop policy if exists ai_recommendations_member_read on public.ai_recommendations;
+
+-- AI use-case configuration is organisation-level control-plane data.
+drop policy if exists ai_use_cases_member_read on public.ai_use_cases;
+create policy ai_use_cases_configure_read on public.ai_use_cases
+for select to authenticated
+using (
+  public.has_effective_org_permission(organization_id, 'ai.configure')
+);
+
+-- Audit history is sensitive. The currently implemented API reads application
+-- audit records only, so expose only those records and require both the audit
+-- permission and access to the referenced application. Unknown entity types
+-- remain inaccessible through the Data API.
+drop policy if exists audit_member_read on public.audit_events;
+create policy audit_application_resource_read on public.audit_events
+for select to authenticated
+using (
+  entity_type = 'application'
+  and public.has_effective_org_permission(organization_id, 'organization.audit.read')
+  and private.can_access_application(organization_id, entity_id, auth.uid())
+);
