@@ -12,6 +12,7 @@ from uuid import uuid4
 from fastapi import HTTPException
 
 from app.auth import assert_org_permission, has_org_permission
+from app.routers.permissions import _assert_can_grant
 
 
 class FakeCursor:
@@ -105,6 +106,35 @@ class PermissionResolverTests(unittest.TestCase):
                 assert_org_permission(user_id, organization_id, "jobs.delete")
         self.assertEqual(caught.exception.status_code, 403)
 
+
+
+class PermissionGrantGuardTests(unittest.TestCase):
+    def test_admin_cannot_grant_permission_they_do_not_hold(self):
+        user_id, organization_id = uuid4(), uuid4()
+        with patch("app.routers.permissions.get_org_role", return_value="admin"), \\
+             patch("app.routers.permissions.has_org_permission", return_value=False):
+            with self.assertRaises(HTTPException) as caught:
+                _assert_can_grant(user_id, organization_id, "billing.manage")
+        self.assertEqual(caught.exception.status_code, 403)
+
+    def test_admin_cannot_grant_ownership_transfer_even_if_permission_check_is_true(self):
+        user_id, organization_id = uuid4(), uuid4()
+        with patch("app.routers.permissions.get_org_role", return_value="admin"), \\
+             patch("app.routers.permissions.has_org_permission", return_value=True):
+            with self.assertRaises(HTTPException) as caught:
+                _assert_can_grant(user_id, organization_id, "ownership.transfer")
+        self.assertEqual(caught.exception.status_code, 403)
+
+    def test_admin_can_grant_a_permission_they_already_hold(self):
+        user_id, organization_id = uuid4(), uuid4()
+        with patch("app.routers.permissions.get_org_role", return_value="admin"), \\
+             patch("app.routers.permissions.has_org_permission", return_value=True):
+            _assert_can_grant(user_id, organization_id, "candidates.read")
+
+    def test_owner_can_grant_permissions(self):
+        user_id, organization_id = uuid4(), uuid4()
+        with patch("app.routers.permissions.get_org_role", return_value="owner"):
+            _assert_can_grant(user_id, organization_id, "ownership.transfer")
 
 if __name__ == "__main__":
     unittest.main()
