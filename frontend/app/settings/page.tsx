@@ -7,6 +7,10 @@ import { getActiveOrganizationId } from "@/lib/organization";
 
 type Organization = { id: string; name: string; timezone: string; role: string };
 type Invitation = { id: string; email: string; role: string; expires_at: string; created_at: string };
+type Permission = { permission_key: string; category: string; label: string; description: string; sensitive: boolean };
+type RoleTemplate = { id: string; role_key: string; name: string; description: string | null; is_system: boolean; is_active: boolean; permissions: Record<string, boolean> };
+type TeamMember = { user_id: string; email: string | null; full_name: string | null; role: string; custom_role_id: string | null; custom_role_name: string | null; overrides: Record<string, { effect: "allow" | "deny"; reason?: string | null; expires_at?: string | null }> };
+type PermissionData = { permissions: Permission[]; roles: RoleTemplate[]; members: TeamMember[] };
 const timezones = [
   ["Europe/London", "Europe/London (UK)"],
   ["America/New_York", "America/New_York (US Eastern)"],
@@ -33,6 +37,19 @@ export default function SettingsPage() {
   const [inviteMessage, setInviteMessage] = useState("");
   const [inviteError, setInviteError] = useState("");
   const [inviteLink, setInviteLink] = useState("");
+  const [permissionData, setPermissionData] = useState<PermissionData | null>(null);
+  const [selectedRoleId, setSelectedRoleId] = useState("");
+  const [permissionSaving, setPermissionSaving] = useState(false);
+  const [permissionMessage, setPermissionMessage] = useState("");
+  const [permissionError, setPermissionError] = useState("");
+  const [newRoleName, setNewRoleName] = useState("");
+  const [newRoleDescription, setNewRoleDescription] = useState("");
+  const [roleCreating, setRoleCreating] = useState(false);
+  const [selectedMemberId, setSelectedMemberId] = useState("");
+  const [selectedMemberRole, setSelectedMemberRole] = useState("");
+  const [selectedPermissionKey, setSelectedPermissionKey] = useState("");
+  const [overrideEffect, setOverrideEffect] = useState<"allow" | "deny" | "inherit">("inherit");
+  const [overrideReason, setOverrideReason] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -58,6 +75,18 @@ export default function SettingsPage() {
               const inviteData = await inviteResponse.json();
               setInvitations(inviteData.invitations || []);
             }
+          }
+          const permissionResponse = await apiFetch(API_BASE + "/api/organizations/" + active.id + "/permissions");
+          if (permissionResponse.ok) {
+            const permissionResult = await permissionResponse.json() as PermissionData;
+            setPermissionData(permissionResult);
+            const initialRole = permissionResult.roles.find((role) => role.role_key === "recruiter") || permissionResult.roles[0];
+            if (initialRole) setSelectedRoleId(initialRole.id);
+            if (permissionResult.members[0]) {
+              setSelectedMemberId(permissionResult.members[0].user_id);
+              setSelectedMemberRole(permissionResult.members[0].custom_role_id || permissionResult.members[0].role);
+            }
+            if (permissionResult.permissions[0]) setSelectedPermissionKey(permissionResult.permissions[0].permission_key);
           }
         }
       } catch (cause) {
@@ -96,6 +125,85 @@ export default function SettingsPage() {
   }
 
   const canEdit = organization?.role === "owner" || organization?.role === "admin";
+  const selectedRole = permissionData?.roles.find((role) => role.id === selectedRoleId) || null;
+  const selectedMember = permissionData?.members.find((member) => member.user_id === selectedMemberId) || null;
+
+  async function saveRolePermissions() {
+    if (!organization || !selectedRole) return;
+    setPermissionSaving(true); setPermissionMessage(""); setPermissionError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/roles/" + selectedRole.id + "/permissions", {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ permissions: selectedRole.permissions }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Unable to save role permissions.");
+      setPermissionMessage("Permissions saved for " + selectedRole.name + ".");
+    } catch (cause) {
+      setPermissionError(cause instanceof Error ? cause.message : "Unable to save permissions.");
+    } finally { setPermissionSaving(false); }
+  }
+
+  async function createCustomRole(event: FormEvent) {
+    event.preventDefault();
+    if (!organization) return;
+    setRoleCreating(true); setPermissionMessage(""); setPermissionError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/roles", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: newRoleName, description: newRoleDescription || null }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Unable to create custom role.");
+      const refreshed = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/permissions");
+      if (refreshed.ok) {
+        const data = await refreshed.json() as PermissionData;
+        setPermissionData(data);
+        setSelectedRoleId(body.role.id);
+      }
+      setNewRoleName(""); setNewRoleDescription("");
+      setPermissionMessage("Custom role created. Configure its permissions before assigning it.");
+    } catch (cause) {
+      setPermissionError(cause instanceof Error ? cause.message : "Unable to create custom role.");
+    } finally { setRoleCreating(false); }
+  }
+
+  async function saveMemberRole() {
+    if (!organization || !selectedMember) return;
+    setPermissionSaving(true); setPermissionMessage(""); setPermissionError("");
+    try {
+      const custom = selectedMemberRole.startsWith("custom:");
+      const response = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/members/" + selectedMember.user_id + "/role", {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(custom ? { custom_role_id: selectedMemberRole.slice(7) } : { role: selectedMemberRole }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Unable to update member role.");
+      const refreshed = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/permissions");
+      if (refreshed.ok) setPermissionData(await refreshed.json() as PermissionData);
+      setPermissionMessage("Team member role updated.");
+    } catch (cause) {
+      setPermissionError(cause instanceof Error ? cause.message : "Unable to update member role.");
+    } finally { setPermissionSaving(false); }
+  }
+
+  async function saveMemberOverride() {
+    if (!organization || !selectedMember || !selectedPermissionKey) return;
+    setPermissionSaving(true); setPermissionMessage(""); setPermissionError("");
+    try {
+      const response = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/members/" + selectedMember.user_id + "/permissions/" + encodeURIComponent(selectedPermissionKey), {
+        method: "PUT", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ effect: overrideEffect, reason: overrideReason || null }),
+      });
+      const body = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(body?.detail || "Unable to update member permission.");
+      const refreshed = await apiFetch(API_BASE + "/api/organizations/" + organization.id + "/permissions");
+      if (refreshed.ok) setPermissionData(await refreshed.json() as PermissionData);
+      setPermissionMessage("Individual permission updated.");
+    } catch (cause) {
+      setPermissionError(cause instanceof Error ? cause.message : "Unable to update member permission.");
+    } finally { setPermissionSaving(false); }
+  }
 
   async function sendInvitation(event: FormEvent) {
     event.preventDefault();
@@ -195,6 +303,85 @@ export default function SettingsPage() {
                     ))}
                   </div>
                 )}
+              </div>
+            </section>
+          )}
+          {organization && permissionData && (
+            <section className="card" style={{ maxWidth: 1100, marginTop: 20 }}>
+              <div className="card-head"><span className="card-title">Roles & permissions</span><span className="badge blue">Granular access control</span></div>
+              <p className="muted-small" style={{ lineHeight: 1.6 }}>Configure organisation-wide role templates, create custom roles, and grant or revoke individual permissions. Changes are recorded in the audit history.</p>
+              {permissionMessage && <p className="notice" role="status">{permissionMessage}</p>}
+              {permissionError && <p className="dashboard-error" role="alert">{permissionError}</p>}
+              <div style={{ display: "grid", gridTemplateColumns: "minmax(220px, 280px) minmax(0, 1fr)", gap: 20, marginTop: 18 }}>
+                <div style={{ display: "grid", alignContent: "start", gap: 12 }}>
+                  <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Role template
+                    <select className="filter" value={selectedRoleId} onChange={(event) => setSelectedRoleId(event.target.value)}>
+                      {permissionData.roles.map((role) => <option key={role.id} value={role.id}>{role.name}{role.is_system ? " · Standard" : " · Custom"}</option>)}
+                    </select>
+                  </label>
+                  {selectedRole && <div className="muted-small">{selectedRole.description || "Custom organisation role"}</div>}
+                  <form onSubmit={createCustomRole} style={{ display: "grid", gap: 8, borderTop: "1px solid var(--border, #e5e7eb)", paddingTop: 14 }}>
+                    <strong style={{ fontSize: 14 }}>Create custom role</strong>
+                    <input className="filter" required minLength={2} maxLength={80} value={newRoleName} onChange={(event) => setNewRoleName(event.target.value)} placeholder="e.g. Senior Recruiter" />
+                    <input className="filter" maxLength={300} value={newRoleDescription} onChange={(event) => setNewRoleDescription(event.target.value)} placeholder="Short description (optional)" />
+                    <button className="btn" disabled={roleCreating}>{roleCreating ? "Creating…" : "Create role"}</button>
+                  </form>
+                </div>
+                <div>
+                  {selectedRole && <div style={{ display: "grid", gap: 8 }}>
+                    {permissionData.permissions.map((permission) => (
+                      <label key={permission.permission_key} style={{ display: "flex", gap: 10, alignItems: "flex-start", padding: "9px 0", borderBottom: "1px solid var(--border, #e5e7eb)", fontSize: 13 }}>
+                        <input type="checkbox" checked={Boolean(selectedRole.permissions[permission.permission_key])} disabled={selectedRole.role_key === "owner" || selectedRole.role_key === "admin" && organization.role !== "owner"} onChange={(event) => setPermissionData((current) => current ? ({ ...current, roles: current.roles.map((role) => role.id === selectedRole.id ? { ...role, permissions: { ...role.permissions, [permission.permission_key]: event.target.checked } } : role) }) : current)} />
+                        <span style={{ display: "grid", gap: 2 }}><strong>{permission.label}{permission.sensitive ? " · Sensitive" : ""}</strong><span className="muted-small">{permission.description}</span><span className="muted-small">{permission.category}</span></span>
+                      </label>
+                    ))}
+                    <div className="modal-actions" style={{ justifyContent: "flex-start" }}>
+                      <button className="btn primary" disabled={permissionSaving || selectedRole.role_key === "owner" || selectedRole.role_key === "admin" && organization.role !== "owner"} onClick={saveRolePermissions}>{permissionSaving ? "Saving…" : "Save role permissions"}</button>
+                    </div>
+                  </div>}
+                </div>
+              </div>
+              <div style={{ borderTop: "1px solid var(--border, #e5e7eb)", marginTop: 24, paddingTop: 18 }}>
+                <strong>Team member access</strong>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 12 }}>
+                  <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Team member
+                    <select className="filter" value={selectedMemberId} onChange={(event) => {
+                      setSelectedMemberId(event.target.value);
+                      const member = permissionData.members.find((item) => item.user_id === event.target.value);
+                      setSelectedMemberRole(member?.custom_role_id ? "custom:" + member.custom_role_id : member?.role || "");
+                    }}>
+                      {permissionData.members.map((member) => <option key={member.user_id} value={member.user_id}>{member.full_name || member.email || member.user_id}{member.role === "owner" ? " · Owner" : ""}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Assigned role
+                    <select className="filter" value={selectedMemberRole} onChange={(event) => setSelectedMemberRole(event.target.value)} disabled={selectedMember?.role === "owner"}>
+                      <optgroup label="Standard roles">
+                        {["admin", "recruiter", "hiring_manager", "viewer"].map((role) => <option key={role} value={role}>{role.replace("_", " ")}</option>)}
+                      </optgroup>
+                      <optgroup label="Custom roles">
+                        {permissionData.roles.filter((role) => !role.is_system).map((role) => <option key={role.id} value={"custom:" + role.id}>{role.name}</option>)}
+                      </optgroup>
+                    </select>
+                  </label>
+                  <div style={{ display: "flex", alignItems: "end" }}><button className="btn" disabled={permissionSaving || !selectedMember || selectedMember.role === "owner"} onClick={saveMemberRole}>Update role</button></div>
+                </div>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(220px, 1fr))", gap: 12, marginTop: 16 }}>
+                  <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Permission
+                    <select className="filter" value={selectedPermissionKey} onChange={(event) => setSelectedPermissionKey(event.target.value)}>
+                      {permissionData.permissions.map((permission) => <option key={permission.permission_key} value={permission.permission_key}>{permission.label}</option>)}
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Individual override
+                    <select className="filter" value={overrideEffect} onChange={(event) => setOverrideEffect(event.target.value as "allow" | "deny" | "inherit")}>
+                      <option value="inherit">Use role default</option><option value="allow">Grant access</option><option value="deny">Deny access</option>
+                    </select>
+                  </label>
+                  <label style={{ display: "grid", gap: 7, fontSize: 13, fontWeight: 650 }}>Reason (optional)
+                    <input className="filter" maxLength={500} value={overrideReason} onChange={(event) => setOverrideReason(event.target.value)} placeholder="Why is this access changing?" />
+                  </label>
+                  <div style={{ display: "flex", alignItems: "end" }}><button className="btn primary" disabled={permissionSaving || !selectedMember || selectedMember.role === "owner"} onClick={saveMemberOverride}>Save individual access</button></div>
+                </div>
+                {selectedMember && <p className="muted-small" style={{ marginTop: 12 }}>Current overrides: {Object.keys(selectedMember.overrides || {}).length}. Active overrides take precedence over the role template. The Owner's access cannot be overridden.</p>}
               </div>
             </section>
           )}
