@@ -9,9 +9,12 @@ CLIENT_COLUMNS = """
 """
 
 class ClientService:
-    async def list_clients(self, organization_id: UUID, status: str | None = None, search: str | None = None) -> list[dict[str, Any]]:
+    async def list_clients(self, organization_id: UUID, status: str | None = None, search: str | None = None, user_id: UUID | None = None) -> list[dict[str, Any]]:
         query = f"select {CLIENT_COLUMNS} from public.clients where organization_id = %s"
         params: list[Any] = [organization_id]
+        if user_id is not None:
+            query += " and public.can_access_client(id, organization_id, %s)"
+            params.append(user_id)
         if status:
             query += " and status = %s"
             params.append(status)
