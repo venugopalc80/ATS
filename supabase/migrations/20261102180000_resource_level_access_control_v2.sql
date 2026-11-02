@@ -1127,3 +1127,21 @@ using (
       and private.can_access_application(application_id, organization_id))
   )
 );
+
+
+-- Campaign rows may expose both candidate_id and application_id. Require access to every populated reference, not merely either one.
+drop policy if exists campaign_memberships_scoped_read on public.campaign_memberships;
+create policy campaign_memberships_scoped_read on public.campaign_memberships for select to authenticated using (
+ public.is_org_member(organization_id)
+ and exists (select 1 from public.recruitment_campaigns rc where rc.id=campaign_memberships.campaign_id and rc.organization_id=campaign_memberships.organization_id and ((rc.target_job_id is not null and public.has_effective_org_permission(rc.organization_id,'jobs.read') and private.can_access_job(rc.target_job_id,rc.organization_id)) or (rc.target_job_id is null and rc.owner_user_id=auth.uid())))
+ and (candidate_id is not null or application_id is not null)
+ and (candidate_id is null or (public.has_effective_org_permission(organization_id,'candidates.read') and private.can_access_candidate(candidate_id,organization_id)))
+ and (application_id is null or (public.has_effective_org_permission(organization_id,'applications.read') and private.can_access_application(application_id,organization_id))));
+
+drop policy if exists campaign_events_scoped_read on public.campaign_events;
+create policy campaign_events_scoped_read on public.campaign_events for select to authenticated using (
+ public.is_org_member(organization_id)
+ and exists (select 1 from public.recruitment_campaigns rc where rc.id=campaign_events.campaign_id and rc.organization_id=campaign_events.organization_id and ((rc.target_job_id is not null and public.has_effective_org_permission(rc.organization_id,'jobs.read') and private.can_access_job(rc.target_job_id,rc.organization_id)) or (rc.target_job_id is null and rc.owner_user_id=auth.uid())))
+ and (candidate_id is not null or application_id is not null)
+ and (candidate_id is null or (public.has_effective_org_permission(organization_id,'candidates.read') and private.can_access_candidate(candidate_id,organization_id)))
+ and (application_id is null or (public.has_effective_org_permission(organization_id,'applications.read') and private.can_access_application(application_id,organization_id))));
