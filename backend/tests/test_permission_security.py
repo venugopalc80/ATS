@@ -5,6 +5,7 @@ HTTP behaviour and the SQL scope/precedence contract; staging integration tests
 are still required to validate the live database policies and joins.
 """
 import unittest
+import asyncio
 from contextlib import contextmanager
 from unittest.mock import patch
 from uuid import uuid4
@@ -13,6 +14,9 @@ from fastapi import HTTPException
 
 from app.auth import assert_org_permission, has_org_permission, has_resource_access, assert_resource_access
 from app.routers.permissions import _assert_can_grant, _assert_team_manager
+from app.services.interview_service import InterviewService
+from app.services.offer_service import list_offers
+from app.services.placement_service import list_placements
 
 
 class FakeCursor:
@@ -33,6 +37,9 @@ class FakeCursor:
 
     def fetchone(self):
         return self.row
+
+    def fetchall(self):
+        return []
 
 
 class FakeConnection:
@@ -179,6 +186,56 @@ class TeamManagementGuardTests(unittest.TestCase):
         with patch("app.routers.permissions.assert_org_permission") as permission_check:
             _assert_team_manager(user_id, organization_id)
         permission_check.assert_called_once_with(user_id, organization_id, "team.manage_roles")
+
+
+class ResourceScopedListQueryTests(unittest.TestCase):
+    def _connection(self):
+        connection = FakeConnection(None)
+        @contextmanager
+        def fake_connection():
+            yield connection
+        return connection, fake_connection
+
+    def test_interview_list_is_filtered_by_application_access(self):
+        organization_id, user_id = uuid4(), uuid4()
+        connection, fake_connection = self._connection()
+        with patch("app.services.interview_service.get_connection", fake_connection):
+            asyncio.run(InterviewService().list_interviews(organization_id, user_id))
+        self.assertIn("public.can_access_application", connection.cursor_instance.sql)
+        self.assertEqual(connection.cursor_instance.params, [organization_id, user_id])
+
+    def test_offer_list_is_filtered_by_application_access(self):
+        organization_id, user_id = uuid4(), uuid4()
+        connection, fake_connection = self._connection()
+        with patch("app.services.offer_service.get_connection", fake_connection):
+            list_offers(organization_id, user_id)
+        self.assertIn("public.can_access_application", connection.cursor_instance.sql)
+        self.assertEqual(connection.cursor_instance.params, [organization_id, user_id])
+
+    def test_placement_list_is_filtered_by_application_access(self):
+        organization_id, user_id = uuid4(), uuid4()
+        connection, fake_connection = self._connection()
+        with patch("app.services.placement_service.get_connection", fake_connection):
+            list_placements(organization_id, user_id)
+        self.assertIn("public.can_access_application", connection.cursor_instance.sql)
+        self.assertEqual(connection.cursor_instance.params, [organization_id, user_id])
+
+
+class ApplicationAssignmentBoundaryTests(unittest.TestCase):
+    def test_candidate_assignment_does_not_grant_all_application_access(self):
+        from pathlib import Path
+        migration = (
+            Path(__file__).resolve().parents[2]
+            / "supabase"
+            / "migrations"
+            / "20261102180000_resource_level_access_control_v2.sql"
+        ).read_text()
+        start = migration.index("create or replace function public.can_access_application")
+        end = migration.index("$;", start)
+        function_sql = migration[start:end]
+        self.assertIn("public.application_access_assignments", function_sql)
+        self.assertIn("public.can_access_job", function_sql)
+        self.assertNotIn("public.can_access_candidate", function_sql)
 
 
 if __name__ == "__main__":
