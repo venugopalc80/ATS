@@ -335,3 +335,14 @@ h1 { margin: 5px 0 6px; font-size: 28px; letter-spacing: -.7px; } .subtitle { co
  .dashboard-task-row { align-items:flex-start; flex-wrap:wrap; }
  .dashboard-task-copy { flex-basis:100%; }
 }
+
+
+.dashboard-task-edit-form { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:10px; width:100%; padding:4px 0; }
+.dashboard-task-edit-form label { display:grid; gap:5px; min-width:0; color:var(--muted); font-size:11px; font-weight:650; }
+.dashboard-task-edit-form input,.dashboard-task-edit-form select,.dashboard-task-edit-form textarea { width:100%; min-width:0; border:1px solid var(--line); border-radius:8px; background:#fff; padding:8px 10px; color:var(--ink); font:inherit; font-size:13px; }
+.dashboard-task-edit-form textarea { resize:vertical; }
+.dashboard-task-edit-actions { display:flex; align-items:center; gap:8px; grid-column:1 / -1; }
+@media (max-width:650px) {
+ .dashboard-task-edit-form { grid-template-columns:1fr; }
+ .dashboard-task-edit-actions { flex-wrap:wrap; }
+}
