@@ -393,7 +393,7 @@ export default function JobsPage() {
         <section className="content">
           <div className="header-row">
             <div><div className="eyebrow">Recruitment operations</div><h1>Jobs</h1><p className="subtitle">Manage requisitions, hiring requirements and recruitment status.</p></div>
-            <button className="btn primary" onClick={openCreate}>+ New requisition</button>
+            <div className="actions"><Link className="btn" href="/forms">Application forms</Link><button className="btn primary" onClick={openCreate}>+ New requisition</button></div>
           </div>
 
           <div className="card" style={{ marginBottom: 18 }}>
