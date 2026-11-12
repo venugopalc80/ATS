@@ -15,14 +15,8 @@ Confirm these are configured for **Production** and Preview as appropriate:
 
 - `NEXT_PUBLIC_SITE_URL=https://aqerith.com`
 - `NEXT_PUBLIC_API_URL=https://ats-mu-azure.vercel.app`
-- `NEXT_PUBLIC_ORGANIZATION_ID=<the organisation UUID used for the public careers feed>`
-- `NEXT_PUBLIC_JOB_POSTING_ORGANIZATION_NAME=<actual hiring organisation name>`
-- `NEXT_PUBLIC_JOB_POSTING_ORGANIZATION_URL=<official hiring organisation website>` (optional)
-- `NEXT_PUBLIC_JOB_POSTING_SALARY_UNIT=YEAR` only if salary values are annual; otherwise set the correct Schema.org unit supported by the implementation.
 
-**Important:** the current public careers configuration reads one organisation UUID from the environment. Before opening this feature to multiple AQERITH customer organisations, public job URLs and the hiring organisation must become tenant-aware; do not expose a customer’s vacancies by changing a public query parameter alone.
-
-The structured-data organisation name must identify the real hiring organisation. Use `Confidential` only for genuinely confidential/anonymous employers, not as a universal default. The current implementation uses a configurable value because the public job API does not yet expose the employer’s display name.
+Public job endpoints now resolve the tenant from the stored job record and expose only jobs with an explicit `careers` or `google` distribution selection. The public job detail response includes the linked client name and website when available. When no hiring organisation is linked, the structured data uses `Confidential`; use this only for genuinely confidential vacancies. Salary structured data is intentionally omitted until AQERITH stores a reliable salary pay period, so the platform does not falsely label hourly or monthly salary as annual.
 
 ## Google setup checklist
 
@@ -35,13 +29,13 @@ The structured-data organisation name must identify the real hiring organisation
 
 ## Indexing API credentials and automatic notifications
 
-The backend includes a best-effort notification service. When enabled, creating an open job or updating an open job queues `URL_UPDATED`; moving an open job out of the open state or deleting an open job queues `URL_DELETED`. Notifications run after the API response in a FastAPI background task and failures are logged without failing the ATS job operation. This is a lightweight first implementation, not a durable retry queue.
+The backend includes a best-effort notification service. When enabled, creating an open job or updating an open job queues `URL_UPDATED` only if the job is explicitly selected for Google. Moving a Google-selected open job out of the open state or deleting it queues `URL_DELETED`. Notifications run after the API response in a FastAPI background task and failures are logged without failing the ATS job operation. This is a lightweight first implementation, not a durable retry queue.
 
 Set these **backend-only** Vercel environment variables after completing Google's setup:
 
 - `GOOGLE_INDEXING_ENABLED=true`
 - `GOOGLE_INDEXING_SERVICE_ACCOUNT_JSON=<complete service-account JSON contents>`
-- `NEXT_PUBLIC_SITE_URL=https://aqerith.com` (used by the backend helper to form canonical URLs; ensure it is set in the backend project too)
+- `PUBLIC_SITE_URL=https://aqerith.com` (used by the backend helper to form canonical URLs)
 
 Keep the service-account JSON private; do not commit it to GitHub or use a `NEXT_PUBLIC_` prefix for the credentials.
 

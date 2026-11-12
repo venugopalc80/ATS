@@ -3,7 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
 
 from app.auth import assert_org_member, get_current_user_id
-from app.db import DatabaseConfigurationError, DatabaseConnectionError
+from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 from app.schemas.jobs import JobCreate, JobOut, JobUpdate
 from app.services.google_indexing import notify_google_indexing
 from app.services.job_service import JobService
@@ -95,9 +95,22 @@ async def delete_job(
         if existing is None:
             raise HTTPException(status_code=404, detail="Job not found")
         assert_org_member(user_id, existing["organization_id"])
+        google_selected = False
+        if existing.get("status") == "open":
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """select selected from public.job_distribution_channels
+                           where organization_id = %s and job_id = %s and channel_id = 'google'""",
+                        [existing["organization_id"], job_id],
+                    )
+                    distribution = cursor.fetchone()
+                    google_selected = bool(distribution and distribution["selected"])
         deleted = await service.delete_job(job_id)
-        if deleted and existing.get("status") == "open":
-            background_tasks.add_task(notify_google_indexing, str(job_id), "URL_DELETED")
+        if deleted and google_selected:
+            background_tasks.add_task(
+                notify_google_indexing, str(job_id), "URL_DELETED", True
+            )
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
     if not deleted:
