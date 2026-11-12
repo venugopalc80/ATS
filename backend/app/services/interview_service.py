@@ -4,7 +4,7 @@ from uuid import UUID
 from app.db import get_connection
 from app.schemas.interviews import InterviewCreate, InterviewUpdate
 
-COLUMNS = "id, organization_id, application_id, scheduled_at, duration_minutes, interview_type, location, interviewer_ids, status, notes, feedback, outcome, created_by, created_at, updated_at"
+COLUMNS = "id, organization_id, application_id, scheduled_at, duration_minutes, interview_type, location, interviewer_ids, status, notes, feedback, outcome, feedback_author_id, feedback_at, created_by, created_at, updated_at"
 
 ALLOWED_INTERVIEW_TRANSITIONS = {
     "scheduled": {"completed", "cancelled", "rescheduled", "no_show"},
@@ -60,7 +60,11 @@ class InterviewService:
 
         with get_connection() as c:
             with c.cursor() as cur:
-                cur.execute("select status from public.interviews where id=%s", [interview_id])
+                # Lock the row while validating the transition and attributing feedback.
+                cur.execute(
+                    "select status, feedback from public.interviews where id=%s for update",
+                    [interview_id],
+                )
                 existing = cur.fetchone()
                 if existing is None:
                     return None
@@ -74,12 +78,28 @@ class InterviewService:
                     ):
                         raise ValueError("Invalid interview status transition")
 
+                # Only a change to the feedback text updates its author/timestamp.
+                # Clearing feedback clears attribution; an unchanged feedback value
+                # preserves the original author and timestamp.
+                if "feedback" in d and d["feedback"] != existing.get("feedback"):
+                    has_feedback = bool(d["feedback"] and d["feedback"].strip())
+                    d["feedback_author_id"] = actor_user_id if has_feedback else None
+                    d["feedback_at"] = has_feedback
+
                 cur.execute(
                     "select set_config('app.actor_user_id', %s, true)",
                     [str(actor_user_id)],
                 )
+                assignments = []
+                params = []
+                for key, value in d.items():
+                    if key == "feedback_at":
+                        assignments.append("feedback_at=now()" if value else "feedback_at=NULL")
+                    else:
+                        assignments.append(f"{key}=%s")
+                        params.append(value)
                 cur.execute(
-                    f"update public.interviews set {','.join(f'{k}=%s' for k in d)},updated_at=now() where id=%s returning {COLUMNS}",
-                    list(d.values()) + [interview_id],
+                    f"update public.interviews set {','.join(assignments)},updated_at=now() where id=%s returning {COLUMNS}",
+                    params + [interview_id],
                 )
                 return cur.fetchone()
