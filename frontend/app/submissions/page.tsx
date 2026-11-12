@@ -10,7 +10,7 @@ const DEFAULT_ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
 type Job = { id: string; title: string; status: string };
 type Candidate = { id: string; first_name: string; last_name?: string | null; email?: string | null; phone?: string | null; city?: string | null; region?: string | null; current_title?: string | null };
-type ApplicationStatus = "new" | "screening" | "submitted" | "interview" | "offer" | "hired" | "rejected" | "withdrawn";
+type ApplicationStatus = "new" | "screening" | "shortlisted" | "submitted" | "interview" | "assessment" | "offer" | "hired" | "rejected" | "withdrawn";
 type Application = {
   id: string;
   job_id: string;
@@ -22,18 +22,14 @@ type Application = {
   created_at: string;
 };
 
-const statuses: ApplicationStatus[] = ["new", "screening", "submitted", "interview", "offer", "hired", "rejected", "withdrawn"];
-const boardStatuses: ApplicationStatus[] = ["new", "screening", "submitted", "interview", "offer", "hired"];
-
-const allowedTransitions: Record<ApplicationStatus, ApplicationStatus[]> = {
-  new: ["screening", "rejected", "withdrawn"],
-  screening: ["submitted", "rejected", "withdrawn"],
-  submitted: ["interview", "rejected", "withdrawn"],
-  interview: ["offer", "rejected", "withdrawn"],
-  offer: ["hired", "rejected", "withdrawn"],
-  hired: [],
-  rejected: [],
-  withdrawn: [],
+type ApplicationStageConfig = {
+  organization_id: string;
+  stage_key: ApplicationStatus;
+  label: string;
+  display_order: number;
+  allowed_next_stages: ApplicationStatus[];
+  is_terminal: boolean;
+  enabled: boolean;
 };
 
 function candidateName(candidate?: Candidate) {
@@ -44,6 +40,7 @@ export default function SubmissionsPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [candidates, setCandidates] = useState<Candidate[]>([]);
+  const [stages, setStages] = useState<ApplicationStageConfig[]>([]);
   const [status, setStatus] = useState<"all" | ApplicationStatus>("all");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [query, setQuery] = useState("");
@@ -61,13 +58,19 @@ export default function SubmissionsPage() {
   const [selectedCandidate, setSelectedCandidate] = useState("");
   const [source, setSource] = useState("Direct");
   const [saving, setSaving] = useState(false);
+  const [selectedApplicationIds, setSelectedApplicationIds] = useState<string[]>([]);
+  const [bulkStatus, setBulkStatus] = useState<ApplicationStatus | "">("");
+  const [bulkSaving, setBulkSaving] = useState(false);
+  const [bulkFailures, setBulkFailures] = useState<Array<{ application_id: string; error: string }>>([]);
 
   const jobMap = useMemo(() => new Map(jobs.map((job) => [job.id, job])), [jobs]);
   const candidateMap = useMemo(() => new Map(candidates.map((candidate) => [candidate.id, candidate])), [candidates]);
+  const stageMap = useMemo(() => new Map(stages.map((stage) => [stage.stage_key, stage])), [stages]);
+  const stageLabel = (value: ApplicationStatus) => stageMap.get(value)?.label ?? value.replaceAll("_", " ");
 
   useEffect(() => {
     const requestedStatus = new URLSearchParams(window.location.search).get("status");
-    if (requestedStatus && ["new", "screening", "submitted", "interview", "offer", "hired", "rejected", "withdrawn"].includes(requestedStatus)) {
+    if (requestedStatus && ["new", "screening", "shortlisted", "submitted", "interview", "assessment", "offer", "hired", "rejected", "withdrawn"].includes(requestedStatus)) {
       setStatus(requestedStatus as ApplicationStatus);
     }
   }, []);
@@ -86,15 +89,17 @@ export default function SubmissionsPage() {
       }
       try {
         const org = encodeURIComponent(organizationId);
-        const [apps, jobResponse, candidateResponse] = await Promise.all([
+        const [apps, jobResponse, candidateResponse, stageResponse] = await Promise.all([
           apiFetch(API_BASE + "/api/applications?organization_id=" + org),
           apiFetch(API_BASE + "/api/jobs?organization_id=" + org),
           apiFetch(API_BASE + "/api/candidates?organization_id=" + org),
+          apiFetch(API_BASE + "/api/applications/stages?organization_id=" + org),
         ]);
-        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok) throw new Error("Unable to load recruitment pipeline.");
+        if (!apps.ok || !jobResponse.ok || !candidateResponse.ok || !stageResponse.ok) throw new Error("Unable to load recruitment pipeline and stage configuration.");
         setApplications(await apps.json());
         setJobs(await jobResponse.json());
         setCandidates(await candidateResponse.json());
+        setStages(await stageResponse.json());
       } catch (error) {
         setMessage(error instanceof Error ? error.message : "Unable to load submissions.");
       } finally {
@@ -146,15 +151,24 @@ export default function SubmissionsPage() {
 
   async function changeStatus(application: Application, nextStatus: ApplicationStatus) {
     if (application.status === nextStatus) return;
-    if (!allowedTransitions[application.status].includes(nextStatus)) {
-      setMessage("That stage transition is not allowed.");
+    const currentStage = stageMap.get(application.status);
+    const targetStage = stageMap.get(nextStatus);
+    if (!currentStage?.allowed_next_stages.includes(nextStatus) || !targetStage?.enabled) {
+      setMessage("That stage transition is not allowed by this organisation's workflow.");
+      return;
+    }
+    const reason = window.prompt("Why is this application moving to " + targetStage.label + "?");
+    if (reason === null) return;
+    const normalizedReason = reason.trim();
+    if (!normalizedReason || normalizedReason.length > 1000) {
+      setMessage("Enter a reason between 1 and 1000 characters to record this stage change.");
       return;
     }
     try {
-      const response = await apiFetch(API_BASE + "/api/applications/" + application.id, {
-        method: "PATCH",
+      const response = await apiFetch(API_BASE + "/api/applications/" + application.id + "/transition", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: nextStatus }),
+        body: JSON.stringify({ status: nextStatus, reason: normalizedReason }),
       });
       if (!response.ok) {
         const detail = await response.json().catch(() => null);
@@ -165,6 +179,65 @@ export default function SubmissionsPage() {
       setMessage("");
     } catch (error) {
       setMessage(error instanceof Error ? error.message : "Unable to update application.");
+    }
+  }
+
+  async function runBulkTransition() {
+    if (!selectedApplicationIds.length || !bulkStatus || bulkSaving) return;
+    const reason = window.prompt("Why are these applications moving to " + stageLabel(bulkStatus) + "?");
+    if (reason === null) return;
+    const normalizedReason = reason.trim();
+    if (!normalizedReason || normalizedReason.length > 1000) {
+      setMessage("Enter a reason between 1 and 1000 characters to record this bulk stage change.");
+      return;
+    }
+    setBulkSaving(true);
+    setBulkFailures([]);
+    try {
+      const response = await apiFetch(API_BASE + "/api/applications/bulk-transition", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          application_ids: selectedApplicationIds,
+          status: bulkStatus,
+          reason: normalizedReason,
+        }),
+      });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.detail ?? "Unable to update selected applications.");
+      }
+      const result: {
+        requested: number;
+        succeeded: number;
+        failed: number;
+        results: Array<{ application_id: string; success: boolean; status?: ApplicationStatus | null; error?: string | null }>;
+      } = await response.json();
+      const successful = new Map(
+        result.results.filter((item) => item.success && item.status).map((item) => [item.application_id, item.status as ApplicationStatus]),
+      );
+      setApplications((current) => current.map((item) => {
+        const nextStatus = successful.get(item.id);
+        return nextStatus ? { ...item, status: nextStatus } : item;
+      }));
+      const failures = result.results
+        .filter((item) => !item.success)
+        .map((item) => ({
+          application_id: item.application_id,
+          error: item.error ?? "The application could not be moved.",
+        }));
+      setBulkFailures(failures);
+      setSelectedApplicationIds(failures.map((item) => item.application_id));
+      setMessage(
+        result.failed
+          ? result.succeeded + " application(s) moved; " + result.failed + " failed. Failed records remain selected so you can review them."
+          : result.succeeded + " application(s) moved successfully.",
+      );
+      setBulkStatus("");
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : "Unable to update selected applications.");
+    } finally {
+      setBulkSaving(false);
     }
   }
 
@@ -222,7 +295,7 @@ export default function SubmissionsPage() {
             <div className="card"><div className="metric-title">Interviews</div><div className="metric-value">{interviewCount}</div><div className="metric-foot">Interview stage</div></div>
             <div className="card"><div className="metric-title">All applications</div><div className="metric-value">{applications.length}</div><div className="metric-foot">Across all stages</div></div>
           </div>
-          <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{statuses.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><select className="filter" aria-label="Filter application source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(1); }}><option value="all">All sources</option>{sourceOptions.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} application{filtered.length === 1 ? "" : "s"}</span></div></div>
+          <div className="card" style={{ marginBottom: 16 }}><div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}><select className="filter" aria-label="Saved applicant views" value={activeView} onChange={(event) => applyView(event.target.value)}><option>All applicants</option>{savedViews.map((view) => <option key={view.name}>{view.name}</option>)}</select><button className="btn" onClick={saveView}>+ Add view</button><select className="filter" aria-label="Filter applicant status" value={status} onChange={(event) => { setStatus(event.target.value as "all" | ApplicationStatus); setPage(1); }}><option value="all">All statuses</option>{stages.map((item) => <option key={item.stage_key} value={item.stage_key}>{item.label}</option>)}</select><select className="filter" aria-label="Filter application source" value={sourceFilter} onChange={(event) => { setSourceFilter(event.target.value); setPage(1); }}><option value="all">All sources</option>{sourceOptions.map((item) => <option key={item} value={item}>{item.replaceAll("_", " ")}</option>)}</select><span className="muted-small">{filtered.length} application{filtered.length === 1 ? "" : "s"}</span></div></div>
           {message && <div className="notice">{message}</div>}
 
           {showCreate && (
@@ -283,12 +356,13 @@ export default function SubmissionsPage() {
           )}
 
           {viewMode === "board" && <div className="pipeline-board">
-            {boardStatuses.map((stage) => {
-              const stageApps = filtered.filter((application) => application.status === stage);
+            {stages.filter((stage) => stage.enabled || filtered.some((application) => application.status === stage.stage_key)).map((stage) => {
+              const stageKey = stage.stage_key;
+              const stageApps = filtered.filter((application) => application.status === stageKey);
               return (
-                <div key={stage} className="pipeline-column" onDragOver={(event) => event.preventDefault()} onDrop={(event) => onDrop(event, stage)}>
+                <div key={stageKey} className="pipeline-column" onDragOver={(event) => event.preventDefault()} onDrop={(event) => onDrop(event, stageKey)}>
                   <div className="pipeline-column-head">
-                    <span>{stage.replaceAll("_", " ")}</span>
+                    <span>{stage.label}</span>
                     <span className="muted-small">{stageApps.length}</span>
                   </div>
                   <div className="pipeline-cards">
@@ -305,9 +379,9 @@ export default function SubmissionsPage() {
                             value={application.status}
                             onChange={(event) => void changeStatus(application, event.target.value as ApplicationStatus)}
                           >
-                            <option value={application.status}>{application.status.replaceAll("_", " ")}</option>
-                            {allowedTransitions[application.status].map((next) => (
-                              <option key={next} value={next}>{next.replaceAll("_", " ")}</option>
+                            <option value={application.status}>{stageLabel(application.status)}</option>
+                            {(stageMap.get(application.status)?.allowed_next_stages ?? []).filter((next) => stageMap.get(next)?.enabled).map((next) => (
+                              <option key={next} value={next}>{stageLabel(next)}</option>
                             ))}
                           </select>
                         </div>
@@ -322,18 +396,59 @@ export default function SubmissionsPage() {
 
           {viewMode === "table" && <div className="card">
             <div className="card-head"><span className="card-title">Applications</span><span className="muted-small">{loading ? "Loading..." : "Live data · " + filtered.length + " records"}</span></div>
+            {selectedApplicationIds.length > 0 && <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", padding: "12px 0" }}>
+              <strong>{selectedApplicationIds.length} selected</strong>
+              <select className="filter" aria-label="Bulk move selected applications to stage" value={bulkStatus} onChange={(event) => setBulkStatus(event.target.value as ApplicationStatus | "")}>
+                <option value="">Move selected to stage...</option>
+                {stages.filter((stage) => stage.enabled).map((stage) => <option key={stage.stage_key} value={stage.stage_key}>{stage.label}</option>)}
+              </select>
+              <button className="btn primary" disabled={!bulkStatus || bulkSaving} onClick={() => void runBulkTransition()}>{bulkSaving ? "Updating..." : "Apply to selected"}</button>
+              <button className="btn" disabled={bulkSaving} onClick={() => { setSelectedApplicationIds([]); setBulkFailures([]); }}>Clear selection</button>
+              <span className="muted-small">Up to 100 applications per batch. Invalid transitions are reported individually.</span>
+            </div>}
+            {bulkFailures.length > 0 && <div role="alert" aria-live="polite" style={{ margin: "8px 0 14px", padding: 12, border: "1px solid var(--border)", borderRadius: 8 }}>
+              <strong>{bulkFailures.length} application(s) need attention</strong>
+              <ul style={{ margin: "8px 0 0", paddingLeft: 20 }}>
+                {bulkFailures.map((failure) => {
+                  const failedApplication = applications.find((item) => item.id === failure.application_id);
+                  const failedCandidate = failedApplication ? candidateMap.get(failedApplication.candidate_id) : undefined;
+                  const failedJob = failedApplication ? jobMap.get(failedApplication.job_id) : undefined;
+                  const label = failedCandidate ? candidateName(failedCandidate) : failure.application_id.slice(0, 8).toUpperCase();
+                  return <li key={failure.application_id}>
+                    <strong>{label}</strong>{failedJob?.title ? " · " + failedJob.title : ""}: {failure.error}
+                  </li>;
+                })}
+              </ul>
+            </div>}
             <div style={{ overflowX: "auto" }}><table className="table applicant-table">
-              <thead><tr><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
+              <thead><tr><th><input type="checkbox" aria-label="Select all applications on this page" checked={pageApplications.length > 0 && pageApplications.every((item) => selectedApplicationIds.includes(item.id))} onChange={(event) => {
+                if (event.target.checked) {
+                  const next = Array.from(new Set([...selectedApplicationIds, ...pageApplications.map((item) => item.id)]));
+                  if (next.length > 100) { setMessage("You can select up to 100 applications per batch."); return; }
+                  setSelectedApplicationIds(next);
+                } else {
+                  const pageIds = new Set(pageApplications.map((item) => item.id));
+                  setSelectedApplicationIds(selectedApplicationIds.filter((id) => !pageIds.has(id)));
+                }
+              }} /></th><th>Applicant ID</th><th><button className="table-sort" onClick={() => changeSort("candidate")}>Applicant name {sortBy === "candidate" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Email address</th><th>Mobile number</th><th>City / region</th><th><button className="table-sort" onClick={() => changeSort("source")}>Source {sortBy === "source" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("status")}>Applicant status {sortBy === "status" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th><button className="table-sort" onClick={() => changeSort("job")}>Job title {sortBy === "job" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th><th>Match / review</th><th><button className="table-sort" onClick={() => changeSort("created")}>Applied {sortBy === "created" ? (sortDirection === "asc" ? "↑" : "↓") : ""}</button></th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={10}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={10}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
+                {loading ? <tr><td colSpan={11}>Loading applicants...</td></tr> : filtered.length === 0 ? <tr><td colSpan={11}>No applicants match these filters. Create a new application or adjust your search.</td></tr> : pageApplications.map((application) => {
                     const candidate = candidateMap.get(application.candidate_id);
                     const job = jobMap.get(application.job_id);
                     return (
                       <tr key={application.id}>
+                        <td><input type="checkbox" aria-label={"Select " + candidateName(candidate)} checked={selectedApplicationIds.includes(application.id)} onChange={(event) => {
+                          if (event.target.checked) {
+                            if (selectedApplicationIds.length >= 100) { setMessage("You can select up to 100 applications per batch."); return; }
+                            setSelectedApplicationIds((current) => current.includes(application.id) ? current : [...current, application.id]);
+                          } else {
+                            setSelectedApplicationIds((current) => current.filter((id) => id !== application.id));
+                          }
+                        }} /></td>
                         <td><Link className="link" href={"/submissions/" + application.id}>{application.id.slice(0, 8).toUpperCase()}</Link></td>
                         <td><Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link></td>
                         <td>{candidate?.email ?? "—"}</td><td>{candidate?.phone ?? "—"}</td><td>{[candidate?.city, candidate?.region].filter(Boolean).join(", ") || "—"}</td><td>{application.source || "Direct"}</td>
-                        <td><select className="filter" aria-label={"Status for " + candidateName(candidate)} value={application.status} onChange={(event) => void changeStatus(application, event.target.value as ApplicationStatus)}><option value={application.status}>{application.status.replaceAll("_", " ")}</option>{allowedTransitions[application.status].map((next) => <option key={next} value={next}>{next.replaceAll("_", " ")}</option>)}</select></td>
+                        <td><select className="filter" aria-label={"Status for " + candidateName(candidate)} value={application.status} onChange={(event) => void changeStatus(application, event.target.value as ApplicationStatus)}><option value={application.status}>{application.status.replaceAll("_", " ")}</option>{(stageMap.get(application.status)?.allowed_next_stages ?? []).filter((next) => stageMap.get(next)?.enabled).map((next) => <option key={next} value={next}>{stageLabel(next)}</option>)}</select></td>
                         <td>{job?.title ?? "Unknown job"}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td><td>{new Date(application.created_at).toLocaleDateString()}</td>
                       </tr>
                     );
