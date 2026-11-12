@@ -1,0 +1,49 @@
+name: Security hardening migration smoke test
+
+on:
+  pull_request:
+    paths:
+      - 'supabase/migrations/20261101190000_restrict_public_security_definer_and_rls.sql'
+      - 'supabase/tests/security_hardening_migration_fixture.sql'
+      - 'supabase/tests/security_hardening_migration_assertions.sql'
+      - '.github/workflows/security-hardening-smoke.yml'
+  push:
+    branches:
+      - main
+      - fix/production-rls-role-hardening
+
+jobs:
+  postgres-smoke:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aqerith_security_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d aqerith_security_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      PGHOST: 127.0.0.1
+      PGPORT: 5432
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      PGDATABASE: aqerith_security_test
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+      - name: Create disposable production-shaped schema
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security_hardening_migration_fixture.sql
+      - name: Apply security hardening migration
+        run: psql -v ON_ERROR_STOP=1 -f supabase/migrations/20261101190000_restrict_public_security_definer_and_rls.sql
+      - name: Assert grants, policy targets and trigger behaviour
+        run: psql -v ON_ERROR_STOP=1 -f supabase/tests/security_hardening_migration_assertions.sql
