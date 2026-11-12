@@ -52,4 +52,4 @@ drop trigger if exists placements_status_audit on public.placements;
 create trigger placements_status_audit after update of status on public.placements
 for each row execute function public.audit_workflow_status_change();
 
-revoke all on function public.audit_workflow_status_change() from public;
+revoke all on function public.audit_workflow_status_change() from public, anon, authenticated;

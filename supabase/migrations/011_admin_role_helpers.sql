@@ -31,6 +31,12 @@ as $$
   );
 $$;
 
+-- These helpers are internal to the database/API layer, not public RPC endpoints.
+revoke all on function public.current_user_org_role(uuid) from public, anon, authenticated;
+revoke all on function public.is_org_admin(uuid) from public, anon, authenticated;
+alter function public.current_user_org_role(uuid) set search_path = pg_catalog, public;
+alter function public.is_org_admin(uuid) set search_path = pg_catalog, public;
+
 -- Audit rows are append-only for ordinary authenticated clients.
 drop policy if exists audit_member_read on public.audit_events;
 create policy audit_member_read on public.audit_events
