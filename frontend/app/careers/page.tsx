@@ -40,7 +40,7 @@ export default async function CareersPage() {
     <main className="careers-page">
       <header className="careers-header">
         <Link href="/careers" className="careers-brand">AQERITH Careers</Link>
-        <span>Opportunities, made clearer.</span>
+        <span>Opportunities, made clearer.</span><Link href={"/candidate-portal?organization_id=" + encodeURIComponent(ORGANIZATION_ID)} className="career-back-link">Candidate sign in →</Link>
       </header>
       <section className="careers-hero">
         <p className="careers-eyebrow">CAREERS AT OUR CLIENTS</p>

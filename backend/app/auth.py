@@ -18,22 +18,26 @@ def _auth_client():
     return create_client(url, key)
 
 
-def get_current_user_id(
+def get_current_user(
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer),
-) -> UUID:
+):
+    """Validate the bearer token with Supabase and return its authoritative user object."""
     if credentials is None:
         raise HTTPException(status_code=401, detail="Authentication required")
-
     try:
         response = _auth_client().auth.get_user(credentials.credentials)
         user = response.user
         if user is None:
             raise HTTPException(status_code=401, detail="Invalid authentication token")
-        return UUID(str(user.id))
+        return user
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(status_code=401, detail="Invalid authentication token") from exc
+
+
+def get_current_user_id(user=Depends(get_current_user)) -> UUID:
+    return UUID(str(user.id))
 
 
 def get_org_role(user_id: UUID, organization_id: UUID) -> str:

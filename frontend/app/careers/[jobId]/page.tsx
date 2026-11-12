@@ -91,7 +91,7 @@ export default async function CareerJobPage({ params }: { params: Promise<{ jobI
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(schema).replace(/</g, "\\u003c") }} />
       <header className="careers-header">
         <Link href="/careers" className="careers-brand">AQERITH Careers</Link>
-        <Link href="/careers" className="career-back-link">← All opportunities</Link>
+        <div className="candidate-careers-actions"><Link href={"/candidate-portal?organization_id=" + encodeURIComponent(ORGANIZATION_ID)} className="career-back-link">Candidate sign in →</Link><Link href="/careers" className="career-back-link">← All opportunities</Link></div>
       </header>
       <article className="career-detail">
         <p className="careers-eyebrow">OPEN POSITION</p>
