@@ -7,7 +7,7 @@ from pathlib import Path
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 from pydantic import BaseModel
@@ -337,10 +337,22 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
 async def bulk_upload_cvs(
     organization_id: UUID,
     files: list[UploadFile] = File(...),
+    lawful_basis: str | None = Form(default=None),
+    privacy_notice_version: str | None = Form(default=None),
+    consent_purpose: str | None = Form(default=None),
+    retention_until: datetime | None = Form(default=None),
+    consent_confirmed: bool = Form(default=False),
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
     assert_org_permission(user_id, organization_id, "candidates.documents.upload")
+    allowed_bases = {"consent", "contract", "legal_obligation", "legitimate_interests", "public_task", "vital_interests"}
+    if lawful_basis and lawful_basis not in allowed_bases:
+        raise HTTPException(status_code=422, detail="Invalid lawful basis")
+    if lawful_basis == "consent" and not consent_confirmed:
+        raise HTTPException(status_code=422, detail="Confirm that consent was genuinely obtained before recording consent")
+    if lawful_basis != "consent" and consent_confirmed:
+        raise HTTPException(status_code=422, detail="Consent confirmation is only valid when consent is the selected basis")
     if not files:
         raise HTTPException(status_code=422, detail="Choose at least one CV to upload")
     if len(files) > MAX_BULK_FILES:
@@ -395,10 +407,15 @@ async def bulk_upload_cvs(
                         cursor.execute(
                             """insert into public.candidates
                                (id, organization_id, first_name, last_name, email, phone, status,
-                                skills, resume_path, resume_text, source_type, created_at, updated_at)
-                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,'cv_upload',now(),now())""",
+                                skills, resume_path, resume_text, source_type, lawful_basis,
+                                privacy_notice_version, consent_purpose, consent_recorded_at,
+                                retention_until, created_at, updated_at)
+                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,'cv_upload',%s,%s,%s,%s,%s,now(),now())""",
                             [candidate_id, organization_id, fields["first_name"], fields["last_name"],
-                             fields["email"], fields["phone"], fields["skills"], path, text or None],
+                             fields["email"], fields["phone"], fields["skills"], path, text or None,
+                             lawful_basis, privacy_notice_version, consent_purpose,
+                             datetime.utcnow() if lawful_basis == "consent" and consent_confirmed else None,
+                             retention_until],
                         )
                         cursor.execute(
                             """insert into public.candidate_access_assignments
