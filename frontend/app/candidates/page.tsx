@@ -42,6 +42,12 @@ type CandidateForm = {
   current_title: string;
   years_experience: string;
   skills: string;
+  lawful_basis: "" | "consent" | "contract" | "legal_obligation" | "legitimate_interests" | "public_task" | "vital_interests";
+  privacy_notice_version: string;
+  consent_purpose: string;
+  retention_until: string;
+  source_type: "recruiter_entry" | "career_page" | "job_application" | "referral" | "agency" | "import" | "cv_upload" | "other";
+  consent_confirmed: boolean;
 };
 
 const emptyForm: CandidateForm = {
@@ -56,6 +62,12 @@ const emptyForm: CandidateForm = {
   current_title: "",
   years_experience: "",
   skills: "",
+  lawful_basis: "",
+  privacy_notice_version: "v1",
+  consent_purpose: "Recruitment and candidate matching",
+  retention_until: "",
+  source_type: "recruiter_entry",
+  consent_confirmed: false,
 };
 
 type ImportRow = {
@@ -96,6 +108,12 @@ function formFromCandidate(candidate: Candidate): CandidateForm {
     current_title: candidate.current_title ?? "",
     years_experience: candidate.years_experience?.toString() ?? "",
     skills: candidate.skills.join(", "),
+    lawful_basis: candidate.lawful_basis ?? "",
+    privacy_notice_version: candidate.privacy_notice_version ?? "v1",
+    consent_purpose: candidate.consent_purpose ?? "",
+    retention_until: candidate.retention_until ? candidate.retention_until.slice(0, 10) : "",
+    source_type: candidate.source_type ?? "recruiter_entry",
+    consent_confirmed: Boolean(candidate.consent_recorded_at),
   };
 }
 
@@ -459,6 +477,12 @@ export default function CandidatesPage() {
       current_title: form.current_title || null,
       years_experience: form.years_experience ? Number(form.years_experience) : null,
       skills: form.skills.split(",").map((skill) => skill.trim()).filter(Boolean),
+      lawful_basis: form.lawful_basis || null,
+      privacy_notice_version: form.privacy_notice_version.trim() || null,
+      consent_purpose: form.consent_purpose.trim() || null,
+      retention_until: form.retention_until ? new Date(form.retention_until + "T23:59:59Z").toISOString() : null,
+      source_type: form.source_type,
+      consent_recorded_at: form.consent_confirmed && form.lawful_basis === "consent" ? new Date().toISOString() : null,
     };
 
     try {
