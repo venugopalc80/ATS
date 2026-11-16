@@ -289,10 +289,12 @@ export default function JobsPage() {
     setSaving(true);
     setMessage("");
 
+    const selectedClientName = clients.find((client) => client.id === form.client_id_id)?.name ?? "";
+
     const payload = {
       ...(editingJob ? {} : { organization_id: organizationId }),
       title: form.title,
-      client_id: form.client_id || null,
+      client_id: form.client_id_id || null,
       location: form.location || null,
       employment_type: form.employment_type || null,
       work_mode: form.work_mode || null,
@@ -307,10 +309,10 @@ export default function JobsPage() {
     try {
       if (!API_BASE || !organizationId) {
         if (editingJob) {
-          setJobs((current) => current.map((job) => job.id === editingJob.id ? { ...job, ...payload, client: form.client } : job));
+          setJobs((current) => current.map((job) => job.id === editingJob.id ? { ...job, ...payload, client: selectedClientName } : job));
           setMessage("Demo requisition updated.");
         } else {
-          const demoJob: Job = { id: `local-${Date.now()}`, ...payload, client: form.client } as Job;
+          const demoJob: Job = { id: `local-${Date.now()}`, ...payload, client: selectedClientName } as Job;
           setJobs((current) => [demoJob, ...current]);
           setMessage("Demo requisition created.");
         }
@@ -329,8 +331,8 @@ export default function JobsPage() {
         }
         const saved: Job = await response.json();
         setJobs((current) => editingJob?.id
-          ? current.map((job) => job.id === saved.id ? { ...saved, client: form.client } : job)
-          : [{ ...saved, client: form.client }, ...current]);
+          ? current.map((job) => job.id === saved.id ? { ...saved, client: selectedClientName } : job)
+          : [{ ...saved, client: selectedClientName }, ...current]);
         setMessage(editingJob ? "Requisition updated successfully." : "Requisition created successfully.");
       }
 
@@ -487,7 +489,7 @@ export default function JobsPage() {
           <form className="modal" onSubmit={saveJob}>
             <div className="card-head"><span className="card-title">{editingJob ? "Edit requisition" : "New requisition"}</span><button type="button" className="icon-button" onClick={() => setShowForm(false)}>×</button></div>
             <label>Job title<input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Senior Python Engineer" /></label>
-            <label>Client<select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}><option value="">No client / Internal vacancy</option>{clients.filter((client) => client.status !== "inactive").map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
+            <label>Client<select value={form.client_id_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}><option value="">No client / Internal vacancy</option>{clients.filter((client) => client.status !== "inactive").map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
             <label>Location<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="London, UK / Remote" /></label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>Employment type<select value={form.employment_type} onChange={(e) => setForm({ ...form, employment_type: e.target.value })}><option>Permanent</option><option>Contract</option><option>Temporary</option><option>Part-time</option></select></label>
