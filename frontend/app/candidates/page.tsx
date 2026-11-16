@@ -24,6 +24,12 @@ type Candidate = {
   years_experience?: number | null;
   skills: string[];
   ai_summary?: string | null;
+  lawful_basis?: "consent" | "contract" | "legal_obligation" | "legitimate_interests" | "public_task" | "vital_interests" | null;
+  privacy_notice_version?: string | null;
+  consent_purpose?: string | null;
+  retention_until?: string | null;
+  source_type?: "recruiter_entry" | "career_page" | "job_application" | "referral" | "agency" | "import" | "cv_upload" | "other";
+  consent_recorded_at?: string | null;
 };
 
 type LatestNote = { candidate_id: string; note: string; created_at: string; author_user_id?: string | null };
@@ -687,6 +693,51 @@ export default function CandidatesPage() {
               <label>Status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Candidate["status"] })}><option value="active">Active</option><option value="inactive">Inactive</option><option value="placed">Placed</option><option value="do_not_contact">Do not contact</option></select></label>
             </div>
             <label>Skills<input value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} placeholder="Python, SQL, FastAPI, PostgreSQL" /></label>
+
+            <div style={{ border: "1px solid #dbe3f0", borderRadius: 10, padding: 14, marginTop: 8 }}>
+              <strong>Privacy and record details</strong>
+              <p className="muted-small" style={{ margin: "6px 0 12px" }}>Record the applicable processing basis and privacy notice. Consent is separate and should only be recorded when it was genuinely obtained.</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label>Processing basis (where applicable)
+                  <select value={form.lawful_basis} onChange={(e) => setForm({ ...form, lawful_basis: e.target.value as CandidateForm["lawful_basis"], consent_confirmed: e.target.value === "consent" ? form.consent_confirmed : false })}>
+                    <option value="">Not recorded</option>
+                    <option value="consent">Consent</option>
+                    <option value="contract">Contract / pre-contract steps</option>
+                    <option value="legal_obligation">Legal obligation</option>
+                    <option value="legitimate_interests">Legitimate interests</option>
+                    <option value="public_task">Public task</option>
+                    <option value="vital_interests">Vital interests</option>
+                  </select>
+                </label>
+                <label>Privacy notice version
+                  <input maxLength={50} value={form.privacy_notice_version} onChange={(e) => setForm({ ...form, privacy_notice_version: e.target.value })} placeholder="e.g. v1.0" />
+                </label>
+              </div>
+              <label>Collection / processing purpose
+                <input maxLength={500} value={form.consent_purpose} onChange={(e) => setForm({ ...form, consent_purpose: e.target.value })} placeholder="e.g. Recruitment and candidate matching" />
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label>Candidate source
+                  <select value={form.source_type} onChange={(e) => setForm({ ...form, source_type: e.target.value as CandidateForm["source_type"] })}>
+                    <option value="recruiter_entry">Recruiter entry</option>
+                    <option value="career_page">Careers page</option>
+                    <option value="job_application">Job application</option>
+                    <option value="referral">Referral</option>
+                    <option value="agency">Agency</option>
+                    <option value="import">Import</option>
+                    <option value="cv_upload">CV upload</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label>Retention review / delete by
+                  <input type="date" value={form.retention_until} onChange={(e) => setForm({ ...form, retention_until: e.target.value })} />
+                </label>
+              </div>
+              {form.lawful_basis === "consent" && <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <input type="checkbox" required checked={form.consent_confirmed} onChange={(e) => setForm({ ...form, consent_confirmed: e.target.checked })} />
+                Consent was actually obtained and its evidence is retained.
+              </label>}
+            </div>
 
             <div className="modal-actions">
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>
