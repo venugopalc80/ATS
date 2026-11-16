@@ -34,6 +34,9 @@ frontend_origins = {
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(frontend_origins),
+    # Permit this project's unique Vercel preview deployment hostnames.
+    # Keep the pattern restricted to the AQERITH frontend project and team.
+    allow_origin_regex=r"https://aqerith-frontend-[a-z0-9-]+-venugopalc80-9526s-projects\\.vercel\\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
