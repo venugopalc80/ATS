@@ -70,7 +70,7 @@ const emptyForm: CandidateForm = {
   skills: "",
   lawful_basis: "",
   privacy_notice_version: "",
-  consent_purpose: "Recruitment and candidate matching",
+  consent_purpose: "",
   retention_until: "",
   source_type: "recruiter_entry",
   consent_confirmed: false,
@@ -713,7 +713,7 @@ export default function CandidatesPage() {
                   <input maxLength={50} value={form.privacy_notice_version} onChange={(e) => setForm({ ...form, privacy_notice_version: e.target.value })} placeholder="e.g. v1.0" />
                 </label>
               </div>
-              <label>Collection / processing purpose
+              <label>Processing purpose
                 <input maxLength={500} value={form.consent_purpose} onChange={(e) => setForm({ ...form, consent_purpose: e.target.value })} placeholder="e.g. Recruitment and candidate matching" />
               </label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
