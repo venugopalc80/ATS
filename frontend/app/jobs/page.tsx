@@ -12,6 +12,7 @@ type ClientOption = { id: string; name: string; status: "prospect" | "active" | 
 
 type Job = {
   id?: string;
+  job_code?: string | null;
   organization_id?: string;
   title: string;
   client?: string;
@@ -196,7 +197,7 @@ export default function JobsPage() {
   }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
-    const matchesQuery = (job.id ?? "") === query || (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = (job.id ?? "") === query || (job.job_code ?? "").toLowerCase().includes(query.toLowerCase()) || (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
@@ -346,7 +347,7 @@ export default function JobsPage() {
     }
   }
 
-  async function deleteJob(job: Job) {
+  async function copyJobReference(reference: string) {\n    try {\n      await navigator.clipboard.writeText(reference);\n      setMessage("Copied requisition reference: " + reference);\n    } catch {\n      setMessage("Unable to copy the requisition reference. Please select and copy it manually.");\n    }\n  }\n\n  async function deleteJob(job: Job) {
     if (!job.id) return;
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
@@ -419,9 +420,9 @@ export default function JobsPage() {
           <div className="card">
             <div className="card-head"><span className="card-title">Requisitions</span><span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "Demo mode"}</span></div>
             <table className="table">
-              <thead><tr><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Distribution</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Job ID</th><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Distribution</th><th>Actions</th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={8}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={8}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
+                {loading ? <tr><td colSpan={9}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={9}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
                   <tr key={job.id ?? job.title}>
                     <td><strong>{job.title}</strong></td>
                     <td>{job.client ?? clients.find((client) => client.id === job.client_id)?.name ?? "Unassigned"}</td>
@@ -430,7 +431,7 @@ export default function JobsPage() {
                     <td><span className={`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}`}>{job.status.replace("_", " ")}</span></td>
                     <td>{(job.required_skills ?? []).slice(0, 3).join(", ") || "-"}</td>
                     <td><button className="btn" onClick={() => openDistribution(job)}>Distribute job</button></td>
-                    <td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
+                    <td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button className="btn" disabled={!job.job_code} onClick={() => job.job_code && copyJobReference(job.job_code)}>Copy ID</button><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
                   </tr>
                 ))}
               </tbody>
