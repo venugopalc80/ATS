@@ -289,12 +289,12 @@ export default function JobsPage() {
     setSaving(true);
     setMessage("");
 
-    const selectedClientName = clients.find((client) => client.id === form.client_id_id)?.name ?? "";
+    const selectedClientName = clients.find((client) => client.id === form.client_id)?.name ?? "";
 
     const payload = {
       ...(editingJob ? {} : { organization_id: organizationId }),
       title: form.title,
-      client_id: form.client_id_id || null,
+      client_id: form.client_id || null,
       location: form.location || null,
       employment_type: form.employment_type || null,
       work_mode: form.work_mode || null,
@@ -489,7 +489,7 @@ export default function JobsPage() {
           <form className="modal" onSubmit={saveJob}>
             <div className="card-head"><span className="card-title">{editingJob ? "Edit requisition" : "New requisition"}</span><button type="button" className="icon-button" onClick={() => setShowForm(false)}>×</button></div>
             <label>Job title<input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Senior Python Engineer" /></label>
-            <label>Client<select value={form.client_id_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}><option value="">No client / Internal vacancy</option>{clients.filter((client) => client.status !== "inactive").map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
+            <label>Client<select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}><option value="">No client / Internal vacancy</option>{clients.filter((client) => client.status !== "inactive").map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
             <label>Location<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="London, UK / Remote" /></label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>Employment type<select value={form.employment_type} onChange={(e) => setForm({ ...form, employment_type: e.target.value })}><option>Permanent</option><option>Contract</option><option>Temporary</option><option>Part-time</option></select></label>
