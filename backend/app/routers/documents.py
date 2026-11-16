@@ -347,6 +347,9 @@ async def bulk_upload_cvs(
     """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
     assert_org_permission(user_id, organization_id, "candidates.documents.upload")
     allowed_bases = {"consent", "contract", "legal_obligation", "legitimate_interests", "public_task", "vital_interests"}
+    lawful_basis = lawful_basis or None
+    privacy_notice_version = privacy_notice_version or None
+    consent_purpose = consent_purpose or None
     if lawful_basis and lawful_basis not in allowed_bases:
         raise HTTPException(status_code=422, detail="Invalid lawful basis")
     if lawful_basis == "consent" and not consent_confirmed:
