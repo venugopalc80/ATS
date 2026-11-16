@@ -433,6 +433,7 @@ export default function JobsPage() {
               <tbody>
                 {loading ? <tr><td colSpan={9}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={9}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
                   <tr key={job.id ?? job.title}>
+                    <td><strong>{job.job_code ?? "—"}</strong></td>
                     <td><strong>{job.title}</strong></td>
                     <td>{job.client ?? clients.find((client) => client.id === job.client_id)?.name ?? "Unassigned"}</td>
                     <td>{job.location ?? "Not specified"}</td>
