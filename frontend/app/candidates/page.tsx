@@ -470,8 +470,9 @@ export default function CandidatesPage() {
     setSaving(true);
     setMessage("");
 
+    const activeOrganizationId = getActiveOrganizationId(ORGANIZATION_ID);
     const payload = {
-      ...(editing ? {} : { organization_id: getActiveOrganizationId(ORGANIZATION_ID) }),
+      ...(editing ? {} : { organization_id: activeOrganizationId }),
       first_name: form.first_name,
       last_name: form.last_name || null,
       email: form.email || null,
@@ -492,8 +493,8 @@ export default function CandidatesPage() {
     };
 
     try {
-      if (!API_BASE || !ORGANIZATION_ID) {
-        setMessage("API configuration is missing.");
+      if (!API_BASE || (!editing && !activeOrganizationId)) {
+        setMessage(!API_BASE ? "API configuration is missing." : "Select an organisation before creating a candidate.");
         return;
       }
 
