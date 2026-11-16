@@ -39,6 +39,8 @@ async def create_candidate(
     try:
         row = await service.create_candidate(payload, user_id)
         return CandidateOut.model_validate(row)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
@@ -73,6 +75,8 @@ async def update_candidate(
         assert_resource_access(user_id, existing["organization_id"], "candidate", candidate_id)
         row = await service.update_candidate(candidate_id, payload)
         return CandidateOut.model_validate(row)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
         raise db_unavailable(exc) from exc
 
