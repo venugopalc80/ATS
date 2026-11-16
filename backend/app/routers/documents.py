@@ -395,8 +395,8 @@ async def bulk_upload_cvs(
                         cursor.execute(
                             """insert into public.candidates
                                (id, organization_id, first_name, last_name, email, phone, status,
-                                skills, resume_path, resume_text, created_at, updated_at)
-                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
+                                skills, resume_path, resume_text, source_type, created_at, updated_at)
+                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,'cv_upload',now(),now())""",
                             [candidate_id, organization_id, fields["first_name"], fields["last_name"],
                              fields["email"], fields["phone"], fields["skills"], path, text or None],
                         )
