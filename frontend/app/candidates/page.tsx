@@ -673,6 +673,7 @@ export default function CandidatesPage() {
               <span className="card-title">{editing ? "Edit candidate" : "Add candidate"}</span>
               <button type="button" className="icon-button" onClick={() => setShowForm(false)}>×</button>
             </div>
+            {message && <div className="notice" role="alert" style={{ marginBottom: 12 }}>{message}</div>}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>First name<input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></label>
