@@ -10,7 +10,8 @@ CANDIDATE_COLUMNS = """
     city, region, country_code, status, current_title,
     years_experience, skills, resume_path, resume_text,
     ai_summary, consent_recorded_at, consent_purpose,
-    retention_until, created_at, updated_at
+    retention_until, lawful_basis, privacy_notice_version, source_type,
+    created_at, updated_at
 """
 
 
@@ -67,14 +68,27 @@ class CandidateService:
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    insert into public.candidates ({", ".join(columns)})
-                    values ({placeholders})
-                    returning {CANDIDATE_COLUMNS}
-                    """,
-                    values,
-                )
+                email = (data.get("email") or "").strip()
+                if email:
+                    cursor.execute(
+                        "select id from public.candidates where organization_id=%s and lower(trim(email))=lower(trim(%s)) limit 1",
+                        [data["organization_id"], email],
+                    )
+                    if cursor.fetchone():
+                        raise ValueError("A candidate with this email already exists in this organisation.")
+                try:
+                    cursor.execute(
+                        f"""
+                        insert into public.candidates ({", ".join(columns)})
+                        values ({placeholders})
+                        returning {CANDIDATE_COLUMNS}
+                        """,
+                        values,
+                    )
+                except Exception as exc:
+                    if getattr(exc, "sqlstate", None) == "23505":
+                        raise ValueError("A candidate with this email already exists in this organisation.") from exc
+                    raise
                 row = cursor.fetchone()
                 if row is None:
                     raise RuntimeError("Candidate was not created")
@@ -112,15 +126,31 @@ class CandidateService:
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    update public.candidates
-                    set {assignments}, updated_at = now()
-                    where id = %s
-                    returning {CANDIDATE_COLUMNS}
-                    """,
-                    values,
-                )
+                email = (data.get("email") or "").strip()
+                if email:
+                    cursor.execute("select organization_id from public.candidates where id=%s", [candidate_id])
+                    owner = cursor.fetchone()
+                    if owner:
+                        cursor.execute(
+                            "select id from public.candidates where organization_id=%s and lower(trim(email))=lower(trim(%s)) and id<>%s limit 1",
+                            [owner["organization_id"], email, candidate_id],
+                        )
+                        if cursor.fetchone():
+                            raise ValueError("Another candidate with this email already exists in this organisation.")
+                try:
+                    cursor.execute(
+                        f"""
+                        update public.candidates
+                        set {assignments}, updated_at = now()
+                        where id = %s
+                        returning {CANDIDATE_COLUMNS}
+                        """,
+                        values,
+                    )
+                except Exception as exc:
+                    if getattr(exc, "sqlstate", None) == "23505":
+                        raise ValueError("Another candidate with this email already exists in this organisation.") from exc
+                    raise
                 return cursor.fetchone()
 
     async def delete_candidate(self, candidate_id: UUID) -> bool:
