@@ -654,6 +654,21 @@ export default function CandidatesPage() {
           {cvUnsupportedFiles.length > 0 && <div className="notice" style={{ margin: "8px 0", borderColor: "#d97706" }}>Remove unsupported, empty, or over-4-MB files: {cvUnsupportedFiles.map((file) => file.name).join(", ")}</div>}
           {cvFiles.length > 20 && <div className="notice" style={{ margin: "8px 0", borderColor: "#d97706" }}>Select no more than 20 files per batch.</div>}
           {cvFiles.length > 0 && <div style={{ overflow: "auto", maxHeight: 180, marginBottom: 12 }}><table className="table"><thead><tr><th>Filename</th><th>Size</th><th>Type</th></tr></thead><tbody>{cvFiles.map((file, index) => <tr key={file.name + file.size + index}><td>{file.name}</td><td>{(file.size / (1024 * 1024)).toFixed(2)} MB</td><td>{file.name.toLowerCase().endsWith(".pdf") ? "PDF" : file.name.toLowerCase().endsWith(".docx") ? "DOCX" : "Unsupported"}</td></tr>)}</tbody></table></div>}
+          <div style={{ border: "1px solid #dbe3f0", borderRadius: 10, padding: 14, margin: "12px 0" }}>
+            <strong>Privacy and record details for this CV batch</strong>
+            <p className="muted-small">Apply these details to every candidate created in this batch. Leave fields blank when the information has not been established. Importing a CV does not itself mean the candidate consented.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <label>Processing basis
+                <select value={importPrivacy.lawful_basis} onChange={(e) => setImportPrivacy({ ...importPrivacy, lawful_basis: e.target.value, consent_confirmed: e.target.value === "consent" ? importPrivacy.consent_confirmed : false })}>
+                  <option value="">Not recorded</option><option value="consent">Consent</option><option value="contract">Contract / pre-contract steps</option><option value="legal_obligation">Legal obligation</option><option value="legitimate_interests">Legitimate interests</option><option value="public_task">Public task</option><option value="vital_interests">Vital interests</option>
+                </select>
+              </label>
+              <label>Privacy notice version<input maxLength={50} value={importPrivacy.privacy_notice_version} onChange={(e) => setImportPrivacy({ ...importPrivacy, privacy_notice_version: e.target.value })} placeholder="e.g. v1.0" /></label>
+            </div>
+            <label>Processing purpose<input maxLength={500} value={importPrivacy.consent_purpose} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_purpose: e.target.value })} placeholder="Enter the actual purpose for this processing" /></label>
+            <label>Retention review / delete by<input type="date" value={importPrivacy.retention_until} onChange={(e) => setImportPrivacy({ ...importPrivacy, retention_until: e.target.value })} /></label>
+            {importPrivacy.lawful_basis === "consent" && <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={importPrivacy.consent_confirmed} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_confirmed: e.target.checked })} />Consent was genuinely obtained and evidence is retained for these candidates.</label>}
+          </div>
           {cvImportMessage && <div className="notice" style={{ margin: "12px 0" }}>{cvImportMessage}</div>}
           {cvImportResults.length > 0 && <div style={{ overflow: "auto", maxHeight: 320 }}><table className="table"><thead><tr><th>CV</th><th>Result</th><th>Candidate</th><th>Extracted details</th></tr></thead><tbody>{cvImportResults.map((result, index) => <tr key={result.filename + index}><td>{result.filename}</td><td><span className={"badge " + (result.status === "imported" ? "green" : result.status === "duplicate" ? "amber" : "red")}>{result.status}</span></td><td>{result.name || "—"}<div className="muted-small">{result.email || ""}</div></td><td>{result.skills_found?.length ? result.skills_found.join(", ") : result.text_extracted === false ? "No readable text found" : result.message || "—"}</td></tr>)}</tbody></table></div>}
           <div className="modal-actions"><button className="btn" disabled={cvImporting} onClick={() => { setCvFiles([]); setCvImportResults([]); setCvImportMessage(""); }}>Clear</button><button className="btn primary" disabled={cvImporting || cvFiles.length === 0 || cvFiles.length > 20 || cvTotalBytes > 4 * 1024 * 1024 || cvUnsupportedFiles.length > 0} onClick={() => void runBulkCvImport()}>{cvImporting ? "Importing CVs…" : "Import " + cvFiles.length + " CVs"}</button><button className="btn" disabled={cvImporting} onClick={() => setShowCvImport(false)}>Close</button></div>
@@ -666,6 +681,21 @@ export default function CandidatesPage() {
           <p className="subtitle">Upload a CSV or Excel workbook. AQERITH scans worksheets, previews candidate rows, and skips email duplicates.</p>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}><input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => void readImportFile(event.target.files?.[0])} disabled={importing} />{importFileName && <span className="muted-small">{importFileName}</span>}</div>
           <p className="muted-small">Recognised columns include applicant/candidate name, email, phone/mobile, location, skills, job title and status. Excel workbooks with multiple worksheets are scanned. Application history is not imported in this candidate-only workflow.</p>
+          <div style={{ border: "1px solid #dbe3f0", borderRadius: 10, padding: 14, margin: "12px 0" }}>
+            <strong>Privacy and record details for this import</strong>
+            <p className="muted-small">Apply these details to every candidate created in this batch. Leave fields blank when the information has not been established. Importing a CV does not itself mean the candidate consented.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <label>Processing basis
+                <select value={importPrivacy.lawful_basis} onChange={(e) => setImportPrivacy({ ...importPrivacy, lawful_basis: e.target.value, consent_confirmed: e.target.value === "consent" ? importPrivacy.consent_confirmed : false })}>
+                  <option value="">Not recorded</option><option value="consent">Consent</option><option value="contract">Contract / pre-contract steps</option><option value="legal_obligation">Legal obligation</option><option value="legitimate_interests">Legitimate interests</option><option value="public_task">Public task</option><option value="vital_interests">Vital interests</option>
+                </select>
+              </label>
+              <label>Privacy notice version<input maxLength={50} value={importPrivacy.privacy_notice_version} onChange={(e) => setImportPrivacy({ ...importPrivacy, privacy_notice_version: e.target.value })} placeholder="e.g. v1.0" /></label>
+            </div>
+            <label>Processing purpose<input maxLength={500} value={importPrivacy.consent_purpose} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_purpose: e.target.value })} placeholder="Enter the actual purpose for this processing" /></label>
+            <label>Retention review / delete by<input type="date" value={importPrivacy.retention_until} onChange={(e) => setImportPrivacy({ ...importPrivacy, retention_until: e.target.value })} /></label>
+            {importPrivacy.lawful_basis === "consent" && <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={importPrivacy.consent_confirmed} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_confirmed: e.target.checked })} />Consent was genuinely obtained and evidence is retained for these candidates.</label>}
+          </div>
           {importMessage && <div className="notice" style={{ marginBottom: 12 }}>{importMessage}</div>}
           {importRows.length > 0 && <>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}><span className="badge green">{importRows.filter((row) => !row.errors.length && !row.duplicate).length} ready</span><span className="badge amber">{importRows.filter((row) => row.errors.length > 0).length} with errors</span><span className="badge amber">{importRows.filter((row) => row.duplicate).length} duplicates</span></div>
