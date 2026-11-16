@@ -454,7 +454,7 @@ export default function JobsPage() {
         <div className="modal-backdrop" role="presentation">
           <section className="modal distribution-modal" role="dialog" aria-modal="true" aria-labelledby="distribution-title">
             <div className="card-head">
-              <div><span className="card-title" id="distribution-title">Job distribution</span><div className="muted-small" style={{ marginTop: 5 }}>{distributionJob.title}</div></div>
+              <div><span className="card-title" id="distribution-title">Job distribution</span><div className="muted-small" style={{ marginTop: 5 }}>{distributionJob.job_code ? distributionJob.job_code+" · " : ""}{distributionJob.title}</div></div>
               <button type="button" className="icon-button" aria-label="Close distribution settings" onClick={() => setDistributionJob(null)}>×</button>
             </div>
             <div className="notice">{distributionLoading ? "Loading saved channel preferences…" : API_BASE && distributionJob.id && !distributionJob.id.startsWith("demo-") && !distributionJob.id.startsWith("local-") ? "Channel preferences are saved per job in the organisation database. External publishing still requires configured partner APIs or feeds." : "Demo mode: channel choices persist in this browser. External publishing requires configured partner APIs or feeds."}</div>
