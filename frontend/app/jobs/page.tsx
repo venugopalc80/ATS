@@ -347,7 +347,16 @@ export default function JobsPage() {
     }
   }
 
-  async function copyJobReference(reference: string) {\n    try {\n      await navigator.clipboard.writeText(reference);\n      setMessage("Copied requisition reference: " + reference);\n    } catch {\n      setMessage("Unable to copy the requisition reference. Please select and copy it manually.");\n    }\n  }\n\n  async function deleteJob(job: Job) {
+  async function copyJobReference(reference: string) {
+    try {
+      await navigator.clipboard.writeText(reference);
+      setMessage("Copied requisition reference: " + reference);
+    } catch {
+      setMessage("Unable to copy the requisition reference. Please select and copy it manually.");
+    }
+  }
+
+  async function deleteJob(job: Job) {
     if (!job.id) return;
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!window.confirm(`Delete "${job.title}"? This cannot be undone.`)) return;
