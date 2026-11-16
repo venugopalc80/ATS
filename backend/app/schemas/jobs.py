@@ -11,7 +11,6 @@ JobStatus = Literal["draft", "open", "on_hold", "closed", "filled", "cancelled"]
 
 class JobBase(BaseModel):
     client_id: UUID | None = None
-    job_code: str | None = None
     title: str = Field(min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
@@ -92,6 +91,7 @@ class JobUpdate(BaseModel):
 
 class JobOut(JobBase):
     id: UUID
+    job_code: str
     organization_id: UUID
     created_at: datetime
     updated_at: datetime
