@@ -439,7 +439,7 @@ export default function CandidatesPage() {
     setImporting(true); let created = 0; const failures: string[] = [];
     try {
       for (const row of eligible) {
-        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean) };
+        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean), source_type: "import" as const, lawful_basis: null, privacy_notice_version: null, consent_purpose: null, retention_until: null, consent_recorded_at: null };
         try {
           const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
