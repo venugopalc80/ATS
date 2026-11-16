@@ -53,7 +53,6 @@ class JobCreate(JobBase):
 
 class JobUpdate(BaseModel):
     client_id: UUID | None = None
-    job_code: str | None = None
     title: str | None = Field(default=None, min_length=1, max_length=200)
     description: str | None = None
     location: str | None = None
