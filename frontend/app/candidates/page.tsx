@@ -153,6 +153,7 @@ export default function CandidatesPage() {
   const [cvImporting, setCvImporting] = useState(false);
   const [cvImportMessage, setCvImportMessage] = useState("");
   const [cvImportResults, setCvImportResults] = useState<Array<{ filename: string; status: string; message?: string; name?: string; email?: string | null; skills_found?: string[]; text_extracted?: boolean }>>([]);
+  const [importPrivacy, setImportPrivacy] = useState({ lawful_basis: "", privacy_notice_version: "", consent_purpose: "", retention_until: "", consent_confirmed: false });
   const [cvPreviewCandidate, setCvPreviewCandidate] = useState<Candidate | null>(null);
   const [cvPreviewDocuments, setCvPreviewDocuments] = useState<CandidateCv[]>([]);
   const [cvPreviewLoading, setCvPreviewLoading] = useState(false);
@@ -305,6 +306,8 @@ export default function CandidatesPage() {
       setCvImportMessage("Select an organisation before importing CVs.");
       return;
     }
+    if (importPrivacy.lawful_basis === "consent" && !importPrivacy.consent_confirmed) { setCvImportMessage("Confirm that consent was genuinely obtained before importing with consent as the basis."); return; }
+    if (importPrivacy.lawful_basis !== "consent" && importPrivacy.consent_confirmed) { setCvImportMessage("Consent confirmation is only available when consent is selected as the processing basis."); return; }
     if (cvFiles.length > 20 || cvFiles.reduce((total, file) => total + file.size, 0) > 4 * 1024 * 1024) {
       setCvImportMessage("Choose up to 20 CVs with a combined size of 4 MB or less per batch.");
       return;
@@ -315,6 +318,11 @@ export default function CandidatesPage() {
     try {
       const formData = new FormData();
       cvFiles.forEach((file) => formData.append("files", file));
+      formData.append("lawful_basis", importPrivacy.lawful_basis);
+      formData.append("privacy_notice_version", importPrivacy.privacy_notice_version);
+      formData.append("consent_purpose", importPrivacy.consent_purpose);
+      if (importPrivacy.retention_until) formData.append("retention_until", new Date(importPrivacy.retention_until + "T23:59:59Z").toISOString());
+      formData.append("consent_confirmed", String(importPrivacy.consent_confirmed));
       const response = await apiFetch(API_BASE + "/api/documents/bulk-cv?organization_id=" + encodeURIComponent(organizationId), {
         method: "POST",
         body: formData,
@@ -434,12 +442,14 @@ export default function CandidatesPage() {
   async function runImport() {
     const eligible = importRows.filter((row) => row.errors.length === 0 && !row.duplicate);
     if (!eligible.length) { setImportMessage("There are no valid, non-duplicate rows to import."); return; }
+    if (importPrivacy.lawful_basis === "consent" && !importPrivacy.consent_confirmed) { setImportMessage("Confirm that consent was genuinely obtained before importing with consent as the basis."); return; }
+    if (importPrivacy.lawful_basis !== "consent" && importPrivacy.consent_confirmed) { setImportMessage("Consent confirmation is only available when consent is selected as the processing basis."); return; }
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setImportMessage("API or active organisation is not configured."); return; }
     setImporting(true); let created = 0; const failures: string[] = [];
     try {
       for (const row of eligible) {
-        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean), source_type: "import" as const, lawful_basis: null, privacy_notice_version: null, consent_purpose: null, retention_until: null, consent_recorded_at: null };
+        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean), source_type: "import" as const, lawful_basis: importPrivacy.lawful_basis || null, privacy_notice_version: importPrivacy.privacy_notice_version.trim() || null, consent_purpose: importPrivacy.consent_purpose.trim() || null, retention_until: importPrivacy.retention_until ? new Date(importPrivacy.retention_until + "T23:59:59Z").toISOString() : null, consent_recorded_at: importPrivacy.lawful_basis === "consent" && importPrivacy.consent_confirmed ? new Date().toISOString() : null };
         try {
           const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
