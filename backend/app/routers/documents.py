@@ -161,10 +161,42 @@ async def upload_candidate_document(
         raise HTTPException(status_code=503, detail="Unable to store the document") from exc
 
 
-@router.get("", response_model=list[DocumentOut])
+def build_document_preview(document: dict, organization_id: UUID) -> dict:
+    """Build an authorised preview payload; DOCX text is cached after first extraction."""
+    if document["content_type"] == "application/pdf":
+        result = storage_client().storage.from_(document["storage_bucket"]).create_signed_url(
+            document["storage_path"], 60, options={"download": False}
+        )
+        signed_url = result.get("signedURL") or result.get("signedUrl")
+        if not signed_url:
+            raise HTTPException(status_code=503, detail="Unable to create secure preview link")
+        return {"kind": "pdf", "url": signed_url, "filename": document["original_filename"], "expires_in": 60}
+
+    if document["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        extracted = document.get("preview_text")
+        if not extracted:
+            data = storage_client().storage.from_(document["storage_bucket"]).download(document["storage_path"])
+            extracted = extract_cv_text(data, document["content_type"])
+            if not extracted.strip():
+                raise HTTPException(status_code=422, detail="No readable text was found in this DOCX file")
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """update public.candidate_documents
+                           set preview_text=%s
+                           where id=%s and organization_id=%s and deleted_at is null""",
+                        [extracted, document["id"], organization_id],
+                    )
+        return {"kind": "text", "text": extracted, "filename": document["original_filename"]}
+
+    raise HTTPException(status_code=415, detail="Preview is not supported for this file type")
+
+
+@router.get("")
 async def list_candidate_documents(
     organization_id: UUID,
     candidate_id: UUID,
+    include_preview: bool = Query(default=False),
     user_id: UUID = Depends(get_current_user_id),
 ):
     assert_org_permission(user_id, organization_id, "candidates.documents.read")
@@ -175,13 +207,19 @@ async def list_candidate_documents(
             with connection.cursor() as cursor:
                 cursor.execute(
                     """select id, organization_id, candidate_id, application_id, document_type,
-                              original_filename, content_type, file_size_bytes, sha256, created_at
+                              original_filename, content_type, storage_bucket, storage_path,
+                              file_size_bytes, sha256, created_at,
+                              case when %s then preview_text else null end as preview_text
                        from public.candidate_documents
                        where organization_id=%s and candidate_id=%s and deleted_at is null
                        order by created_at desc""",
-                    [organization_id, candidate_id],
+                    [include_preview, organization_id, candidate_id],
                 )
-                return list(cursor.fetchall())
+                documents = list(cursor.fetchall())
+        if not include_preview:
+            return documents
+        preview = build_document_preview(documents[0], organization_id) if len(documents) == 1 else None
+        return {"documents": documents, "preview": preview}
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -244,23 +282,8 @@ async def preview_candidate_document(
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
                 assert_resource_access(user_id, organization_id, "candidate", row["candidate_id"])
-        if row["content_type"] == "application/pdf":
-            result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(
-                row["storage_path"], 60, options={"download": False}
-            )
-            signed_url = result.get("signedURL") or result.get("signedUrl")
-            if not signed_url:
-                raise HTTPException(status_code=503, detail="Unable to create secure preview link")
-            return {"kind": "pdf", "url": signed_url, "filename": row["original_filename"], "expires_in": 60}
-
-        if row["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            data = storage_client().storage.from_(row["storage_bucket"]).download(row["storage_path"])
-            text = extract_cv_text(data, row["content_type"])
-            if not text.strip():
-                raise HTTPException(status_code=422, detail="No readable text was found in this DOCX file")
-            return {"kind": "text", "text": text, "filename": row["original_filename"]}
-
-        raise HTTPException(status_code=415, detail="Preview is not supported for this file type")
+        row["id"] = document_id
+        return build_document_preview(row, organization_id)
     except HTTPException:
         raise
     except Exception as exc:
