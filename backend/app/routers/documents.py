@@ -306,15 +306,41 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         "professional experience", "education", "skills", "experience",
     }
     name = ""
-    for raw_line in text.splitlines()[:15]:
-        line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
-        if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+    first_lines = text.splitlines()[:20]
+
+    # Prefer an explicitly labelled name in the CV over a filename-derived guess.
+    # Common labels include "Name:", "Full Name:" and "Candidate Name:".
+    for raw_line in first_lines:
+        labelled = re.match(
+            r"^\s*(?:candidate\s+name|full\s+name|name)\s*[:：-]\s*(.+?)\s*$",
+            raw_line,
+            re.I,
+        )
+        if not labelled:
             continue
-        if line.casefold() in excluded or len(line.split()) > 5:
-            continue
-        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
-            name = line
+        candidate_name = re.sub(r"\s+", " ", labelled.group(1)).strip(" \t|•-")
+        if (
+            candidate_name
+            and len(candidate_name) <= 80
+            and "@" not in candidate_name
+            and not re.search(r"\d{3}", candidate_name)
+            and re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", candidate_name)
+            and 2 <= len(candidate_name.split()) <= 5
+        ):
+            name = candidate_name
             break
+
+    # If no labelled name exists, use a plausible standalone name near the top.
+    if not name:
+        for raw_line in first_lines:
+            line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
+            if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+                continue
+            if line.casefold() in excluded or len(line.split()) > 5:
+                continue
+            if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
+                name = line
+                break
     if not name:
         stem = Path(filename).stem
         stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
