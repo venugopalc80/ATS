@@ -216,10 +216,17 @@ async def list_candidate_documents(
                     [include_preview, organization_id, candidate_id],
                 )
                 documents = list(cursor.fetchall())
+        public_documents = [
+            {key: document[key] for key in (
+                "id", "organization_id", "candidate_id", "application_id", "document_type",
+                "original_filename", "content_type", "file_size_bytes", "sha256", "created_at",
+            )}
+            for document in documents
+        ]
         if not include_preview:
-            return documents
+            return public_documents
         preview = build_document_preview(documents[0], organization_id) if len(documents) == 1 else None
-        return {"documents": documents, "preview": preview}
+        return {"documents": public_documents, "preview": preview}
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
