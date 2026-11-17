@@ -165,11 +165,16 @@ export default function CandidatesPage() {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     try {
       if (!API_BASE || !organizationId) throw new Error("Organisation configuration is missing.");
-      const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id));
+      const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id) + "&include_preview=true");
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not load this candidate's CVs.");
-      const docs: CandidateCv[] = await response.json(); setCvPreviewDocuments(docs);
+      const payload: { documents: CandidateCv[]; preview: CandidateCvPreview | null } = await response.json();
+      const docs = payload.documents ?? [];
+      setCvPreviewDocuments(docs);
       if (!docs.length) setCvPreviewMessage("No CV is available for this candidate yet.");
-      else if (docs.length === 1) await previewCandidateCv(docs[0], organizationId);
+      else if (docs.length === 1 && payload.preview) {
+        setCvPreviewDocumentId(docs[0].id);
+        setCvPreview(payload.preview);
+      }
     } catch (error) { setCvPreviewMessage(error instanceof Error ? error.message : "Could not load this candidate's CVs."); }
     finally { setCvPreviewLoading(false); }
   }
