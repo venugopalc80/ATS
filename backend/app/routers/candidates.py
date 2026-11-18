@@ -30,6 +30,46 @@ async def list_candidates(
         raise db_unavailable(exc) from exc
 
 
+
+@router.get("/search")
+async def search_candidates(
+    organization_id: UUID,
+    status: str | None = Query(default=None, pattern="^(active|inactive|placed|do_not_contact)$"),
+    search: str | None = Query(default=None, max_length=100),
+    country_code: str | None = Query(default=None, min_length=2, max_length=2, pattern="^[A-Za-z]{2}$"),
+    skill: str | None = Query(default=None, max_length=80),
+    min_experience: float | None = Query(default=None, ge=0, le=80),
+    max_experience: float | None = Query(default=None, ge=0, le=80),
+    sort_by: str = Query(default="created_at", pattern="^(name|title|location|experience|created_at)$"),
+    sort_direction: str = Query(default="desc", pattern="^(asc|desc)$"),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=25, ge=1, le=100),
+    user_id: UUID = Depends(get_current_user_id),
+) -> dict:
+    assert_org_permission(user_id, organization_id, "candidates.read")
+    if min_experience is not None and max_experience is not None and min_experience > max_experience:
+        raise HTTPException(status_code=422, detail="min_experience cannot exceed max_experience")
+    try:
+        result = await service.search_candidates(
+            organization_id,
+            user_id,
+            status=status,
+            search=search,
+            country_code=country_code,
+            skill=skill,
+            min_experience=min_experience,
+            max_experience=max_experience,
+            sort_by=sort_by,
+            sort_direction=sort_direction,
+            page=page,
+            page_size=page_size,
+        )
+        result["items"] = [CandidateOut.model_validate(row) for row in result["items"]]
+        return result
+    except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
+        raise db_unavailable(exc) from exc
+
+
 @router.post("", response_model=CandidateOut, status_code=201)
 async def create_candidate(
     payload: CandidateCreate,
