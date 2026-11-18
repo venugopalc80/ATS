@@ -128,6 +128,7 @@ export default function CandidatesPage() {
   const [latestNotes, setLatestNotes] = useState<Record<string, LatestNote>>({});
   const [loading, setLoading] = useState(Boolean(API_BASE));
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [country, setCountry] = useState("all");
   const [sortBy, setSortBy] = useState<"name" | "title" | "location" | "status">("name");
@@ -208,6 +209,11 @@ export default function CandidatesPage() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setLoading(false); return; }
     let cancelled = false;
@@ -221,7 +227,7 @@ export default function CandidatesPage() {
           sort_by: sortBy,
           sort_direction: sortDirection,
         });
-        if (query.trim()) params.set("search", query.trim());
+        if (debouncedQuery.trim()) params.set("search", debouncedQuery.trim());
         if (status !== "all") params.set("status", status);
         if (country !== "all") params.set("country_code", country);
         const response = await apiFetch(API_BASE + "/api/candidates/search?" + params.toString());
@@ -240,7 +246,7 @@ export default function CandidatesPage() {
     }
     void load();
     return () => { cancelled = true; };
-  }, [page, query, status, country, sortBy, sortDirection]);
+  }, [page, debouncedQuery, status, country, sortBy, sortDirection]);
 
   const filtered = candidates;
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
