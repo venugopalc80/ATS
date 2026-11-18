@@ -4,7 +4,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import { apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
@@ -137,6 +137,7 @@ export default function CandidatesPage() {
   const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string; country: string }>>([]);
   const [activeView, setActiveView] = useState("All candidates");
   const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
   const pageSize = 25;
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Candidate | null>(null);
@@ -209,46 +210,41 @@ export default function CandidatesPage() {
   useEffect(() => {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setLoading(false); return; }
-
     let cancelled = false;
-
     async function load() {
+      setLoading(true);
       try {
-        const response = await apiFetch(
-          API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId)
-        );
-        if (!response.ok) throw new Error("API returned " + response.status);
-        const data: Candidate[] = await response.json();
-        if (!cancelled) setCandidates(data);
+        const params = new URLSearchParams({
+          organization_id: organizationId,
+          page: String(page),
+          page_size: String(pageSize),
+          sort_by: sortBy === "status" ? "created_at" : sortBy,
+          sort_direction: sortDirection,
+        });
+        if (query.trim()) params.set("search", query.trim());
+        if (status !== "all") params.set("status", status);
+        if (country !== "all") params.set("country_code", country);
+        const response = await apiFetch(API_BASE + "/api/candidates/search?" + params.toString());
+        if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Unable to load candidates.");
+        const payload: { items: Candidate[]; total: number; page: number; page_size: number; pages: number } = await response.json();
+        if (!cancelled) {
+          setCandidates(payload.items ?? []);
+          setTotalCount(payload.total ?? 0);
+          setSelectedIds((current) => current.filter((id) => (payload.items ?? []).some((candidate) => candidate.id === id)));
+        }
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : "Unable to load candidates.");
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-
-    load();
+    void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [page, query, status, country, sortBy, sortDirection]);
 
-  const filtered = useMemo(() => candidates.filter((candidate) => {
-    const haystack = (
-      fullName(candidate) + " " +
-      (candidate.email ?? "") + " " +
-      (candidate.current_title ?? "") + " " +
-      (candidate.city ?? "") + " " +
-      candidate.skills.join(" ")
-    ).toLowerCase();
-
-    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country);
-  }).sort((a, b) => {
-    const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
-    const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
-    return sortDirection === "asc" ? comparison : -comparison;
-  }), [candidates, query, status, country, sortBy, sortDirection]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = candidates;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const visibleCandidates = candidates;
   const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
   useEffect(() => {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
@@ -603,8 +599,8 @@ export default function CandidatesPage() {
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
-              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
-              <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
+              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{["AU", "GB", "IN", "US"].map((code) => <option key={code} value={code}>{code}</option>)}</select>
+              <span className="muted-small">{totalCount} candidate{totalCount === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export current page</button>
             </div>
           </div>
 
@@ -641,7 +637,7 @@ export default function CandidatesPage() {
                 ))}
               </tbody>
             </table></div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {totalCount ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, totalCount)} of {totalCount}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
           </div>
         </section>
       </main>
