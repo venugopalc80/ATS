@@ -40,7 +40,7 @@ async def search_candidates(
     skill: str | None = Query(default=None, max_length=80),
     min_experience: float | None = Query(default=None, ge=0, le=80),
     max_experience: float | None = Query(default=None, ge=0, le=80),
-    sort_by: str = Query(default="created_at", pattern="^(name|title|location|experience|created_at)$"),
+    sort_by: str = Query(default="created_at", pattern="^(name|title|location|experience|status|created_at)$"),
     sort_direction: str = Query(default="desc", pattern="^(asc|desc)$"),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=25, ge=1, le=100),
