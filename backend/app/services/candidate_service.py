@@ -124,6 +124,7 @@ class CandidateService:
             "title": "lower(coalesce(current_title, ''))",
             "location": "lower(coalesce(city, ''))",
             "experience": "years_experience",
+            "status": "status",
             "created_at": "created_at",
         }
         order_column = sort_columns[sort_by]
