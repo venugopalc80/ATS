@@ -218,7 +218,7 @@ export default function CandidatesPage() {
           organization_id: organizationId,
           page: String(page),
           page_size: String(pageSize),
-          sort_by: sortBy === "status" ? "created_at" : sortBy,
+          sort_by: sortBy,
           sort_direction: sortDirection,
         });
         if (query.trim()) params.set("search", query.trim());
