@@ -139,6 +139,7 @@ export default function CandidatesPage() {
   const [activeView, setActiveView] = useState("All candidates");
   const [page, setPage] = useState(1);
   const [totalCount, setTotalCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const pageSize = 25;
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Candidate | null>(null);
@@ -246,7 +247,7 @@ export default function CandidatesPage() {
     }
     void load();
     return () => { cancelled = true; };
-  }, [page, debouncedQuery, status, country, sortBy, sortDirection]);
+  }, [page, debouncedQuery, status, country, sortBy, sortDirection, refreshKey]);
 
   const filtered = candidates;
   const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -338,10 +339,7 @@ export default function CandidatesPage() {
       if (!response.ok) throw new Error(payload?.detail || "CV import failed (HTTP " + response.status + ").");
       setCvImportResults(payload.results ?? []);
       setCvImportMessage("Finished: " + payload.imported + " imported, " + payload.duplicates + " duplicates skipped, " + payload.failed + " failed.");
-      if (payload.imported > 0) {
-        const refreshed = await apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId));
-        if (refreshed.ok) setCandidates(await refreshed.json());
-      }
+      if (payload.imported > 0) setRefreshKey((key) => key + 1);
     } catch (error) {
       setCvImportMessage(error instanceof Error ? error.message : "Unable to import CVs.");
     } finally {
@@ -460,11 +458,11 @@ export default function CandidatesPage() {
         try {
           const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
-          const candidate = await response.json() as Candidate; setCandidates((current) => [candidate, ...current]); created++;
+          await response.json(); created++;
         } catch { failures.push("Row " + row.line + ": network error"); }
       }
       setImportMessage("Imported " + created + " candidate(s). Skipped " + (importRows.length - eligible.length) + " invalid or duplicate row(s)." + (failures.length ? " Failed: " + failures.slice(0, 5).join("; ") : ""));
-      if (created > 0) { setImportRows([]); setImportFileName(""); }
+      if (created > 0) { setImportRows([]); setImportFileName(""); setPage(1); setRefreshKey((key) => key + 1); }
     } finally { setImporting(false); }
   }
 
@@ -531,11 +529,8 @@ export default function CandidatesPage() {
       }
 
       const saved: Candidate = await response.json();
-      setCandidates((current) =>
-        editing
-          ? current.map((item) => item.id === saved.id ? saved : item)
-          : [saved, ...current]
-      );
+      if (editing) setCandidates((current) => current.map((item) => item.id === saved.id ? saved : item));
+      else { setPage(1); setRefreshKey((key) => key + 1); }
       setMessage(editing ? "Candidate updated successfully." : "Candidate created successfully.");
       setEditing(null);
       setForm(emptyForm);
