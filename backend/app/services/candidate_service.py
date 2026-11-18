@@ -60,6 +60,104 @@ class CandidateService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
+
+    async def search_candidates(
+        self,
+        organization_id: UUID,
+        user_id: UUID,
+        *,
+        status: str | None = None,
+        search: str | None = None,
+        country_code: str | None = None,
+        skill: str | None = None,
+        min_experience: float | None = None,
+        max_experience: float | None = None,
+        sort_by: str = "created_at",
+        sort_direction: str = "desc",
+        page: int = 1,
+        page_size: int = 25,
+    ) -> dict[str, Any]:
+        # Deliberately exclude resume_path and resume_text from register results.
+        safe_columns = """
+            id, organization_id, first_name, last_name, email, phone,
+            city, region, country_code, status, current_title,
+            years_experience, skills, ai_summary, consent_recorded_at,
+            consent_purpose, retention_until, lawful_basis,
+            privacy_notice_version, source_type, created_at, updated_at
+        """
+        where = [
+            "organization_id = %s",
+            "private.can_access_candidate(id, organization_id, %s)",
+        ]
+        params: list[Any] = [organization_id, user_id]
+
+        if status:
+            where.append("status = %s")
+            params.append(status)
+        if country_code:
+            where.append("country_code = %s")
+            params.append(country_code.upper())
+        if search:
+            where.append("""(
+                first_name ilike %s
+                or coalesce(last_name, '') ilike %s
+                or coalesce(email, '') ilike %s
+                or coalesce(current_title, '') ilike %s
+                or coalesce(city, '') ilike %s
+                or coalesce(array_to_string(skills, ' '), '') ilike %s
+            )""")
+            term = f"%{search}%"
+            params.extend([term] * 6)
+        if skill:
+            where.append("coalesce(array_to_string(skills, ' '), '') ilike %s")
+            params.append(f"%{skill}%")
+        if min_experience is not None:
+            where.append("years_experience >= %s")
+            params.append(min_experience)
+        if max_experience is not None:
+            where.append("years_experience <= %s")
+            params.append(max_experience)
+
+        where_sql = " and ".join(where)
+        sort_columns = {
+            "name": "lower(first_name), lower(coalesce(last_name, ''))",
+            "title": "lower(coalesce(current_title, ''))",
+            "location": "lower(coalesce(city, ''))",
+            "experience": "years_experience",
+            "created_at": "created_at",
+        }
+        order_column = sort_columns[sort_by]
+        direction = "asc" if sort_direction == "asc" else "desc"
+        offset = (page - 1) * page_size
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"select count(*) as total from public.candidates where {where_sql}",
+                    params,
+                )
+                total = int(cursor.fetchone()["total"])
+                cursor.execute(
+                    f"""
+                    select {safe_columns}
+                    from public.candidates
+                    where {where_sql}
+                    order by {order_column} {direction} nulls last, id asc
+                    limit %s offset %s
+                    """,
+                    [*params, page_size, offset],
+                )
+                rows = list(cursor.fetchall())
+
+        return {
+            "items": rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": (total + page_size - 1) // page_size,
+        }
+
+
     async def create_candidate(self, payload: CandidateCreate, creator_user_id: UUID | None = None) -> dict[str, Any]:
         data = payload.model_dump(mode="python")
         columns = list(data.keys())
