@@ -15,6 +15,8 @@ from app.routers.notes import router as notes_router
 from app.routers.job_distribution import router as job_distribution_router
 from app.routers.public_jobs import router as public_jobs_router
 from app.routers.documents import router as documents_router
+from app.routers.permissions import router as permissions_router
+from app.routers.communications import router as communications_router
 
 app=FastAPI(title="ATS API",version="0.10.0",description="AI-powered Applicant Tracking System API")
 frontend_url=os.getenv("FRONTEND_URL","http://localhost:3000").rstrip("/")
@@ -32,6 +34,9 @@ frontend_origins = {
 app.add_middleware(
     CORSMiddleware,
     allow_origins=sorted(frontend_origins),
+    # Permit this project's unique Vercel preview deployment hostnames.
+    # Keep the pattern restricted to the AQERITH frontend project and team.
+    allow_origin_regex=r"https://aqerith-frontend-[a-z0-9-]+-venugopalc80-9526s-projects\.vercel\.app",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -50,6 +55,8 @@ app.include_router(notes_router)
 app.include_router(job_distribution_router)
 app.include_router(public_jobs_router)
 app.include_router(documents_router)
+app.include_router(permissions_router)
+app.include_router(communications_router)
 
 @app.get("/")
 async def root()->dict[str,str]: return {"status":"ok","service":"ats-api","docs":"/docs"}

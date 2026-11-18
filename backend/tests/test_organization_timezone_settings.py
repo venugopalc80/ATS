@@ -69,7 +69,7 @@ class OrganizationTimezoneSettingsTests(unittest.IsolatedAsyncioTestCase):
             with FakeConnection(cursor) as connection:
                 yield connection
 
-        with patch.object(me, "assert_org_admin") as admin_check, patch.object(
+        with patch.object(me, "assert_org_permission") as admin_check, patch.object(
             me, "get_connection", fake_connection
         ):
             result = await me.update_organization_settings(
@@ -78,14 +78,14 @@ class OrganizationTimezoneSettingsTests(unittest.IsolatedAsyncioTestCase):
                 user_id=USER,
             )
 
-        admin_check.assert_called_once_with(USER, ORG)
+        admin_check.assert_called_once_with(USER, ORG, "organization.settings.manage")
         self.assertEqual(result["organization"]["timezone"], "Asia/Kolkata")
         self.assertIn("where id = %s", cursor.sql)
         self.assertEqual(cursor.params, ["Asia/Kolkata", ORG])
 
     async def test_non_admin_is_rejected_before_database_update(self):
         with patch.object(
-            me, "assert_org_admin", side_effect=HTTPException(status_code=403, detail="Admin access required")
+            me, "assert_org_permission", side_effect=HTTPException(status_code=403, detail="Admin access required")
         ) as admin_check, patch.object(me, "get_connection") as connection:
             with self.assertRaises(HTTPException) as error:
                 await me.update_organization_settings(
@@ -95,7 +95,7 @@ class OrganizationTimezoneSettingsTests(unittest.IsolatedAsyncioTestCase):
                 )
 
         self.assertEqual(error.exception.status_code, 403)
-        admin_check.assert_called_once_with(USER, ORG)
+        admin_check.assert_called_once_with(USER, ORG, "organization.settings.manage")
         connection.assert_not_called()
 
 

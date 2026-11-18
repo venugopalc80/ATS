@@ -7,6 +7,8 @@ from pydantic import BaseModel, Field, StringConstraints
 from typing import Annotated
 
 CandidateStatus = Literal["active", "inactive", "placed", "do_not_contact"]
+LawfulBasis = Literal["consent", "contract", "legal_obligation", "legitimate_interests", "public_task", "vital_interests"]
+CandidateSource = Literal["recruiter_entry", "career_page", "job_application", "referral", "agency", "import", "cv_upload", "other"]
 CountryCode = Annotated[str, StringConstraints(pattern=r"^[A-Z]{2}$")]
 
 
@@ -26,8 +28,11 @@ class CandidateBase(BaseModel):
     resume_text: str | None = None
     ai_summary: str | None = None
     consent_recorded_at: datetime | None = None
-    consent_purpose: str | None = None
+    consent_purpose: str | None = Field(default=None, max_length=500)
     retention_until: datetime | None = None
+    lawful_basis: LawfulBasis | None = None
+    privacy_notice_version: str | None = Field(default=None, max_length=50)
+    source_type: CandidateSource = "recruiter_entry"
 
 
 class CandidateCreate(CandidateBase):
@@ -50,8 +55,11 @@ class CandidateUpdate(BaseModel):
     resume_text: str | None = None
     ai_summary: str | None = None
     consent_recorded_at: datetime | None = None
-    consent_purpose: str | None = None
+    consent_purpose: str | None = Field(default=None, max_length=500)
     retention_until: datetime | None = None
+    lawful_basis: LawfulBasis | None = None
+    privacy_notice_version: str | None = Field(default=None, max_length=50)
+    source_type: CandidateSource | None = None
 
 
 class CandidateOut(CandidateBase):

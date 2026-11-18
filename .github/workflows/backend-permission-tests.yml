@@ -1,0 +1,33 @@
+name: Backend permission security tests
+
+on:
+  push:
+    branches:
+      - feat/aqerith-permission-management-v1
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  permission-security:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+      - name: Install backend dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Compile backend
+        run: python -m compileall -q .
+      - name: Run permission security tests
+        env:
+          PYTHONPATH: .
+        run: python -m unittest discover -s tests -p "test_permission_security.py" -v

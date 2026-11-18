@@ -4,7 +4,7 @@ import Link from "next/link";
 import * as XLSX from "xlsx";
 import { apiFetch } from "@/lib/api";
 import { getActiveOrganizationId } from "@/lib/organization";
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
@@ -24,6 +24,12 @@ type Candidate = {
   years_experience?: number | null;
   skills: string[];
   ai_summary?: string | null;
+  lawful_basis?: "consent" | "contract" | "legal_obligation" | "legitimate_interests" | "public_task" | "vital_interests" | null;
+  privacy_notice_version?: string | null;
+  consent_purpose?: string | null;
+  retention_until?: string | null;
+  source_type?: "recruiter_entry" | "career_page" | "job_application" | "referral" | "agency" | "import" | "cv_upload" | "other";
+  consent_recorded_at?: string | null;
 };
 
 type LatestNote = { candidate_id: string; note: string; created_at: string; author_user_id?: string | null };
@@ -42,6 +48,12 @@ type CandidateForm = {
   current_title: string;
   years_experience: string;
   skills: string;
+  lawful_basis: "" | "consent" | "contract" | "legal_obligation" | "legitimate_interests" | "public_task" | "vital_interests";
+  privacy_notice_version: string;
+  consent_purpose: string;
+  retention_until: string;
+  source_type: "recruiter_entry" | "career_page" | "job_application" | "referral" | "agency" | "import" | "cv_upload" | "other";
+  consent_confirmed: boolean;
 };
 
 const emptyForm: CandidateForm = {
@@ -56,6 +68,12 @@ const emptyForm: CandidateForm = {
   current_title: "",
   years_experience: "",
   skills: "",
+  lawful_basis: "",
+  privacy_notice_version: "",
+  consent_purpose: "",
+  retention_until: "",
+  source_type: "recruiter_entry",
+  consent_confirmed: false,
 };
 
 type ImportRow = {
@@ -96,6 +114,12 @@ function formFromCandidate(candidate: Candidate): CandidateForm {
     current_title: candidate.current_title ?? "",
     years_experience: candidate.years_experience?.toString() ?? "",
     skills: candidate.skills.join(", "),
+    lawful_basis: candidate.lawful_basis ?? "",
+    privacy_notice_version: candidate.privacy_notice_version ?? "",
+    consent_purpose: candidate.consent_purpose ?? "",
+    retention_until: candidate.retention_until ? candidate.retention_until.slice(0, 10) : "",
+    source_type: candidate.source_type ?? "recruiter_entry",
+    consent_confirmed: Boolean(candidate.consent_recorded_at),
   };
 }
 
@@ -104,6 +128,7 @@ export default function CandidatesPage() {
   const [latestNotes, setLatestNotes] = useState<Record<string, LatestNote>>({});
   const [loading, setLoading] = useState(Boolean(API_BASE));
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [country, setCountry] = useState("all");
   const [sortBy, setSortBy] = useState<"name" | "title" | "location" | "status">("name");
@@ -113,6 +138,8 @@ export default function CandidatesPage() {
   const [savedViews, setSavedViews] = useState<Array<{ name: string; query: string; status: string; country: string }>>([]);
   const [activeView, setActiveView] = useState("All candidates");
   const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const pageSize = 25;
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Candidate | null>(null);
@@ -129,6 +156,7 @@ export default function CandidatesPage() {
   const [cvImporting, setCvImporting] = useState(false);
   const [cvImportMessage, setCvImportMessage] = useState("");
   const [cvImportResults, setCvImportResults] = useState<Array<{ filename: string; status: string; message?: string; name?: string; email?: string | null; skills_found?: string[]; text_extracted?: boolean }>>([]);
+  const [importPrivacy, setImportPrivacy] = useState({ lawful_basis: "", privacy_notice_version: "", consent_purpose: "", retention_until: "", consent_confirmed: false });
   const [cvPreviewCandidate, setCvPreviewCandidate] = useState<Candidate | null>(null);
   const [cvPreviewDocuments, setCvPreviewDocuments] = useState<CandidateCv[]>([]);
   const [cvPreviewLoading, setCvPreviewLoading] = useState(false);
@@ -140,11 +168,16 @@ export default function CandidatesPage() {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     try {
       if (!API_BASE || !organizationId) throw new Error("Organisation configuration is missing.");
-      const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id));
+      const response = await apiFetch(API_BASE + "/api/documents?organization_id=" + encodeURIComponent(organizationId) + "&candidate_id=" + encodeURIComponent(candidate.id) + "&include_preview=true");
       if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Could not load this candidate's CVs.");
-      const docs: CandidateCv[] = await response.json(); setCvPreviewDocuments(docs);
+      const payload: { documents: CandidateCv[]; preview: CandidateCvPreview | null } = await response.json();
+      const docs = payload.documents ?? [];
+      setCvPreviewDocuments(docs);
       if (!docs.length) setCvPreviewMessage("No CV is available for this candidate yet.");
-      else if (docs.length === 1) await previewCandidateCv(docs[0], organizationId);
+      else if (docs.length === 1 && payload.preview) {
+        setCvPreviewDocumentId(docs[0].id);
+        setCvPreview(payload.preview);
+      }
     } catch (error) { setCvPreviewMessage(error instanceof Error ? error.message : "Could not load this candidate's CVs."); }
     finally { setCvPreviewLoading(false); }
   }
@@ -177,48 +210,48 @@ export default function CandidatesPage() {
   }, []);
 
   useEffect(() => {
+    const timer = window.setTimeout(() => setDebouncedQuery(query), 300);
+    return () => window.clearTimeout(timer);
+  }, [query]);
+
+  useEffect(() => {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setLoading(false); return; }
-
     let cancelled = false;
-
     async function load() {
+      setLoading(true);
       try {
-        const response = await apiFetch(
-          API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId)
-        );
-        if (!response.ok) throw new Error("API returned " + response.status);
-        const data: Candidate[] = await response.json();
-        if (!cancelled) setCandidates(data);
+        const params = new URLSearchParams({
+          organization_id: organizationId,
+          page: String(page),
+          page_size: String(pageSize),
+          sort_by: sortBy,
+          sort_direction: sortDirection,
+        });
+        if (debouncedQuery.trim()) params.set("search", debouncedQuery.trim());
+        if (status !== "all") params.set("status", status);
+        if (country !== "all") params.set("country_code", country);
+        const response = await apiFetch(API_BASE + "/api/candidates/search?" + params.toString());
+        if (!response.ok) throw new Error((await response.json().catch(() => null))?.detail || "Unable to load candidates.");
+        const payload: { items: Candidate[]; total: number; page: number; page_size: number; pages: number } = await response.json();
+        if (!cancelled) {
+          setCandidates(payload.items ?? []);
+          setTotalCount(payload.total ?? 0);
+          setSelectedIds((current) => current.filter((id) => (payload.items ?? []).some((candidate) => candidate.id === id)));
+        }
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : "Unable to load candidates.");
       } finally {
         if (!cancelled) setLoading(false);
       }
     }
-
-    load();
+    void load();
     return () => { cancelled = true; };
-  }, []);
+  }, [page, debouncedQuery, status, country, sortBy, sortDirection, refreshKey]);
 
-  const filtered = useMemo(() => candidates.filter((candidate) => {
-    const haystack = (
-      fullName(candidate) + " " +
-      (candidate.email ?? "") + " " +
-      (candidate.current_title ?? "") + " " +
-      (candidate.city ?? "") + " " +
-      candidate.skills.join(" ")
-    ).toLowerCase();
-
-    return haystack.includes(query.toLowerCase()) && (status === "all" || candidate.status === status) && (country === "all" || (candidate.country_code ?? "").toUpperCase() === country);
-  }).sort((a, b) => {
-    const value = (candidate: Candidate) => sortBy === "title" ? candidate.current_title ?? "" : sortBy === "location" ? [candidate.city, candidate.region, candidate.country_code].filter(Boolean).join(", ") : sortBy === "status" ? candidate.status : fullName(candidate);
-    const comparison = value(a).localeCompare(value(b), undefined, { sensitivity: "base" });
-    return sortDirection === "asc" ? comparison : -comparison;
-  }), [candidates, query, status, country, sortBy, sortDirection]);
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / pageSize));
-  const visibleCandidates = filtered.slice((page - 1) * pageSize, page * pageSize);
+  const filtered = candidates;
+  const pageCount = Math.max(1, Math.ceil(totalCount / pageSize));
+  const visibleCandidates = candidates;
   const visibleCandidateIds = visibleCandidates.map((candidate) => candidate.id).join(",");
   useEffect(() => {
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
@@ -281,6 +314,8 @@ export default function CandidatesPage() {
       setCvImportMessage("Select an organisation before importing CVs.");
       return;
     }
+    if (importPrivacy.lawful_basis === "consent" && !importPrivacy.consent_confirmed) { setCvImportMessage("Confirm that consent was genuinely obtained before importing with consent as the basis."); return; }
+    if (importPrivacy.lawful_basis !== "consent" && importPrivacy.consent_confirmed) { setCvImportMessage("Consent confirmation is only available when consent is selected as the processing basis."); return; }
     if (cvFiles.length > 20 || cvFiles.reduce((total, file) => total + file.size, 0) > 4 * 1024 * 1024) {
       setCvImportMessage("Choose up to 20 CVs with a combined size of 4 MB or less per batch.");
       return;
@@ -291,6 +326,11 @@ export default function CandidatesPage() {
     try {
       const formData = new FormData();
       cvFiles.forEach((file) => formData.append("files", file));
+      formData.append("lawful_basis", importPrivacy.lawful_basis);
+      formData.append("privacy_notice_version", importPrivacy.privacy_notice_version);
+      formData.append("consent_purpose", importPrivacy.consent_purpose);
+      if (importPrivacy.retention_until) formData.append("retention_until", new Date(importPrivacy.retention_until + "T23:59:59Z").toISOString());
+      formData.append("consent_confirmed", String(importPrivacy.consent_confirmed));
       const response = await apiFetch(API_BASE + "/api/documents/bulk-cv?organization_id=" + encodeURIComponent(organizationId), {
         method: "POST",
         body: formData,
@@ -299,10 +339,7 @@ export default function CandidatesPage() {
       if (!response.ok) throw new Error(payload?.detail || "CV import failed (HTTP " + response.status + ").");
       setCvImportResults(payload.results ?? []);
       setCvImportMessage("Finished: " + payload.imported + " imported, " + payload.duplicates + " duplicates skipped, " + payload.failed + " failed.");
-      if (payload.imported > 0) {
-        const refreshed = await apiFetch(API_BASE + "/api/candidates?organization_id=" + encodeURIComponent(organizationId));
-        if (refreshed.ok) setCandidates(await refreshed.json());
-      }
+      if (payload.imported > 0) setRefreshKey((key) => key + 1);
     } catch (error) {
       setCvImportMessage(error instanceof Error ? error.message : "Unable to import CVs.");
     } finally {
@@ -410,20 +447,22 @@ export default function CandidatesPage() {
   async function runImport() {
     const eligible = importRows.filter((row) => row.errors.length === 0 && !row.duplicate);
     if (!eligible.length) { setImportMessage("There are no valid, non-duplicate rows to import."); return; }
+    if (importPrivacy.lawful_basis === "consent" && !importPrivacy.consent_confirmed) { setImportMessage("Confirm that consent was genuinely obtained before importing with consent as the basis."); return; }
+    if (importPrivacy.lawful_basis !== "consent" && importPrivacy.consent_confirmed) { setImportMessage("Consent confirmation is only available when consent is selected as the processing basis."); return; }
     const organizationId = getActiveOrganizationId(ORGANIZATION_ID);
     if (!API_BASE || !organizationId) { setImportMessage("API or active organisation is not configured."); return; }
     setImporting(true); let created = 0; const failures: string[] = [];
     try {
       for (const row of eligible) {
-        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean) };
+        const payload = { organization_id: organizationId, first_name: row.first_name, last_name: row.last_name || null, email: row.email || null, phone: row.phone || null, city: row.city || null, region: row.region || null, country_code: row.country_code || null, status: row.status, current_title: row.current_title || null, years_experience: row.years_experience ? Number(row.years_experience) : null, skills: row.skills.split(/[;,]/).map((skill) => skill.trim()).filter(Boolean), source_type: "import" as const, lawful_basis: importPrivacy.lawful_basis || null, privacy_notice_version: importPrivacy.privacy_notice_version.trim() || null, consent_purpose: importPrivacy.consent_purpose.trim() || null, retention_until: importPrivacy.retention_until ? new Date(importPrivacy.retention_until + "T23:59:59Z").toISOString() : null, consent_recorded_at: importPrivacy.lawful_basis === "consent" && importPrivacy.consent_confirmed ? new Date().toISOString() : null };
         try {
           const response = await apiFetch(API_BASE + "/api/candidates", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
           if (!response.ok) { const body = await response.json().catch(() => null); failures.push("Row " + row.line + ": " + (body?.detail || "API returned " + response.status)); continue; }
-          const candidate = await response.json() as Candidate; setCandidates((current) => [candidate, ...current]); created++;
+          await response.json(); created++;
         } catch { failures.push("Row " + row.line + ": network error"); }
       }
       setImportMessage("Imported " + created + " candidate(s). Skipped " + (importRows.length - eligible.length) + " invalid or duplicate row(s)." + (failures.length ? " Failed: " + failures.slice(0, 5).join("; ") : ""));
-      if (created > 0) { setImportRows([]); setImportFileName(""); }
+      if (created > 0) { setImportRows([]); setImportFileName(""); setPage(1); setRefreshKey((key) => key + 1); }
     } finally { setImporting(false); }
   }
 
@@ -446,8 +485,9 @@ export default function CandidatesPage() {
     setSaving(true);
     setMessage("");
 
+    const activeOrganizationId = getActiveOrganizationId(ORGANIZATION_ID);
     const payload = {
-      ...(editing ? {} : { organization_id: getActiveOrganizationId(ORGANIZATION_ID) }),
+      ...(editing ? {} : { organization_id: activeOrganizationId }),
       first_name: form.first_name,
       last_name: form.last_name || null,
       email: form.email || null,
@@ -459,11 +499,17 @@ export default function CandidatesPage() {
       current_title: form.current_title || null,
       years_experience: form.years_experience ? Number(form.years_experience) : null,
       skills: form.skills.split(",").map((skill) => skill.trim()).filter(Boolean),
+      lawful_basis: form.lawful_basis || null,
+      privacy_notice_version: form.privacy_notice_version.trim() || null,
+      consent_purpose: form.consent_purpose.trim() || null,
+      retention_until: form.retention_until ? new Date(form.retention_until + "T23:59:59Z").toISOString() : null,
+      source_type: form.source_type,
+      consent_recorded_at: form.consent_confirmed && form.lawful_basis === "consent" ? new Date().toISOString() : null,
     };
 
     try {
-      if (!API_BASE || !ORGANIZATION_ID) {
-        setMessage("API configuration is missing.");
+      if (!API_BASE || (!editing && !activeOrganizationId)) {
+        setMessage(!API_BASE ? "API configuration is missing." : "Select an organisation before creating a candidate.");
         return;
       }
 
@@ -483,11 +529,8 @@ export default function CandidatesPage() {
       }
 
       const saved: Candidate = await response.json();
-      setCandidates((current) =>
-        editing
-          ? current.map((item) => item.id === saved.id ? saved : item)
-          : [saved, ...current]
-      );
+      if (editing) setCandidates((current) => current.map((item) => item.id === saved.id ? saved : item));
+      else { setPage(1); setRefreshKey((key) => key + 1); }
       setMessage(editing ? "Candidate updated successfully." : "Candidate created successfully.");
       setEditing(null);
       setForm(emptyForm);
@@ -557,8 +600,8 @@ export default function CandidatesPage() {
                 <option value="placed">Placed</option>
                 <option value="do_not_contact">Do not contact</option>
               </select>
-              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{[...new Set(candidates.map((candidate) => (candidate.country_code ?? "").toUpperCase()).filter(Boolean))].sort().map((code) => <option key={code} value={code}>{code}</option>)}</select>
-              <span className="muted-small">{filtered.length} candidate{filtered.length === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export CSV</button>
+              <select className="filter" aria-label="Filter by country" value={country} onChange={(e) => { setCountry(e.target.value); setPage(1); }}><option value="all">All countries</option>{["AU", "GB", "IN", "US"].map((code) => <option key={code} value={code}>{code}</option>)}</select>
+              <span className="muted-small">{totalCount} candidate{totalCount === 1 ? "" : "s"}</span><span style={{ flex: 1 }} /><button className="btn" onClick={exportCandidates}>Export current page</button>
             </div>
           </div>
 
@@ -595,7 +638,7 @@ export default function CandidatesPage() {
                 ))}
               </tbody>
             </table></div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {filtered.length ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, filtered.length)} of {filtered.length}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12, flexWrap: "wrap", paddingTop: 16 }}><span className="muted-small">Showing {totalCount ? (page - 1) * pageSize + 1 : 0}–{Math.min(page * pageSize, totalCount)} of {totalCount}</span><div style={{ display: "flex", gap: 8, alignItems: "center" }}><button className="btn" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>Previous</button><span className="muted-small">Page {page} of {pageCount}</span><button className="btn" disabled={page >= pageCount} onClick={() => setPage((current) => Math.min(pageCount, current + 1))}>Next</button></div></div>
           </div>
         </section>
       </main>
@@ -610,9 +653,24 @@ export default function CandidatesPage() {
           </label>
           <p className="muted-small">{cvFiles.length} file(s) selected · {(cvTotalBytes / (1024 * 1024)).toFixed(2)} MB total · PDF/DOCX only · 20 files max · 4 MB combined batch limit</p>
           {cvFiles.length > 0 && cvTotalBytes > 4 * 1024 * 1024 && <div className="notice" style={{ margin: "8px 0", borderColor: "#d97706" }}>These files total more than 4 MB. Split them into smaller batches or remove files until the total is 4 MB or less.</div>}
-          {cvUnsupportedFiles.length > 0 && <div className="notice" style={{ margin: "8px 0", borderColor: "#d97706" }}>Remove unsupported, empty, or over-4-MB files: {cvUnsupportedFiles.map((file) => file.name).join(", ")}</div>}
+          {cvUnsupportedFiles.length > 0 && <div className="notice" style={{ margin: "8px 0", borderColor: "#d97706" }}>Remove each unsupported, empty, or over-4-MB file using its Remove button below. Other selected CVs will remain in this batch.</div>}
           {cvFiles.length > 20 && <div className="notice" style={{ margin: "8px 0", borderColor: "#d97706" }}>Select no more than 20 files per batch.</div>}
-          {cvFiles.length > 0 && <div style={{ overflow: "auto", maxHeight: 180, marginBottom: 12 }}><table className="table"><thead><tr><th>Filename</th><th>Size</th><th>Type</th></tr></thead><tbody>{cvFiles.map((file, index) => <tr key={file.name + file.size + index}><td>{file.name}</td><td>{(file.size / (1024 * 1024)).toFixed(2)} MB</td><td>{file.name.toLowerCase().endsWith(".pdf") ? "PDF" : file.name.toLowerCase().endsWith(".docx") ? "DOCX" : "Unsupported"}</td></tr>)}</tbody></table></div>}
+          {cvFiles.length > 0 && <div style={{ overflow: "auto", maxHeight: 180, marginBottom: 12 }}><table className="table"><thead><tr><th>Filename</th><th>Size</th><th>Type</th><th>Action</th></tr></thead><tbody>{cvFiles.map((file, index) => { const supported = /\.pdf$|\.docx$/i.test(file.name) && file.size > 0 && file.size <= 4 * 1024 * 1024; return <tr key={file.name + file.size + index}><td>{file.name}</td><td>{(file.size / (1024 * 1024)).toFixed(2)} MB</td><td>{file.name.toLowerCase().endsWith(".pdf") ? "PDF" : file.name.toLowerCase().endsWith(".docx") ? "DOCX" : "Unsupported"}{!supported && <div className="muted-small">Not eligible for this batch</div>}</td><td><button type="button" className="btn" disabled={cvImporting} aria-label={"Remove " + file.name} onClick={() => { setCvFiles((current) => current.filter((_, currentIndex) => currentIndex !== index)); setCvImportResults([]); setCvImportMessage(""); }}>Remove</button></td></tr>; })}</tbody></table></div>}
+          <div style={{ border: "1px solid #dbe3f0", borderRadius: 10, padding: 14, margin: "12px 0" }}>
+            <strong>Privacy and record details for this CV batch</strong>
+            <p className="muted-small">Apply these details to every candidate created in this batch. Leave fields blank when the information has not been established. Importing a CV does not itself mean the candidate consented.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <label>Processing basis
+                <select value={importPrivacy.lawful_basis} onChange={(e) => setImportPrivacy({ ...importPrivacy, lawful_basis: e.target.value, consent_confirmed: e.target.value === "consent" ? importPrivacy.consent_confirmed : false })}>
+                  <option value="">Not recorded</option><option value="consent">Consent</option><option value="contract">Contract / pre-contract steps</option><option value="legal_obligation">Legal obligation</option><option value="legitimate_interests">Legitimate interests</option><option value="public_task">Public task</option><option value="vital_interests">Vital interests</option>
+                </select>
+              </label>
+              <label>Privacy notice version<input maxLength={50} value={importPrivacy.privacy_notice_version} onChange={(e) => setImportPrivacy({ ...importPrivacy, privacy_notice_version: e.target.value })} placeholder="e.g. v1.0" /></label>
+            </div>
+            <label>Processing purpose<input maxLength={500} value={importPrivacy.consent_purpose} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_purpose: e.target.value })} placeholder="Enter the actual purpose for this processing" /></label>
+            <label>Retention review / delete by<input type="date" value={importPrivacy.retention_until} onChange={(e) => setImportPrivacy({ ...importPrivacy, retention_until: e.target.value })} /></label>
+            {importPrivacy.lawful_basis === "consent" && <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={importPrivacy.consent_confirmed} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_confirmed: e.target.checked })} />Consent was genuinely obtained and evidence is retained for these candidates.</label>}
+          </div>
           {cvImportMessage && <div className="notice" style={{ margin: "12px 0" }}>{cvImportMessage}</div>}
           {cvImportResults.length > 0 && <div style={{ overflow: "auto", maxHeight: 320 }}><table className="table"><thead><tr><th>CV</th><th>Result</th><th>Candidate</th><th>Extracted details</th></tr></thead><tbody>{cvImportResults.map((result, index) => <tr key={result.filename + index}><td>{result.filename}</td><td><span className={"badge " + (result.status === "imported" ? "green" : result.status === "duplicate" ? "amber" : "red")}>{result.status}</span></td><td>{result.name || "—"}<div className="muted-small">{result.email || ""}</div></td><td>{result.skills_found?.length ? result.skills_found.join(", ") : result.text_extracted === false ? "No readable text found" : result.message || "—"}</td></tr>)}</tbody></table></div>}
           <div className="modal-actions"><button className="btn" disabled={cvImporting} onClick={() => { setCvFiles([]); setCvImportResults([]); setCvImportMessage(""); }}>Clear</button><button className="btn primary" disabled={cvImporting || cvFiles.length === 0 || cvFiles.length > 20 || cvTotalBytes > 4 * 1024 * 1024 || cvUnsupportedFiles.length > 0} onClick={() => void runBulkCvImport()}>{cvImporting ? "Importing CVs…" : "Import " + cvFiles.length + " CVs"}</button><button className="btn" disabled={cvImporting} onClick={() => setShowCvImport(false)}>Close</button></div>
@@ -625,6 +683,21 @@ export default function CandidatesPage() {
           <p className="subtitle">Upload a CSV or Excel workbook. AQERITH scans worksheets, previews candidate rows, and skips email duplicates.</p>
           <div style={{ display: "flex", gap: 12, alignItems: "center", flexWrap: "wrap", margin: "12px 0" }}><input type="file" accept=".csv,.xlsx,.xls,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={(event) => void readImportFile(event.target.files?.[0])} disabled={importing} />{importFileName && <span className="muted-small">{importFileName}</span>}</div>
           <p className="muted-small">Recognised columns include applicant/candidate name, email, phone/mobile, location, skills, job title and status. Excel workbooks with multiple worksheets are scanned. Application history is not imported in this candidate-only workflow.</p>
+          <div style={{ border: "1px solid #dbe3f0", borderRadius: 10, padding: 14, margin: "12px 0" }}>
+            <strong>Privacy and record details for this import</strong>
+            <p className="muted-small">Apply these details to every candidate created in this batch. Leave fields blank when the information has not been established. Importing a CV does not itself mean the candidate consented.</p>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
+              <label>Processing basis
+                <select value={importPrivacy.lawful_basis} onChange={(e) => setImportPrivacy({ ...importPrivacy, lawful_basis: e.target.value, consent_confirmed: e.target.value === "consent" ? importPrivacy.consent_confirmed : false })}>
+                  <option value="">Not recorded</option><option value="consent">Consent</option><option value="contract">Contract / pre-contract steps</option><option value="legal_obligation">Legal obligation</option><option value="legitimate_interests">Legitimate interests</option><option value="public_task">Public task</option><option value="vital_interests">Vital interests</option>
+                </select>
+              </label>
+              <label>Privacy notice version<input maxLength={50} value={importPrivacy.privacy_notice_version} onChange={(e) => setImportPrivacy({ ...importPrivacy, privacy_notice_version: e.target.value })} placeholder="e.g. v1.0" /></label>
+            </div>
+            <label>Processing purpose<input maxLength={500} value={importPrivacy.consent_purpose} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_purpose: e.target.value })} placeholder="Enter the actual purpose for this processing" /></label>
+            <label>Retention review / delete by<input type="date" value={importPrivacy.retention_until} onChange={(e) => setImportPrivacy({ ...importPrivacy, retention_until: e.target.value })} /></label>
+            {importPrivacy.lawful_basis === "consent" && <label style={{ display: "flex", alignItems: "center", gap: 8 }}><input type="checkbox" checked={importPrivacy.consent_confirmed} onChange={(e) => setImportPrivacy({ ...importPrivacy, consent_confirmed: e.target.checked })} />Consent was genuinely obtained and evidence is retained for these candidates.</label>}
+          </div>
           {importMessage && <div className="notice" style={{ marginBottom: 12 }}>{importMessage}</div>}
           {importRows.length > 0 && <>
             <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginBottom: 12 }}><span className="badge green">{importRows.filter((row) => !row.errors.length && !row.duplicate).length} ready</span><span className="badge amber">{importRows.filter((row) => row.errors.length > 0).length} with errors</span><span className="badge amber">{importRows.filter((row) => row.duplicate).length} duplicates</span></div>
@@ -643,6 +716,7 @@ export default function CandidatesPage() {
               <span className="card-title">{editing ? "Edit candidate" : "Add candidate"}</span>
               <button type="button" className="icon-button" onClick={() => setShowForm(false)}>×</button>
             </div>
+            {message && <div className="notice" role="alert" style={{ marginBottom: 12 }}>{message}</div>}
 
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>First name<input required value={form.first_name} onChange={(e) => setForm({ ...form, first_name: e.target.value })} /></label>
@@ -663,6 +737,51 @@ export default function CandidatesPage() {
               <label>Status<select value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as Candidate["status"] })}><option value="active">Active</option><option value="inactive">Inactive</option><option value="placed">Placed</option><option value="do_not_contact">Do not contact</option></select></label>
             </div>
             <label>Skills<input value={form.skills} onChange={(e) => setForm({ ...form, skills: e.target.value })} placeholder="Python, SQL, FastAPI, PostgreSQL" /></label>
+
+            <div style={{ border: "1px solid #dbe3f0", borderRadius: 10, padding: 14, marginTop: 8 }}>
+              <strong>Privacy and record details</strong>
+              <p className="muted-small" style={{ margin: "6px 0 12px" }}>Record the applicable processing basis and privacy notice. Consent is separate and should only be recorded when it was genuinely obtained.</p>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label>Processing basis (where applicable)
+                  <select value={form.lawful_basis} onChange={(e) => setForm({ ...form, lawful_basis: e.target.value as CandidateForm["lawful_basis"], consent_confirmed: e.target.value === "consent" ? form.consent_confirmed : false })}>
+                    <option value="">Not recorded</option>
+                    <option value="consent">Consent</option>
+                    <option value="contract">Contract / pre-contract steps</option>
+                    <option value="legal_obligation">Legal obligation</option>
+                    <option value="legitimate_interests">Legitimate interests</option>
+                    <option value="public_task">Public task</option>
+                    <option value="vital_interests">Vital interests</option>
+                  </select>
+                </label>
+                <label>Privacy notice version
+                  <input maxLength={50} value={form.privacy_notice_version} onChange={(e) => setForm({ ...form, privacy_notice_version: e.target.value })} placeholder="e.g. v1.0" />
+                </label>
+              </div>
+              <label>Processing purpose
+                <input maxLength={500} value={form.consent_purpose} onChange={(e) => setForm({ ...form, consent_purpose: e.target.value })} placeholder="e.g. Recruitment and candidate matching" />
+              </label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+                <label>Candidate source
+                  <select value={form.source_type} onChange={(e) => setForm({ ...form, source_type: e.target.value as CandidateForm["source_type"] })}>
+                    <option value="recruiter_entry">Recruiter entry</option>
+                    <option value="career_page">Careers page</option>
+                    <option value="job_application">Job application</option>
+                    <option value="referral">Referral</option>
+                    <option value="agency">Agency</option>
+                    <option value="import">Import</option>
+                    <option value="cv_upload">CV upload</option>
+                    <option value="other">Other</option>
+                  </select>
+                </label>
+                <label>Retention review / delete by
+                  <input type="date" value={form.retention_until} onChange={(e) => setForm({ ...form, retention_until: e.target.value })} />
+                </label>
+              </div>
+              {form.lawful_basis === "consent" && <label style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10 }}>
+                <input type="checkbox" required checked={form.consent_confirmed} onChange={(e) => setForm({ ...form, consent_confirmed: e.target.checked })} />
+                Consent was actually obtained and its evidence is retained.
+              </label>}
+            </div>
 
             <div className="modal-actions">
               <button type="button" className="btn" onClick={() => setShowForm(false)}>Cancel</button>

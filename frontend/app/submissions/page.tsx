@@ -8,7 +8,7 @@ import { getActiveOrganizationId } from "@/lib/organization";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "") ?? "";
 const DEFAULT_ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
-type Job = { id: string; title: string; status: string };
+type Job = { id: string; job_code?: string | null; title: string; status: string };
 type Candidate = { id: string; first_name: string; last_name?: string | null; email?: string | null; phone?: string | null; city?: string | null; region?: string | null; current_title?: string | null };
 type ApplicationStatus = "new" | "screening" | "submitted" | "interview" | "offer" | "hired" | "rejected" | "withdrawn";
 type Application = {
@@ -107,7 +107,7 @@ export default function SubmissionsPage() {
   const filtered = useMemo(() => applications.filter((application) => {
     const candidate = candidateMap.get(application.candidate_id);
     const job = jobMap.get(application.job_id);
-    const haystack = [application.id, candidateName(candidate), candidate?.email, candidate?.phone, candidate?.city, candidate?.region, application.source, job?.title, application.status].filter(Boolean).join(" ").toLowerCase();
+    const haystack = [application.id, candidateName(candidate), candidate?.email, candidate?.phone, candidate?.city, candidate?.region, application.source, job?.job_code, job?.title, application.status].filter(Boolean).join(" ").toLowerCase();
     const normalizedSource = (application.source || "Direct").trim();
     return (status === "all" || application.status === status)
       && (sourceFilter === "all" || normalizedSource.toLowerCase() === sourceFilter.toLowerCase())
@@ -268,7 +268,7 @@ export default function SubmissionsPage() {
                 <label>Job
                   <select required value={selectedJob} onChange={(event) => setSelectedJob(event.target.value)}>
                     <option value="">Select job</option>
-                    {jobs.filter((job) => job.status === "open" || job.status === "on_hold").map((job) => <option key={job.id} value={job.id}>{job.title}</option>)}
+                    {jobs.filter((job) => job.status === "open" || job.status === "on_hold").map((job) => <option key={job.id} value={job.id}>{job.job_code ? `${job.job_code} · ` : ""}{job.title}</option>)}
                   </select>
                 </label>
                 <label>Source
@@ -298,7 +298,7 @@ export default function SubmissionsPage() {
                       return (
                         <div key={application.id} className="pipeline-card" draggable onDragStart={(event) => onDragStart(event, application.id)}>
                           <Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link>
-                          <div className="muted-small">{job?.title ?? "Unknown job"}</div>
+                          <div className="muted-small">{job?.job_code ? `${job.job_code} · ` : ""}{job?.title ?? "Unknown job"}</div>
                           {application.match_score != null && <span className="badge green">{application.match_score}% match</span>}
                           <select
                             className="filter"
@@ -334,7 +334,7 @@ export default function SubmissionsPage() {
                         <td><Link className="link" href={"/submissions/" + application.id}><strong>{candidateName(candidate)}</strong></Link></td>
                         <td>{candidate?.email ?? "—"}</td><td>{candidate?.phone ?? "—"}</td><td>{[candidate?.city, candidate?.region].filter(Boolean).join(", ") || "—"}</td><td>{application.source || "Direct"}</td>
                         <td><select className="filter" aria-label={"Status for " + candidateName(candidate)} value={application.status} onChange={(event) => void changeStatus(application, event.target.value as ApplicationStatus)}><option value={application.status}>{application.status.replaceAll("_", " ")}</option>{allowedTransitions[application.status].map((next) => <option key={next} value={next}>{next.replaceAll("_", " ")}</option>)}</select></td>
-                        <td>{job?.title ?? "Unknown job"}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td><td>{new Date(application.created_at).toLocaleDateString()}</td>
+                        <td>{job?.job_code && <strong>{job.job_code}</strong>}{job?.job_code ? <><br /><span>{job.title}</span></> : (job?.title ?? "Unknown job")}</td><td>{application.match_score != null ? <span className="badge green">{application.match_score}% match</span> : <span className={"badge " + (application.human_reviewed ? "green" : "amber")}>{application.human_reviewed ? "Reviewed" : "Needs review"}</span>}</td><td>{new Date(application.created_at).toLocaleDateString()}</td>
                       </tr>
                     );
                   })}

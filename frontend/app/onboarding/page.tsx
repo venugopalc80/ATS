@@ -26,7 +26,7 @@ export default function OnboardingPage() {
       });
       if (!response.ok) {
         const body = await response.json().catch(() => null);
-        throw new Error(body?.detail || "Unable to create organization.");
+        throw new Error(body?.detail || "Unable to create organisation.");
       }
 
       const result = await response.json();
@@ -48,17 +48,18 @@ export default function OnboardingPage() {
   return (
     <main className="auth-page">
       <section className="auth-card">
-        <div className="brand">Talent<span>OS</span></div>
+        <div className="auth-brand-wordmark">AQERITH</div>
+        <div className="auth-tagline">THE INTELLIGENCE OF HUMAN POTENTIAL</div>
         <div className="eyebrow">Workspace setup</div>
         <h1>Create your recruitment workspace</h1>
         <p className="subtitle">Your account is ready. Set up the organisation that will own your jobs, candidates and applications.</p>
         <form onSubmit={submit} className="auth-form">
           <label>Organisation name<input required minLength={2} value={name} onChange={(e) => setName(e.target.value)} placeholder="Acme Recruitment" /></label>
-          <label>Primary country code<input required maxLength={2} pattern="[A-Za-z]{2}" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} placeholder="GB" /><small className="muted-small">Use the ISO 3166-1 alpha-2 code for your primary country, e.g. GB, US, DE, AE.</small></label>
-          <label>Organisation timezone<input required list="aqerith-timezones" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Europe/London" /><datalist id="aqerith-timezones"><option value="Europe/London" /><option value="America/New_York" /><option value="America/Chicago" /><option value="America/Denver" /><option value="America/Los_Angeles" /><option value="Asia/Kolkata" /><option value="Asia/Singapore" /><option value="Australia/Sydney" /><option value="Australia/Perth" /><option value="Pacific/Auckland" /><option value="UTC" /></datalist><small className="muted-small">Enter an IANA timezone, such as Europe/London, Asia/Kolkata or America/New_York. Used for organisation-wide dates.</small></label>
+          <label>Primary country code<input required maxLength={2} pattern="[A-Za-z]{2}" value={country} onChange={(e) => setCountry(e.target.value.toUpperCase())} placeholder="GB" /><small className="muted-small">Use the ISO 3166-1 alpha-2 code for your primary country, e.g. GB, US, IN or AU.</small></label>
+          <label>Organisation timezone<input required list="aqerith-timezones" value={timezone} onChange={(e) => setTimezone(e.target.value)} placeholder="Europe/London" /><datalist id="aqerith-timezones"><option value="Europe/London" /><option value="America/New_York" /><option value="America/Chicago" /><option value="America/Denver" /><option value="America/Los_Angeles" /><option value="Asia/Kolkata" /><option value="Australia/Sydney" /><option value="Australia/Perth" /><option value="UTC" /></datalist><small className="muted-small">Enter an IANA timezone. It will be used for organisation-wide dates and scheduling.</small></label>
           <button className="btn primary auth-submit" disabled={busy}>{busy ? "Creating..." : "Create workspace"}</button>
         </form>
-        {message && <div className="notice">{message}</div>}
+        {message && <div className="dashboard-error" role="alert">{message}</div>}
         <button className="auth-switch" onClick={signOut}>Sign out</button>
       </section>
     </main>

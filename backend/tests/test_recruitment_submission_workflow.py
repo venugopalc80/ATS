@@ -269,7 +269,7 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "updated_at": NOW,
         }
         with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+            with patch.object(applications, "assert_org_permission", side_effect=HTTPException(status_code=403, detail="Forbidden")):
                 with self.assertRaises(HTTPException) as error:
                     await applications.get_application(APPLICATION, USER)
 
@@ -294,7 +294,7 @@ class ApplicationRouterTenantAuthorizationTests(unittest.IsolatedAsyncioTestCase
             "updated_at": NOW,
         }
         with patch.object(applications.service, "get_application", new_callable=AsyncMock, return_value=row):
-            with patch.object(applications, "assert_org_member", side_effect=HTTPException(status_code=403, detail="Forbidden")):
+            with patch.object(applications, "assert_org_permission", side_effect=HTTPException(status_code=403, detail="Forbidden")):
                 with patch.object(applications.service, "update_application", new_callable=AsyncMock) as update:
                     with self.assertRaises(HTTPException) as error:
                         await applications.update_application(

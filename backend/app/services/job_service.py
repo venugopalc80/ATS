@@ -19,7 +19,7 @@ class JobService:
     """Persistence boundary for job requisitions."""
 
     async def list_jobs(
-        self, organization_id: UUID, status: str | None = None
+        self, organization_id: UUID, status: str | None = None, user_id: UUID | None = None
     ) -> list[dict[str, Any]]:
         query = f"""
             select {JOB_COLUMNS}
@@ -27,6 +27,9 @@ class JobService:
             where organization_id = %s
         """
         params: list[Any] = [organization_id]
+        if user_id is not None:
+            query += " and private.can_access_job(id, organization_id, %s)"
+            params.append(user_id)
 
         if status:
             query += " and status = %s"
@@ -39,8 +42,10 @@ class JobService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
-    async def create_job(self, payload: JobCreate) -> dict[str, Any]:
+    async def create_job(self, payload: JobCreate, creator_user_id: UUID | None = None) -> dict[str, Any]:
         data = payload.model_dump(mode="python")
+        if creator_user_id is not None and not data.get("recruiter_id") and not data.get("hiring_manager_id"):
+            data["recruiter_id"] = creator_user_id
         columns = list(data.keys())
         values = [data[column] for column in columns]
         placeholders = ", ".join(["%s"] * len(columns))

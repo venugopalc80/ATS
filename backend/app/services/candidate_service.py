@@ -10,7 +10,8 @@ CANDIDATE_COLUMNS = """
     city, region, country_code, status, current_title,
     years_experience, skills, resume_path, resume_text,
     ai_summary, consent_recorded_at, consent_purpose,
-    retention_until, created_at, updated_at
+    retention_until, lawful_basis, privacy_notice_version, source_type,
+    created_at, updated_at
 """
 
 
@@ -20,6 +21,7 @@ class CandidateService:
         organization_id: UUID,
         status: str | None = None,
         search: str | None = None,
+        user_id: UUID | None = None,
     ) -> list[dict[str, Any]]:
         query = f"""
             select {CANDIDATE_COLUMNS}
@@ -28,6 +30,12 @@ class CandidateService:
         """
         params: list[Any] = [organization_id]
 
+        if user_id is not None:
+            query += " and private.can_access_candidate(id, organization_id, %s)"
+            params.append(user_id)
+
+        query += """
+        """
         if status:
             query += " and status = %s"
             params.append(status)
@@ -52,7 +60,106 @@ class CandidateService:
                 cursor.execute(query, params)
                 return list(cursor.fetchall())
 
-    async def create_candidate(self, payload: CandidateCreate) -> dict[str, Any]:
+
+    async def search_candidates(
+        self,
+        organization_id: UUID,
+        user_id: UUID,
+        *,
+        status: str | None = None,
+        search: str | None = None,
+        country_code: str | None = None,
+        skill: str | None = None,
+        min_experience: float | None = None,
+        max_experience: float | None = None,
+        sort_by: str = "created_at",
+        sort_direction: str = "desc",
+        page: int = 1,
+        page_size: int = 25,
+    ) -> dict[str, Any]:
+        # Deliberately exclude resume_path and resume_text from register results.
+        safe_columns = """
+            id, organization_id, first_name, last_name, email, phone,
+            city, region, country_code, status, current_title,
+            years_experience, skills, ai_summary, consent_recorded_at,
+            consent_purpose, retention_until, lawful_basis,
+            privacy_notice_version, source_type, created_at, updated_at
+        """
+        where = [
+            "organization_id = %s",
+            "private.can_access_candidate(id, organization_id, %s)",
+        ]
+        params: list[Any] = [organization_id, user_id]
+
+        if status:
+            where.append("status = %s")
+            params.append(status)
+        if country_code:
+            where.append("country_code = %s")
+            params.append(country_code.upper())
+        if search:
+            where.append("""(
+                first_name ilike %s
+                or coalesce(last_name, '') ilike %s
+                or coalesce(email, '') ilike %s
+                or coalesce(current_title, '') ilike %s
+                or coalesce(city, '') ilike %s
+                or coalesce(array_to_string(skills, ' '), '') ilike %s
+            )""")
+            term = f"%{search}%"
+            params.extend([term] * 6)
+        if skill:
+            where.append("coalesce(array_to_string(skills, ' '), '') ilike %s")
+            params.append(f"%{skill}%")
+        if min_experience is not None:
+            where.append("years_experience >= %s")
+            params.append(min_experience)
+        if max_experience is not None:
+            where.append("years_experience <= %s")
+            params.append(max_experience)
+
+        where_sql = " and ".join(where)
+        sort_columns = {
+            "name": "lower(first_name), lower(coalesce(last_name, ''))",
+            "title": "lower(coalesce(current_title, ''))",
+            "location": "lower(coalesce(city, ''))",
+            "experience": "years_experience",
+            "status": "status",
+            "created_at": "created_at",
+        }
+        order_column = sort_columns[sort_by]
+        direction = "asc" if sort_direction == "asc" else "desc"
+        offset = (page - 1) * page_size
+
+        with get_connection() as connection:
+            with connection.cursor() as cursor:
+                cursor.execute(
+                    f"select count(*) as total from public.candidates where {where_sql}",
+                    params,
+                )
+                total = int(cursor.fetchone()["total"])
+                cursor.execute(
+                    f"""
+                    select {safe_columns}
+                    from public.candidates
+                    where {where_sql}
+                    order by {order_column} {direction} nulls last, id asc
+                    limit %s offset %s
+                    """,
+                    [*params, page_size, offset],
+                )
+                rows = list(cursor.fetchall())
+
+        return {
+            "items": rows,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "pages": (total + page_size - 1) // page_size,
+        }
+
+
+    async def create_candidate(self, payload: CandidateCreate, creator_user_id: UUID | None = None) -> dict[str, Any]:
         data = payload.model_dump(mode="python")
         columns = list(data.keys())
         values = [data[column] for column in columns]
@@ -60,17 +167,37 @@ class CandidateService:
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    insert into public.candidates ({", ".join(columns)})
-                    values ({placeholders})
-                    returning {CANDIDATE_COLUMNS}
-                    """,
-                    values,
-                )
+                email = (data.get("email") or "").strip()
+                if email:
+                    cursor.execute(
+                        "select id from public.candidates where organization_id=%s and lower(trim(email))=lower(trim(%s)) limit 1",
+                        [data["organization_id"], email],
+                    )
+                    if cursor.fetchone():
+                        raise ValueError("A candidate with this email already exists in this organisation.")
+                try:
+                    cursor.execute(
+                        f"""
+                        insert into public.candidates ({", ".join(columns)})
+                        values ({placeholders})
+                        returning {CANDIDATE_COLUMNS}
+                        """,
+                        values,
+                    )
+                except Exception as exc:
+                    if getattr(exc, "sqlstate", None) == "23505":
+                        raise ValueError("A candidate with this email already exists in this organisation.") from exc
+                    raise
                 row = cursor.fetchone()
                 if row is None:
                     raise RuntimeError("Candidate was not created")
+                if creator_user_id is not None:
+                    cursor.execute(
+                        """insert into public.candidate_access_assignments
+                           (organization_id, candidate_id, user_id, assigned_by)
+                           values (%s, %s, %s, %s) on conflict do nothing""",
+                        [row["organization_id"], row["id"], creator_user_id, creator_user_id],
+                    )
                 return row
 
     async def get_candidate(self, candidate_id: UUID) -> dict[str, Any] | None:
@@ -98,15 +225,31 @@ class CandidateService:
 
         with get_connection() as connection:
             with connection.cursor() as cursor:
-                cursor.execute(
-                    f"""
-                    update public.candidates
-                    set {assignments}, updated_at = now()
-                    where id = %s
-                    returning {CANDIDATE_COLUMNS}
-                    """,
-                    values,
-                )
+                email = (data.get("email") or "").strip()
+                if email:
+                    cursor.execute("select organization_id from public.candidates where id=%s", [candidate_id])
+                    owner = cursor.fetchone()
+                    if owner:
+                        cursor.execute(
+                            "select id from public.candidates where organization_id=%s and lower(trim(email))=lower(trim(%s)) and id<>%s limit 1",
+                            [owner["organization_id"], email, candidate_id],
+                        )
+                        if cursor.fetchone():
+                            raise ValueError("Another candidate with this email already exists in this organisation.")
+                try:
+                    cursor.execute(
+                        f"""
+                        update public.candidates
+                        set {assignments}, updated_at = now()
+                        where id = %s
+                        returning {CANDIDATE_COLUMNS}
+                        """,
+                        values,
+                    )
+                except Exception as exc:
+                    if getattr(exc, "sqlstate", None) == "23505":
+                        raise ValueError("Another candidate with this email already exists in this organisation.") from exc
+                    raise
                 return cursor.fetchone()
 
     async def delete_candidate(self, candidate_id: UUID) -> bool:

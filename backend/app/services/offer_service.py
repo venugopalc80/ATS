@@ -15,13 +15,13 @@ ALLOWED_OFFER_TRANSITIONS = {
 }
 
 
-def list_offers(organization_id: UUID, status: str | None = None):
+def list_offers(organization_id: UUID, user_id: UUID, status: str | None = None):
     with get_connection() as c:
         with c.cursor() as cur:
             if status:
-                cur.execute("select * from public.offers where organization_id=%s and status=%s order by created_at desc", [organization_id, status])
+                cur.execute("select o.* from public.offers o where o.organization_id=%s and private.can_access_application(o.application_id, o.organization_id, %s) and o.status=%s order by o.created_at desc", [organization_id, user_id, status])
             else:
-                cur.execute("select * from public.offers where organization_id=%s order by created_at desc", [organization_id])
+                cur.execute("select o.* from public.offers o where o.organization_id=%s and private.can_access_application(o.application_id, o.organization_id, %s) order by o.created_at desc", [organization_id, user_id])
             return cur.fetchall()
 
 
@@ -85,11 +85,16 @@ def update_offer(organization_id: UUID, offer_id: UUID, payload: OfferUpdate, ac
                 else:
                     assignments.append(f"{key}=%({key})s")
                     values[key] = value
-            values.update({"offer_id": offer_id, "organization_id": organization_id})
+            values.update({"offer_id": offer_id, "organization_id": organization_id, "actor_user_id": actor_user_id})
 
             cur.execute("select set_config('app.actor_user_id', %s, true)", [str(actor_user_id)])
             cur.execute(
-                f"update public.offers set {', '.join(assignments)},updated_at=now() where id=%(offer_id)s and organization_id=%(organization_id)s returning *",
+                f"""update public.offers set {', '.join(assignments)},updated_at=now()
+                where id=%(offer_id)s and organization_id=%(organization_id)s
+                  and exists (select 1 from public.applications a where a.id=offers.application_id
+                    and a.organization_id=offers.organization_id
+                    and private.can_access_application(a.id, a.organization_id, %(actor_user_id)s))
+                returning *""",
                 values,
             )
             row = cur.fetchone()

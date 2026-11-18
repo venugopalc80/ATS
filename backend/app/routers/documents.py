@@ -7,13 +7,13 @@ from pathlib import Path
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile
 from docx import Document as DocxDocument
 from pypdf import PdfReader
 from pydantic import BaseModel
 from supabase import create_client
 
-from app.auth import assert_org_member, get_current_user_id
+from app.auth import assert_org_permission, assert_resource_access, get_current_user_id
 from app.db import DatabaseConfigurationError, DatabaseConnectionError, get_connection
 
 router = APIRouter(prefix="/api/documents", tags=["candidate documents"])
@@ -90,8 +90,9 @@ async def upload_candidate_document(
     application_id: UUID | None = Query(default=None),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.upload")
     verify_candidate(candidate_id, organization_id)
+    assert_resource_access(user_id, organization_id, "candidate", candidate_id)
 
     mime = (file.content_type or "").lower()
     data = await file.read(MAX_BYTES + 1)
@@ -107,6 +108,7 @@ async def upload_candidate_document(
                 )
                 if cursor.fetchone() is None:
                     raise HTTPException(status_code=404, detail="Application not found for this candidate")
+        assert_resource_access(user_id, organization_id, "application", application_id)
 
     document_id = uuid4()
     path = f"{organization_id}/{candidate_id}/{document_id}{extension}"
@@ -159,26 +161,72 @@ async def upload_candidate_document(
         raise HTTPException(status_code=503, detail="Unable to store the document") from exc
 
 
-@router.get("", response_model=list[DocumentOut])
+def build_document_preview(document: dict, organization_id: UUID) -> dict:
+    """Build an authorised preview payload; DOCX text is cached after first extraction."""
+    if document["content_type"] == "application/pdf":
+        result = storage_client().storage.from_(document["storage_bucket"]).create_signed_url(
+            document["storage_path"], 60, options={"download": False}
+        )
+        signed_url = result.get("signedURL") or result.get("signedUrl")
+        if not signed_url:
+            raise HTTPException(status_code=503, detail="Unable to create secure preview link")
+        return {"kind": "pdf", "url": signed_url, "filename": document["original_filename"], "expires_in": 60}
+
+    if document["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        extracted = document.get("preview_text")
+        if not extracted:
+            data = storage_client().storage.from_(document["storage_bucket"]).download(document["storage_path"])
+            extracted = extract_cv_text(data, document["content_type"])
+            if not extracted.strip():
+                raise HTTPException(status_code=422, detail="No readable text was found in this DOCX file")
+            with get_connection() as connection:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                        """update public.candidate_documents
+                           set preview_text=%s
+                           where id=%s and organization_id=%s and deleted_at is null""",
+                        [extracted, document["id"], organization_id],
+                    )
+        return {"kind": "text", "text": extracted, "filename": document["original_filename"]}
+
+    raise HTTPException(status_code=415, detail="Preview is not supported for this file type")
+
+
+@router.get("")
 async def list_candidate_documents(
     organization_id: UUID,
     candidate_id: UUID,
+    include_preview: bool = Query(default=False),
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         verify_candidate(candidate_id, organization_id)
+        assert_resource_access(user_id, organization_id, "candidate", candidate_id)
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
                     """select id, organization_id, candidate_id, application_id, document_type,
-                              original_filename, content_type, file_size_bytes, sha256, created_at
+                              original_filename, content_type, storage_bucket, storage_path,
+                              file_size_bytes, sha256, created_at,
+                              case when %s then preview_text else null end as preview_text
                        from public.candidate_documents
                        where organization_id=%s and candidate_id=%s and deleted_at is null
                        order by created_at desc""",
-                    [organization_id, candidate_id],
+                    [include_preview, organization_id, candidate_id],
                 )
-                return list(cursor.fetchall())
+                documents = list(cursor.fetchall())
+        public_documents = [
+            {key: document[key] for key in (
+                "id", "organization_id", "candidate_id", "application_id", "document_type",
+                "original_filename", "content_type", "file_size_bytes", "sha256", "created_at",
+            )}
+            for document in documents
+        ]
+        if not include_preview:
+            return public_documents
+        preview = build_document_preview(documents[0], organization_id) if len(documents) == 1 else None
+        return {"documents": public_documents, "preview": preview}
     except HTTPException:
         raise
     except (DatabaseConfigurationError, DatabaseConnectionError) as exc:
@@ -195,12 +243,12 @@ async def create_document_download(
     organization_id: UUID,
     user_id: UUID = Depends(get_current_user_id),
 ):
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
                 cursor.execute(
-                    """select storage_bucket, storage_path, original_filename
+                    """select candidate_id, storage_bucket, storage_path, original_filename
                        from public.candidate_documents
                        where id=%s and organization_id=%s and deleted_at is null""",
                     [document_id, organization_id],
@@ -208,6 +256,7 @@ async def create_document_download(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
+                assert_resource_access(user_id, organization_id, "candidate", row["candidate_id"])
         result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(row["storage_path"], 60, options={"download": False})
         signed_url = result.get("signedURL") or result.get("signedUrl")
         if not signed_url:
@@ -226,7 +275,7 @@ async def preview_candidate_document(
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Return a short-lived inline PDF URL or extracted DOCX text for an authorised recruiter."""
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.read")
     try:
         with get_connection() as connection:
             with connection.cursor() as cursor:
@@ -239,23 +288,9 @@ async def preview_candidate_document(
                 row = cursor.fetchone()
                 if row is None:
                     raise HTTPException(status_code=404, detail="Document not found")
-        if row["content_type"] == "application/pdf":
-            result = storage_client().storage.from_(row["storage_bucket"]).create_signed_url(
-                row["storage_path"], 60, options={"download": False}
-            )
-            signed_url = result.get("signedURL") or result.get("signedUrl")
-            if not signed_url:
-                raise HTTPException(status_code=503, detail="Unable to create secure preview link")
-            return {"kind": "pdf", "url": signed_url, "filename": row["original_filename"], "expires_in": 60}
-
-        if row["content_type"] == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-            data = storage_client().storage.from_(row["storage_bucket"]).download(row["storage_path"])
-            text = extract_cv_text(data, row["content_type"])
-            if not text.strip():
-                raise HTTPException(status_code=422, detail="No readable text was found in this DOCX file")
-            return {"kind": "text", "text": text, "filename": row["original_filename"]}
-
-        raise HTTPException(status_code=415, detail="Preview is not supported for this file type")
+                assert_resource_access(user_id, organization_id, "candidate", row["candidate_id"])
+        row["id"] = document_id
+        return build_document_preview(row, organization_id)
     except HTTPException:
         raise
     except Exception as exc:
@@ -301,15 +336,41 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
         "professional experience", "education", "skills", "experience",
     }
     name = ""
-    for raw_line in text.splitlines()[:15]:
-        line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
-        if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+    first_lines = text.splitlines()[:20]
+
+    # Prefer an explicitly labelled name in the CV over a filename-derived guess.
+    # Common labels include "Name:", "Full Name:" and "Candidate Name:".
+    for raw_line in first_lines:
+        labelled = re.match(
+            r"^\s*(?:candidate\s+name|full\s+name|name)\s*[:：-]\s*(.+?)\s*$",
+            raw_line,
+            re.I,
+        )
+        if not labelled:
             continue
-        if line.casefold() in excluded or len(line.split()) > 5:
-            continue
-        if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
-            name = line
+        candidate_name = re.sub(r"\s+", " ", labelled.group(1)).strip(" \t|•-")
+        if (
+            candidate_name
+            and len(candidate_name) <= 80
+            and "@" not in candidate_name
+            and not re.search(r"\d{3}", candidate_name)
+            and re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", candidate_name)
+            and 2 <= len(candidate_name.split()) <= 5
+        ):
+            name = candidate_name
             break
+
+    # If no labelled name exists, use a plausible standalone name near the top.
+    if not name:
+        for raw_line in first_lines:
+            line = re.sub(r"\s+", " ", raw_line).strip(" \t|•-")
+            if not line or len(line) > 80 or "@" in line or re.search(r"\d{3}", line):
+                continue
+            if line.casefold() in excluded or len(line.split()) > 5:
+                continue
+            if re.fullmatch(r"[A-Za-zÀ-ÖØ-öø-ÿ'’. -]+", line) and len(line.split()) >= 2:
+                name = line
+                break
     if not name:
         stem = Path(filename).stem
         stem = re.sub(r"\b(cv|resume|résumé|curriculum vitae|final|updated|new)\b", " ", stem, flags=re.I)
@@ -332,10 +393,25 @@ def cv_candidate_fields(text: str, filename: str) -> dict:
 async def bulk_upload_cvs(
     organization_id: UUID,
     files: list[UploadFile] = File(...),
+    lawful_basis: str | None = Form(default=None),
+    privacy_notice_version: str | None = Form(default=None),
+    consent_purpose: str | None = Form(default=None),
+    retention_until: datetime | None = Form(default=None),
+    consent_confirmed: bool = Form(default=False),
     user_id: UUID = Depends(get_current_user_id),
 ):
     """Create candidate profiles from a batch of PDF/DOCX CVs and store each CV privately."""
-    assert_org_member(user_id, organization_id)
+    assert_org_permission(user_id, organization_id, "candidates.documents.upload")
+    allowed_bases = {"consent", "contract", "legal_obligation", "legitimate_interests", "public_task", "vital_interests"}
+    lawful_basis = lawful_basis or None
+    privacy_notice_version = privacy_notice_version or None
+    consent_purpose = consent_purpose or None
+    if lawful_basis and lawful_basis not in allowed_bases:
+        raise HTTPException(status_code=422, detail="Invalid lawful basis")
+    if lawful_basis == "consent" and not consent_confirmed:
+        raise HTTPException(status_code=422, detail="Confirm that consent was genuinely obtained before recording consent")
+    if lawful_basis != "consent" and consent_confirmed:
+        raise HTTPException(status_code=422, detail="Consent confirmation is only valid when consent is the selected basis")
     if not files:
         raise HTTPException(status_code=422, detail="Choose at least one CV to upload")
     if len(files) > MAX_BULK_FILES:
@@ -368,7 +444,7 @@ async def bulk_upload_cvs(
                         )
                         existing = cursor.fetchone()
                         if existing:
-                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists", "candidate_id": str(existing["id"])})
+                            results.append({"filename": filename, "status": "duplicate", "message": "A candidate with this email already exists in this organisation"})
                             continue
                     cursor.execute(
                         "select id from public.candidate_documents where organization_id=%s and sha256=%s and deleted_at is null limit 1",
@@ -390,10 +466,21 @@ async def bulk_upload_cvs(
                         cursor.execute(
                             """insert into public.candidates
                                (id, organization_id, first_name, last_name, email, phone, status,
-                                skills, resume_path, resume_text, created_at, updated_at)
-                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,now(),now())""",
+                                skills, resume_path, resume_text, source_type, lawful_basis,
+                                privacy_notice_version, consent_purpose, consent_recorded_at,
+                                retention_until, created_at, updated_at)
+                               values (%s,%s,%s,%s,%s,%s,'active',%s,%s,%s,'cv_upload',%s,%s,%s,%s,%s,now(),now())""",
                             [candidate_id, organization_id, fields["first_name"], fields["last_name"],
-                             fields["email"], fields["phone"], fields["skills"], path, text or None],
+                             fields["email"], fields["phone"], fields["skills"], path, text or None,
+                             lawful_basis, privacy_notice_version, consent_purpose,
+                             datetime.utcnow() if lawful_basis == "consent" and consent_confirmed else None,
+                             retention_until],
+                        )
+                        cursor.execute(
+                            """insert into public.candidate_access_assignments
+                               (organization_id, candidate_id, user_id, assigned_by)
+                               values (%s, %s, %s, %s) on conflict do nothing""",
+                            [organization_id, candidate_id, user_id, user_id],
                         )
                         cursor.execute(
                             """insert into public.candidate_documents

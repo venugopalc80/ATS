@@ -113,7 +113,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
             with FakeConnection(cursor) as connection:
                 yield connection
 
-        with patch.object(dashboard_router, "assert_org_member") as membership, patch.object(
+        with patch.object(dashboard_router, "assert_org_permission") as membership, patch.object(
             dashboard_router, "get_connection", fake_connection
         ):
             result = await dashboard_router.dashboard(
@@ -121,7 +121,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
                 date_to=date(2026, 10, 13), user_id=USER,
             )
 
-        membership.assert_called_once_with(USER, ORG)
+        membership.assert_called_once_with(USER, ORG, "reports.read")
         self.assertEqual(result["metrics"]["open_jobs"], 2)
         self.assertEqual(result["metrics"]["active_candidates"], 8)
         self.assertEqual(result["metrics"]["interviews_today"], 1)
@@ -129,18 +129,18 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         count_query = next((sql, params) for sql, params in cursor.queries if "from public.interviews where" in sql)
         self.assertIn("scheduled_at >= %s and scheduled_at < %s", count_query[0])
         self.assertEqual(count_query[1][0], ORG)
-        self.assertEqual(len(count_query[1]), 3)
+        self.assertEqual(len(count_query[1]), 4)
         list_query = next((sql, params) for sql, params in cursor.queries if "from public.interviews i" in sql and "feedback is null" not in sql)
         self.assertIn("scheduled_at >= %s", list_query[0])
         self.assertEqual(list_query[1][0], ORG)
-        self.assertEqual(len(list_query[1]), 3)
+        self.assertEqual(len(list_query[1]), 4)
         self.assertEqual(result["metrics"]["placements_active"], 4)
         self.assertEqual(result["pipeline"]["new"], 2)
         self.assertEqual(result["pipeline"]["rejected"], 1)
         self.assertEqual(result["date_range"], {"from": "2026-10-01", "to": "2026-10-13"})
         pipeline_query = next((sql, params) for sql, params in cursor.queries if "group by status" in sql)
-        self.assertEqual(pipeline_query[1][1], datetime(2026, 9, 30, 23, tzinfo=timezone.utc))
-        self.assertEqual(pipeline_query[1][2], datetime(2026, 10, 13, 23, tzinfo=timezone.utc))
+        self.assertEqual(pipeline_query[1][2], datetime(2026, 9, 30, 23, tzinfo=timezone.utc))
+        self.assertEqual(pipeline_query[1][3], datetime(2026, 10, 13, 23, tzinfo=timezone.utc))
         vacancy_query = next((sql, params) for sql, params in cursor.queries if "left join public.applications" in sql)
         self.assertIn("at time zone %s", vacancy_query[0])
         local_today = datetime.now(timezone.utc).astimezone(ZoneInfo("Europe/London")).date()
@@ -199,7 +199,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
             with FakeConnection(cursor) as connection:
                 yield connection
 
-        with patch.object(dashboard_router, "assert_org_member"), patch.object(
+        with patch.object(dashboard_router, "assert_org_permission"), patch.object(
             dashboard_router, "get_connection", fake_connection
         ):
             result = await dashboard_router.dashboard(
@@ -214,7 +214,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_rejects_non_member_before_database_access(self):
         with patch.object(
-            dashboard_router, "assert_org_member", side_effect=HTTPException(status_code=403, detail="forbidden")
+            dashboard_router, "assert_org_permission", side_effect=HTTPException(status_code=403, detail="forbidden")
         ), patch.object(dashboard_router, "get_connection") as connection:
             with self.assertRaises(HTTPException) as error:
                 await dashboard_router.dashboard(
@@ -224,7 +224,7 @@ class DashboardEndpointTests(unittest.IsolatedAsyncioTestCase):
         connection.assert_not_called()
 
     async def test_rejects_inverted_date_range_before_database_access(self):
-        with patch.object(dashboard_router, "assert_org_member"), patch.object(
+        with patch.object(dashboard_router, "assert_org_permission"), patch.object(
             dashboard_router, "get_connection"
         ) as connection:
             with self.assertRaises(HTTPException) as error:

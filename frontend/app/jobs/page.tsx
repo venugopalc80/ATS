@@ -8,8 +8,11 @@ import { FormEvent, useEffect, useMemo, useState } from "react";
 const API_BASE = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "");
 const ORGANIZATION_ID = process.env.NEXT_PUBLIC_ORGANIZATION_ID ?? "";
 
+type ClientOption = { id: string; name: string; status: "prospect" | "active" | "inactive" };
+
 type Job = {
   id?: string;
+  job_code?: string | null;
   organization_id?: string;
   title: string;
   client?: string;
@@ -63,7 +66,7 @@ function distributionStatusLabel(channel: DistributionChannel, entry: JobDistrib
 
 type JobForm = {
   title: string;
-  client: string;
+  client_id: string;
   location: string;
   employment_type: string;
   work_mode: string;
@@ -77,7 +80,7 @@ type JobForm = {
 
 const emptyForm: JobForm = {
   title: "",
-  client: "",
+  client_id: "",
   location: "",
   employment_type: "Permanent",
   work_mode: "Hybrid",
@@ -98,7 +101,7 @@ const seedJobs: Job[] = [
 function formFromJob(job: Job): JobForm {
   return {
     title: job.title,
-    client: job.client ?? "",
+    client_id: job.client_id ?? "",
     location: job.location ?? "",
     employment_type: job.employment_type ?? "Permanent",
     work_mode: job.work_mode ?? "Hybrid",
@@ -113,6 +116,7 @@ function formFromJob(job: Job): JobForm {
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState<Job[]>(API_BASE ? [] : seedJobs);
+  const [clients, setClients] = useState<ClientOption[]>([]);
   const [loading, setLoading] = useState(Boolean(API_BASE));
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -177,7 +181,10 @@ export default function JobsPage() {
         const response = await apiFetch(API_BASE + "/api/jobs?organization_id=" + encodeURIComponent(organizationId));
         if (!response.ok) throw new Error("API returned " + response.status);
         const data: Job[] = await response.json();
-        if (!cancelled) setJobs(data);
+        const clientsResponse = await apiFetch(API_BASE + "/api/clients?organization_id=" + encodeURIComponent(organizationId));
+        if (!clientsResponse.ok) throw new Error("Unable to load client accounts (API " + clientsResponse.status + ").");
+        const clientData: ClientOption[] = await clientsResponse.json();
+        if (!cancelled) { setJobs(data); setClients(clientData); }
       } catch (error) {
         if (!cancelled) setMessage(error instanceof Error ? error.message : "Unable to load requisitions.");
       } finally {
@@ -190,7 +197,7 @@ export default function JobsPage() {
   }, []);
 
   const filtered = useMemo(() => jobs.filter((job) => {
-    const matchesQuery = (job.id ?? "") === query || (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
+    const matchesQuery = (job.id ?? "") === query || (job.job_code ?? "").toLowerCase().includes(query.toLowerCase()) || (job.title + " " + (job.client ?? "") + " " + (job.location ?? "")).toLowerCase().includes(query.toLowerCase());
     const matchesStatus = status === "all" || job.status === status;
     return matchesQuery && matchesStatus;
   }), [jobs, query, status]);
@@ -283,9 +290,12 @@ export default function JobsPage() {
     setSaving(true);
     setMessage("");
 
+    const selectedClientName = clients.find((client) => client.id === form.client_id)?.name ?? "";
+
     const payload = {
       ...(editingJob ? {} : { organization_id: organizationId }),
       title: form.title,
+      client_id: form.client_id || null,
       location: form.location || null,
       employment_type: form.employment_type || null,
       work_mode: form.work_mode || null,
@@ -300,10 +310,10 @@ export default function JobsPage() {
     try {
       if (!API_BASE || !organizationId) {
         if (editingJob) {
-          setJobs((current) => current.map((job) => job.id === editingJob.id ? { ...job, ...payload, client: form.client } : job));
+          setJobs((current) => current.map((job) => job.id === editingJob.id ? { ...job, ...payload, client: selectedClientName } : job));
           setMessage("Demo requisition updated.");
         } else {
-          const demoJob: Job = { id: `local-${Date.now()}`, ...payload, client: form.client } as Job;
+          const demoJob: Job = { id: `local-${Date.now()}`, ...payload, client: selectedClientName } as Job;
           setJobs((current) => [demoJob, ...current]);
           setMessage("Demo requisition created.");
         }
@@ -322,8 +332,8 @@ export default function JobsPage() {
         }
         const saved: Job = await response.json();
         setJobs((current) => editingJob?.id
-          ? current.map((job) => job.id === saved.id ? { ...saved, client: form.client } : job)
-          : [{ ...saved, client: form.client }, ...current]);
+          ? current.map((job) => job.id === saved.id ? { ...saved, client: selectedClientName } : job)
+          : [{ ...saved, client: selectedClientName }, ...current]);
         setMessage(editingJob ? "Requisition updated successfully." : "Requisition created successfully.");
       }
 
@@ -334,6 +344,15 @@ export default function JobsPage() {
       setMessage(error instanceof Error ? error.message : "Unable to save requisition.");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function copyJobReference(reference: string) {
+    try {
+      await navigator.clipboard.writeText(reference);
+      setMessage("Copied requisition reference: " + reference);
+    } catch {
+      setMessage("Unable to copy the requisition reference. Please select and copy it manually.");
     }
   }
 
@@ -410,18 +429,19 @@ export default function JobsPage() {
           <div className="card">
             <div className="card-head"><span className="card-title">Requisitions</span><span className="muted-small">{API_BASE ? (loading ? "Loading..." : "Connected to API") : "Demo mode"}</span></div>
             <table className="table">
-              <thead><tr><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Distribution</th><th>Actions</th></tr></thead>
+              <thead><tr><th>Job ID</th><th>Position</th><th>Client</th><th>Location</th><th>Type</th><th>Status</th><th>Skills</th><th>Distribution</th><th>Actions</th></tr></thead>
               <tbody>
-                {loading ? <tr><td colSpan={8}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={8}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
+                {loading ? <tr><td colSpan={9}>Loading requisitions...</td></tr> : filtered.length === 0 ? <tr><td colSpan={9}>No requisitions yet. Create your first one.</td></tr> : filtered.map((job) => (
                   <tr key={job.id ?? job.title}>
+                    <td><strong>{job.job_code ?? "—"}</strong></td>
                     <td><strong>{job.title}</strong></td>
-                    <td>{job.client ?? "Unassigned"}</td>
+                    <td>{job.client ?? clients.find((client) => client.id === job.client_id)?.name ?? "Unassigned"}</td>
                     <td>{job.location ?? "Not specified"}</td>
                     <td>{job.employment_type ?? "-"}</td>
                     <td><span className={`badge ${job.status === "open" ? "green" : job.status === "draft" ? "blue" : "amber"}`}>{job.status.replace("_", " ")}</span></td>
                     <td>{(job.required_skills ?? []).slice(0, 3).join(", ") || "-"}</td>
                     <td><button className="btn" onClick={() => openDistribution(job)}>Distribute job</button></td>
-                    <td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
+                    <td><div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}><button className="btn" disabled={!job.job_code} onClick={() => job.job_code && copyJobReference(job.job_code)}>Copy ID</button><button className="btn" onClick={() => openEdit(job)}>Edit</button><button className="btn" disabled={deletingId === job.id} onClick={() => deleteJob(job)}>{deletingId === job.id ? "..." : "Delete"}</button></div></td>
                   </tr>
                 ))}
               </tbody>
@@ -434,7 +454,7 @@ export default function JobsPage() {
         <div className="modal-backdrop" role="presentation">
           <section className="modal distribution-modal" role="dialog" aria-modal="true" aria-labelledby="distribution-title">
             <div className="card-head">
-              <div><span className="card-title" id="distribution-title">Job distribution</span><div className="muted-small" style={{ marginTop: 5 }}>{distributionJob.title}</div></div>
+              <div><span className="card-title" id="distribution-title">Job distribution</span><div className="muted-small" style={{ marginTop: 5 }}>{distributionJob.job_code ? distributionJob.job_code+" · " : ""}{distributionJob.title}</div></div>
               <button type="button" className="icon-button" aria-label="Close distribution settings" onClick={() => setDistributionJob(null)}>×</button>
             </div>
             <div className="notice">{distributionLoading ? "Loading saved channel preferences…" : API_BASE && distributionJob.id && !distributionJob.id.startsWith("demo-") && !distributionJob.id.startsWith("local-") ? "Channel preferences are saved per job in the organisation database. External publishing still requires configured partner APIs or feeds." : "Demo mode: channel choices persist in this browser. External publishing requires configured partner APIs or feeds."}</div>
@@ -480,7 +500,7 @@ export default function JobsPage() {
           <form className="modal" onSubmit={saveJob}>
             <div className="card-head"><span className="card-title">{editingJob ? "Edit requisition" : "New requisition"}</span><button type="button" className="icon-button" onClick={() => setShowForm(false)}>×</button></div>
             <label>Job title<input required value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} placeholder="e.g. Senior Python Engineer" /></label>
-            <label>Client<input value={form.client} onChange={(e) => setForm({ ...form, client: e.target.value })} placeholder="Client name" /></label>
+            <label>Client<select value={form.client_id} onChange={(e) => setForm({ ...form, client_id: e.target.value })}><option value="">No client / Internal vacancy</option>{clients.filter((client) => client.status !== "inactive").map((client) => <option key={client.id} value={client.id}>{client.name}</option>)}</select></label>
             <label>Location<input value={form.location} onChange={(e) => setForm({ ...form, location: e.target.value })} placeholder="London, UK / Remote" /></label>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
               <label>Employment type<select value={form.employment_type} onChange={(e) => setForm({ ...form, employment_type: e.target.value })}><option>Permanent</option><option>Contract</option><option>Temporary</option><option>Part-time</option></select></label>
